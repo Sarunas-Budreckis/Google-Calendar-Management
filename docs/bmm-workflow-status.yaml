@@ -30,7 +30,7 @@ workflow_path: "method-greenfield.yaml"
 
 workflow_status:
   # Phase 0: Discovery (Optional)
-  product-brief: required
+  product-brief: docs/product-brief-google-calendar-management-2025-11-05.md
 
   # Phase 1: Planning
   prd: required
