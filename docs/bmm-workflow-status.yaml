@@ -33,7 +33,7 @@ workflow_status:
   product-brief: docs/product-brief-google-calendar-management-2025-11-05.md
 
   # Phase 1: Planning
-  prd: required
+  prd: docs/PRD.md
   validate-prd: optional
   create-design: conditional  # Will be required - this project has UI
 
