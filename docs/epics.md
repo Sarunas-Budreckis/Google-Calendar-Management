@@ -51,7 +51,430 @@ Each epic contains 3-8 bite-sized stories designed for single-session completion
 
 ---
 
-<!-- Epics will be added as they are developed -->
+## Epic 1: Foundation & Core Infrastructure
+
+**Goal:** Establish the technical foundation that enables all subsequent development - project structure, database with Entity Framework Core, core dependencies, and OAuth 2.0 infrastructure for API integrations.
+
+### Story 1.1: Project Setup & Initial Infrastructure
+
+As a developer,
+I want a properly scaffolded .NET 9 WinUI 3 project with core dependencies,
+So that I have a solid foundation for building the application.
+
+**Acceptance Criteria:**
+
+**Given** a new development environment
+**When** the project is created
+**Then** the solution contains a WinUI 3 project targeting .NET 9
+**And** the project includes necessary NuGet packages (WinUI 3, Entity Framework Core, dependency injection)
+**And** the project builds successfully without errors
+**And** the application launches with a basic empty window
+
+**Prerequisites:** None (first story)
+
+**Technical Notes:**
+- Use Windows App SDK for WinUI 3
+- Install packages: Microsoft.EntityFrameworkCore.Sqlite, Microsoft.Extensions.DependencyInjection
+- Set up proper project structure: /Models, /Services, /Views, /ViewModels
+- Configure app.manifest for appropriate Windows capabilities
+
+### Story 1.2: SQLite Database Schema & Entity Framework Setup
+
+As a developer,
+I want Entity Framework Core configured with the complete SQLite schema,
+So that the application can persist all required data locally.
+
+**Acceptance Criteria:**
+
+**Given** the project foundation exists
+**When** Entity Framework is configured
+**Then** all 14 database tables are defined as EF Core entities
+**And** DbContext is configured for SQLite with appropriate relationships
+**And** migrations are created for the initial schema
+**And** the database is created on first application launch
+**And** database integrity checks pass on startup
+
+**Prerequisites:** Story 1.1
+
+**Technical Notes:**
+- Implement all 14 tables from PRD: GoogleCalendarEvents (with version history), TogglTimeEntries, CallLogs, YouTubeVideos, YouTubeVideoMetadata, ApprovedEvents, DateStates, SavePoints, SavePointEvents, AuditLog, ColorDefinitions, AppSettings, OutlookEvents, WeeklyStatusRecords
+- Use SQLite WAL mode for crash recovery
+- Configure foreign key constraints
+- Set up automatic timestamp tracking (CreatedAt, UpdatedAt)
+- Database file location: %LocalAppData%/GoogleCalendarManagement/calendar.db
+
+### Story 1.3: Dependency Injection & Service Architecture
+
+As a developer,
+I want dependency injection configured with core service interfaces,
+So that the application has a clean, testable architecture.
+
+**Acceptance Criteria:**
+
+**Given** the database is configured
+**When** dependency injection is set up
+**Then** service interfaces are defined for all major components
+**And** services are registered in the DI container
+**And** ViewModels can inject required services
+**And** database context is available via DI with proper lifetime scope
+
+**Prerequisites:** Story 1.2
+
+**Technical Notes:**
+- Define interfaces: ICalendarService, IDatabaseService, IAuthService, IDataSourceService
+- Register DbContext as scoped
+- Register services appropriately (singleton for app-wide state, scoped for per-operation)
+- Set up ViewModel locator pattern for WinUI 3
+- Use CommunityToolkit.Mvvm for MVVM helpers
+
+### Story 1.4: OAuth 2.0 Infrastructure & Credential Storage
+
+As a developer,
+I want OAuth 2.0 authentication infrastructure with secure credential storage,
+So that API integrations can authenticate securely without exposing tokens.
+
+**Acceptance Criteria:**
+
+**Given** the service architecture is established
+**When** OAuth infrastructure is implemented
+**Then** OAuth 2.0 flow helper methods are available
+**And** tokens are encrypted using Windows DPAPI before storage
+**And** tokens are stored in SQLite database with encryption
+**And** token refresh logic is implemented with automatic retry
+**And** token expiration warnings can be triggered
+
+**Prerequisites:** Story 1.3
+
+**Technical Notes:**
+- Use System.Security.Cryptography.ProtectedData for DPAPI encryption
+- Store encrypted tokens in AppSettings table with scope/provider identification
+- Implement IAuthService with methods: AuthenticateAsync, RefreshTokenAsync, GetValidTokenAsync
+- Support multiple OAuth providers (Google, Microsoft)
+- Implement token lifetime tracking for expiration warnings
+
+### Story 1.5: Application Shell & Navigation Framework
+
+As a user,
+I want a consistent application shell with navigation structure,
+So that I can access different features of the application.
+
+**Acceptance Criteria:**
+
+**Given** the core architecture is ready
+**When** the application launches
+**Then** the main window displays with navigation menu
+**And** the navigation menu includes placeholders for: Calendar, Import, Settings
+**And** clicking navigation items switches the content area
+**And** the application remembers window size and position between sessions
+
+**Prerequisites:** Story 1.4
+
+**Technical Notes:**
+- Use NavigationView control from WinUI 3
+- Implement frame navigation pattern
+- Store window state in AppSettings table
+- Create placeholder pages for main sections (to be filled in later epics)
+- Apply Windows 11 theme awareness (light/dark mode)
+
+---
+
+## Epic 2: Google Calendar Integration & Sync
+
+**Goal:** Connect to Google Calendar API, authenticate securely, fetch existing events to local cache, and publish events with proper error handling and resilience.
+
+### Story 2.1: Google Calendar API Authentication
+
+As a user,
+I want to authenticate with Google Calendar using OAuth 2.0,
+So that the application can access my calendar data securely.
+
+**Acceptance Criteria:**
+
+**Given** the application is launched for the first time
+**When** I initiate Google Calendar connection
+**Then** a browser window opens for Google OAuth consent
+**And** I can grant calendar access permissions
+**And** the OAuth token is received and encrypted in the database
+**And** subsequent app launches use the stored token without re-authentication
+**And** token refresh happens automatically when expired
+
+**Prerequisites:** Story 1.4 (OAuth infrastructure)
+
+**Technical Notes:**
+- Use Google.Apis.Calendar.v3 NuGet package
+- Implement OAuth 2.0 web flow (local redirect server)
+- Scopes required: calendar.events (full calendar access)
+- Store access token and refresh token encrypted
+- Implement automatic token refresh before expiration
+- Handle revoked token scenario with re-authentication prompt
+
+### Story 2.2: Fetch Google Calendar Events to Local Cache
+
+As a user,
+I want to fetch my existing Google Calendar events for any date range,
+So that I can view and work with my calendar offline.
+
+**Acceptance Criteria:**
+
+**Given** Google Calendar authentication is complete
+**When** I specify a date range to fetch
+**Then** all events in that range are retrieved via Google Calendar API
+**And** events are stored in the GoogleCalendarEvents table
+**And** complete event details are preserved (title, start, end, description, color, ID)
+**And** fetch progress is displayed during API calls
+**And** I can fetch additional date ranges as needed
+**And** previously fetched events are updated if changed in Google Calendar
+
+**Prerequisites:** Story 2.1
+
+**Technical Notes:**
+- Use Google Calendar API events.list with timeMin/timeMax parameters
+- Implement pagination to handle >250 events per request
+- Store Google Calendar event ID for later updates
+- Track last sync timestamp per event
+- Implement incremental sync (fetch only changed events using updatedMin parameter)
+- Handle API rate limits with exponential backoff
+
+### Story 2.3: Publish Events to Google Calendar
+
+As a user,
+I want to publish approved events to Google Calendar,
+So that they appear in my calendar across all devices.
+
+**Acceptance Criteria:**
+
+**Given** I have approved events ready to publish
+**When** I trigger the publish operation
+**Then** events are created in Google Calendar via API
+**And** Google Calendar event IDs are stored locally
+**And** "Published by Google Calendar Management on {datetime}" is appended to descriptions
+**And** events appear in Google Calendar with correct title, time, description, and color
+**And** publish progress is shown with count of successful/failed events
+
+**Prerequisites:** Story 2.2
+
+**Technical Notes:**
+- Use Google Calendar API events.insert for new events
+- Implement batch requests (max 50 events per batch) to minimize API calls
+- Map custom colors to Google Calendar's color palette (closest match)
+- Store exact custom color locally even if Google uses approximation
+- Handle API errors gracefully (show which events failed, allow retry)
+- Implement retry logic with exponential backoff for transient failures
+
+### Story 2.4: Update Existing Google Calendar Events
+
+As a user,
+I want to update events that were previously published,
+So that I can correct mistakes or refine event details.
+
+**Acceptance Criteria:**
+
+**Given** an event exists in both local database and Google Calendar
+**When** I modify the event locally and publish updates
+**Then** the existing Google Calendar event is updated (not duplicated)
+**And** the event retains its Google Calendar ID
+**And** all modified fields are reflected in Google Calendar
+**And** version history is maintained in the local database
+
+**Prerequisites:** Story 2.3
+
+**Technical Notes:**
+- Use Google Calendar API events.update with stored event ID
+- Implement conflict detection (check if event was modified externally)
+- Prompt user on conflicts with options: keep local, keep remote, merge
+- Store complete version history in GoogleCalendarEvents table
+- Update LastModifiedTimestamp on each change
+
+### Story 2.5: Sync Resilience & Error Handling
+
+As a user,
+I want robust error handling during Google Calendar sync,
+So that temporary failures don't lose my data or break my workflow.
+
+**Acceptance Criteria:**
+
+**Given** I'm performing Google Calendar operations
+**When** API failures occur (network issues, rate limits, server errors)
+**Then** operations are retried automatically with exponential backoff
+**And** failed operations are queued for later retry
+**And** clear error messages explain what went wrong
+**And** I can manually retry failed operations
+**And** no data is lost during failures
+
+**Prerequisites:** Story 2.4
+
+**Technical Notes:**
+- Implement retry policy: 3 retries with exponential backoff (1s, 2s, 4s)
+- Queue failed operations in database with retry count
+- Handle specific error codes: 401 (re-auth), 403 (quota), 429 (rate limit), 5xx (server error)
+- Show user-friendly messages: "Connection lost - will retry automatically"
+- Implement background retry queue that processes during idle time
+- Log all API errors to AuditLog table
+
+---
+
+## Epic 3: Calendar UI & Visual Display
+
+**Goal:** Single-pane-of-glass view that eliminates cognitive overload - beautiful calendar display with month/week/day views, offline viewing of cached events, event interaction, and multi-selection capabilities.
+
+### Story 3.1: Calendar View Component with Month/Week/Day Views
+
+As a user,
+I want to view my calendar in month, week, or day layouts,
+So that I can see events at different levels of detail.
+
+**Acceptance Criteria:**
+
+**Given** the application is open and events are cached locally
+**When** I navigate to the calendar page
+**Then** the calendar displays in month view by default
+**And** I can switch between month, week, and day views
+**And** view transitions are smooth (60 FPS animations)
+**And** the current view mode is persisted between sessions
+
+**Prerequisites:** Story 2.2 (events cached locally)
+
+**Technical Notes:**
+- Use WinUI 3 CalendarView as base, extend for week/day views
+- Implement custom CalendarViewModel to manage view state
+- Use XAML animations for smooth transitions
+- Store view preference in AppSettings table
+- Consider custom rendering for week/day views if CalendarView insufficient
+- Target <1 second render time for month with 200+ events
+
+### Story 3.2: Event Rendering with Visual State Distinction
+
+As a user,
+I want to see both published and pending events with clear visual distinction,
+So that I know which events are already in Google Calendar versus awaiting approval.
+
+**Acceptance Criteria:**
+
+**Given** the calendar view is displayed
+**When** events are rendered
+**Then** published events appear in their assigned Google Calendar colors
+**And** pending approval events appear in yellow/banana overlay color
+**And** selected events show checkmark or highlight border
+**And** event titles are readable without overlapping
+**And** multi-day events span appropriately
+
+**Prerequisites:** Story 3.1
+
+**Technical Notes:**
+- Create custom event template for CalendarView items
+- Use data binding to event state (Published, Pending, Selected)
+- Apply different visual styles via DataTemplate selectors
+- Implement text truncation with ellipsis for long titles
+- Use hover tooltips to show full event details
+- Ensure color contrast for accessibility (even though not WCAG-focused)
+
+### Story 3.3: Event Selection (Individual, Day, Range)
+
+As a user,
+I want to select multiple events for batch operations,
+So that I can approve or modify groups of events efficiently.
+
+**Acceptance Criteria:**
+
+**Given** events are displayed in the calendar
+**When** I interact with events
+**Then** clicking an event toggles its selection state
+**And** shift-clicking selects a range of events
+**And** "Select day" button selects all pending events on that date
+**And** "Select range" dialog allows date range selection
+**And** selected count badge shows number of selected events
+**And** "Clear selection" button deselects all
+
+**Prerequisites:** Story 3.2
+
+**Technical Notes:**
+- Implement SelectionMode in CalendarViewModel (toggle, range, day, dateRange)
+- Track selected event IDs in ObservableCollection
+- Use visual state manager for selected event appearance
+- Implement shift-click range detection (from last clicked to current)
+- Create "Select day" command button on date headers
+- Show selection count in status bar or header
+
+### Story 3.4: Inline Event Editing Panel
+
+As a user,
+I want to click any event to edit its details inline,
+So that I can quickly adjust titles, times, descriptions, and colors without modal interruptions.
+
+**Acceptance Criteria:**
+
+**Given** an event is displayed
+**When** I click to edit the event
+**Then** an inline editing panel appears adjacent to the event
+**And** I can modify title, start time, end time, description, and color
+**And** time picker shows 15-minute increments
+**And** color picker displays all 9 custom colors with labels
+**And** changes are saved to the local database immediately
+**And** pressing Esc cancels edits, Enter confirms
+
+**Prerequisites:** Story 3.3
+
+**Technical Notes:**
+- Create EventEditPanel user control (flyout or side panel)
+- Use WinUI 3 TimePicker with 15-minute increment configuration
+- Implement custom color picker showing ColorDefinitions from database
+- Bind to event ViewModel with two-way binding
+- Auto-save changes to database on field blur (don't wait for "Save" button)
+- Show validation messages for invalid time ranges
+- Implement keyboard shortcuts (Esc, Enter, Tab navigation)
+
+### Story 3.5: Date Navigation & Jump-To Features
+
+As a user,
+I want quick navigation controls to jump to specific dates,
+So that I can efficiently move through my calendar without tedious scrolling.
+
+**Acceptance Criteria:**
+
+**Given** the calendar view is displayed
+**When** I use navigation controls
+**Then** I can jump to today's date with one click
+**And** I can select any date via date picker
+**And** I can navigate forward/backward by view period (day, week, month)
+**And** breadcrumb shows current date range being viewed
+**And** keyboard arrows navigate through dates
+**And** navigation is instant (<100ms response)
+
+**Prerequisites:** Story 3.4
+
+**Technical Notes:**
+- Add navigation toolbar with: Today, Previous, Next, Date Picker buttons
+- Implement breadcrumb showing current view range (e.g., "November 2025" or "Nov 4-10, 2025")
+- Bind keyboard shortcuts: Left/Right arrows, Page Up/Down, Home/End
+- Optimize rendering to only load visible date range + buffer
+- Update URL/navigation stack to support back/forward navigation
+- Smooth scroll animations when navigating
+
+### Story 3.6: Offline Calendar Viewing with Arbitrary Date Range Loading
+
+As a user,
+I want to view any date range of my calendar offline using cached data,
+So that I can review and work with events without internet connection.
+
+**Acceptance Criteria:**
+
+**Given** I have previously fetched Google Calendar events for specific date ranges
+**When** I'm offline or choose offline mode
+**Then** I can view all cached events without internet connection
+**And** I can specify and load arbitrary date ranges that haven't been cached yet (when back online)
+**And** the UI clearly indicates which date ranges are cached vs not cached
+**And** I can request to fetch and cache additional date ranges
+**And** cached events are available instantly without API calls
+
+**Prerequisites:** Story 2.2 (local event cache), Story 3.5
+
+**Technical Notes:**
+- Add DateRangeCacheStatus table tracking which ranges are fully cached
+- Implement visual indicators on calendar (green = cached, grey = not cached)
+- Add "Fetch this range" button that appears when viewing uncached dates
+- Load events from local database (GoogleCalendarEvents table) for offline viewing
+- Implement cache management UI showing total cached events and date coverage
+- Allow manual cache refresh to update stale cached data
 
 ---
 
