@@ -1,0 +1,233 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>3</storyId>
+    <title>Implement Core Database Schema (Phase 1 Tables)</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-3-implement-core-database-schema-phase-1-tables.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>the Phase 1 database schema defined as EF Core entities with fluent API configurations</iWant>
+    <soThat>the application can persist and retrieve Google Calendar events, version history, save states, and app metadata locally</soThat>
+    <tasks>
+      - Create 7 entity classes in Data/Entities/: GcalEvent, GcalEventVersion, SaveState, AuditLog, Config, DataSourceRefresh, SystemState — all properties matching _database-schemas.md column names
+      - Create 7 fluent configuration classes in Data/Configurations/ implementing IEntityTypeConfiguration&lt;T&gt;: table names, column names, PKs, defaults, indexes, FK, and HasData seed for Config
+      - Update CalendarDbContext.cs: add 7 DbSet properties, replace OnModelCreating placeholder with modelBuilder.ApplyConfigurationsFromAssembly(typeof(CalendarDbContext).Assembly)
+      - Run dotnet ef migrations add Phase1Schema; review generated SQL for all 7 tables, indexes, FK, and seed data
+      - Write integration tests in Tests/Integration/SchemaTests.cs: AllPhase1Tables_ExistAfterEnsureCreated, GcalEvent_CrudRoundTrip_Succeeds, GcalEventVersion_ForeignKey_EnforcedOnInsert, Config_SeedData_PresentAfterMigration
+      - Final validation: build Debug+Release, inspect calendar.db with DB Browser, confirm __EFMigrationsHistory has InitialCreate + Phase1Schema, run full test suite
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1">
+      Given Entity Framework Core configured from Story 1.2
+      When I create the Phase 1 entity model and apply the migration
+      Then 7 tables are created in SQLite: gcal_event, gcal_event_version, save_state, audit_log, config, data_source_refresh, system_state
+    </criterion>
+    <criterion id="AC-2">
+      The entity model is correctly structured:
+      - 7 C# entity classes in Data/Entities/ (no data annotations)
+      - 7 fluent configuration classes in Data/Configurations/
+      - CalendarDbContext has 7 DbSet properties
+      - OnModelCreating calls ApplyConfigurationsFromAssembly
+    </criterion>
+    <criterion id="AC-3">
+      The migration applies cleanly:
+      - All 7 tables with correct columns, types, and defaults
+      - All 9 indexes present: idx_gcal_event_date, idx_gcal_recurring, idx_gcal_source, idx_gcal_app_created, idx_version_event, idx_audit_timestamp, idx_audit_operation, idx_refresh_source, idx_refresh_date
+      - FK: gcal_event_version.gcal_event_id → gcal_event.gcal_event_id
+      - 6 default Config rows seeded
+    </criterion>
+    <criterion id="AC-4">
+      Schema is integration-tested:
+      - All 7 tables exist after EnsureCreated() on in-memory SQLite
+      - GcalEvent CRUD round-trip succeeds
+      - GcalEventVersion FK constraint prevents orphan rows
+      - Config seed data present (6 rows)
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schema Reference</title>
+        <section>Phase 1 Tables: gcal_event, gcal_event_version, save_state, audit_log, config, data_source_refresh, system_state</section>
+        <snippet>Phase 1 (7 tables): gcal_event — Google Calendar event cache with app_created, source_system (Phase 3 nullable), gcal_etag; gcal_event_version — full snapshot for rollback with FK to gcal_event; save_state — snapshot_data JSON; audit_log — operation_type, user_action, success; config — config_key PK, config_type, HasData seed; data_source_refresh — source_name, start_date/end_date range, records_fetched; system_state — state_name UNIQUE, state_value.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schema Reference</title>
+        <section>gcal_event indexes</section>
+        <snippet>idx_gcal_event_date ON gcal_event(start_datetime, end_datetime); idx_gcal_recurring ON gcal_event(recurring_event_id); idx_gcal_source ON gcal_event(source_system); idx_gcal_app_created ON gcal_event(app_created).</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schema Reference</title>
+        <section>gcal_event_version indexes and FK</section>
+        <snippet>idx_version_event ON gcal_event_version(gcal_event_id, created_at DESC). FOREIGN KEY (gcal_event_id) REFERENCES gcal_event(gcal_event_id).</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schema Reference</title>
+        <section>Config seed data</section>
+        <snippet>INSERT INTO config: ('min_event_duration_minutes','5','integer'), ('phone_coalesce_gap_minutes','15','integer'), ('youtube_coalesce_gap_minutes','30','integer'), ('call_min_duration_minutes','3','integer'), ('youtube_char_limit_short','40','integer'), ('eight_fifteen_threshold','8','integer').</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Data Layer / Project Structure</section>
+        <snippet>Entities in Data/Entities/ (14 classes for full schema). Configurations in Data/Configurations/ (one IEntityTypeConfiguration per entity). Repository pattern in Data/Repositories/. Migrations in Data/Migrations/. Story 1.3 adds Phase 1 entities only (7 of 14).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Decision Summary — Table Naming, Fluent API</section>
+        <snippet>Table naming: singular (Key Decisions §3). Fluent API configuration — no data annotations. snake_case table and column names to match SQL schema doc.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 1.3 Definition</section>
+        <snippet>FR-8.1, NFR-D1, NFR-D4. EF Core fluent API for all config. EventDataJson stores full event state for rollback. Phase 1 schema only — additional tables in later epics. Consider DateTimeOffset for timezone handling.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>FR-8.1 / NFR-D1 / NFR-D4</section>
+        <snippet>FR-8.1: SQLite schema with full local storage. NFR-D1: Version history for rollback (gcal_event_version). NFR-D4: Audit trail for all operations (audit_log).</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>Data/CalendarDbContext.cs</path>
+        <kind>data-context</kind>
+        <symbol>CalendarDbContext</symbol>
+        <lines>1-15</lines>
+        <reason>Story 1.3 adds 7 DbSet properties and replaces the OnModelCreating placeholder comment with ApplyConfigurationsFromAssembly. Current file has no DbSets and a comment "populated in Story 1.3".</reason>
+      </artifact>
+      <artifact>
+        <path>GoogleCalendarManagement.Tests/Integration/DatabaseInfrastructureTests.cs</path>
+        <kind>test</kind>
+        <symbol>CreateInMemoryContext factory</symbol>
+        <lines>1-50</lines>
+        <reason>Story 1.3 integration tests reuse the same in-memory SQLite factory pattern established here. SchemaTests.cs should follow the same xUnit + FluentAssertions structure.</reason>
+      </artifact>
+      <artifact>
+        <path>GoogleCalendarManagement.Tests/Unit/SmokeTests.cs</path>
+        <kind>test</kind>
+        <symbol>SmokeTests</symbol>
+        <lines>1-42</lines>
+        <reason>Reference pattern for xUnit test style: [Fact] methods, Arrange/Act/Assert, FluentAssertions .Should() syntax used across all test files.</reason>
+      </artifact>
+      <artifact>
+        <path>GoogleCalendarManagement.csproj</path>
+        <kind>project-file</kind>
+        <symbol>PackageReference ItemGroup</symbol>
+        <lines>50-58</lines>
+        <reason>EF Core 9.0.12 packages already present from Story 1.2. No new packages needed for Story 1.3.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <ecosystem name="dotnet-main-project">
+        <current>
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" note="Already installed in Story 1.2" />
+          <package name="Microsoft.EntityFrameworkCore.Design" version="9.0.12" note="Required for dotnet ef migrations add" />
+          <package name="Microsoft.EntityFrameworkCore.Tools" version="9.0.12" note="Required for EF Core CLI" />
+        </current>
+        <toAdd />
+      </ecosystem>
+      <ecosystem name="dotnet-test-project">
+        <current>
+          <package name="xunit" version="2.9.2" />
+          <package name="FluentAssertions" version="8.8.0" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" note="In-memory SQLite for tests" />
+        </current>
+        <toAdd />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C-1">FLUENT API ONLY. No data annotations ([Required], [Column], [Key], [MaxLength]) on entity classes. All configuration via IEntityTypeConfiguration&lt;T&gt; classes in Data/Configurations/. This is an architecture mandate.</constraint>
+    <constraint id="C-2">PHASE 1 SCOPE ONLY. Do not define entities for Phase 2 (PendingEvent) or Phase 3 (TogglData, YouTubeData, CallLogData, GeneratedEventSource, DateState, TrackedGap, WeeklyState). Those belong in future stories.</constraint>
+    <constraint id="C-3">snake_case TABLE AND COLUMN NAMES. Every configuration class MUST call ToTable("snake_case_name") and HasColumnName("snake_case_col") for every property. EF Core defaults to PascalCase without explicit configuration.</constraint>
+    <constraint id="C-4">STRING PK ENTITIES (GcalEvent, Config) must call .ValueGeneratedNever() on the primary key property. Without this, EF Core may attempt to generate string GUIDs automatically.</constraint>
+    <constraint id="C-5">INTEGER AUTOINCREMENT PKs (GcalEventVersion, SaveState, AuditLog, DataSourceRefresh, SystemState) must use .ValueGeneratedOnAdd(). EF Core SQLite provider maps this to INTEGER PRIMARY KEY AUTOINCREMENT.</constraint>
+    <constraint id="C-6">source_system COLUMN on GcalEvent: This Phase 3 field must still be defined as a nullable string property on the entity. Deferring it creates a future breaking migration. Define it now, nullable, to match the schema doc.</constraint>
+    <constraint id="C-7">UNIQUE CONSTRAINT on SystemState.StateName: Configure via builder.HasIndex(e => e.StateName).IsUnique() in SystemStateConfiguration.</constraint>
+    <constraint id="C-8">FOREIGN KEY CASCADE: GcalEventVersion.GcalEventId has ON DELETE CASCADE — configure with .OnDelete(DeleteBehavior.Cascade) in GcalEventConfiguration navigation config.</constraint>
+    <constraint id="C-9">CONFIG SEED DATA: HasData() in ConfigConfiguration must use static/fixed DateTime values (not DateTime.Now) to ensure the migration is deterministic and reproducible.</constraint>
+    <constraint id="C-10">ApplyConfigurationsFromAssembly PLACEMENT: Call before base.OnModelCreating(). Configuration classes are discovered automatically if they implement IEntityTypeConfiguration&lt;T&gt; — no manual registration needed.</constraint>
+    <constraint id="C-11">IN-MEMORY SQLITE FOR TESTS: Schema tests must use SQLite in-memory provider (Data Source=:memory:) with OpenConnection() + EnsureCreated(). The EF Core InMemory provider does not enforce FK constraints.</constraint>
+    <constraint id="C-12">NULLABLE REFERENCE TYPES: All entity classes must be fully compatible with &lt;Nullable&gt;enable&lt;/Nullable&gt;. Nullable columns → nullable C# type (string?). Required columns → non-nullable (string, not string?).</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>CalendarDbContext — updated</name>
+      <kind>data-context</kind>
+      <signature>
+public DbSet&lt;GcalEvent&gt; GcalEvents { get; set; }
+public DbSet&lt;GcalEventVersion&gt; GcalEventVersions { get; set; }
+public DbSet&lt;SaveState&gt; SaveStates { get; set; }
+public DbSet&lt;AuditLog&gt; AuditLogs { get; set; }
+public DbSet&lt;Config&gt; Configs { get; set; }
+public DbSet&lt;DataSourceRefresh&gt; DataSourceRefreshes { get; set; }
+public DbSet&lt;SystemState&gt; SystemStates { get; set; }
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder.ApplyConfigurationsFromAssembly(typeof(CalendarDbContext).Assembly);
+    base.OnModelCreating(modelBuilder);
+}
+      </signature>
+      <path>Data/CalendarDbContext.cs</path>
+    </interface>
+    <interface>
+      <name>IEntityTypeConfiguration&lt;GcalEvent&gt;</name>
+      <kind>ef-configuration</kind>
+      <signature>public class GcalEventConfiguration : IEntityTypeConfiguration&lt;GcalEvent&gt; { public void Configure(EntityTypeBuilder&lt;GcalEvent&gt; builder) { ... } }</signature>
+      <path>Data/Configurations/GcalEventConfiguration.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>Config seed data (HasData)</name>
+      <kind>ef-seed</kind>
+      <signature>builder.HasData(new Config { ConfigKey = "min_event_duration_minutes", ConfigValue = "5", ConfigType = "integer", Description = "...", UpdatedAt = new DateTime(2026, 1, 1) }, ...);</signature>
+      <path>Data/Configurations/ConfigConfiguration.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>Migration command</name>
+      <kind>cli-command</kind>
+      <signature>dotnet ef migrations add Phase1Schema</signature>
+      <path>Project root — requires Microsoft.EntityFrameworkCore.Design in startup project</path>
+    </interface>
+    <interface>
+      <name>SchemaTests in-memory factory</name>
+      <kind>test-helper</kind>
+      <signature>var options = new DbContextOptionsBuilder&lt;CalendarDbContext&gt;().UseSqlite("Data Source=:memory:").Options; var ctx = new CalendarDbContext(options); ctx.Database.OpenConnection(); ctx.Database.EnsureCreated(); return ctx;</signature>
+      <path>GoogleCalendarManagement.Tests/Integration/SchemaTests.cs (to be created)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Integration tests use xUnit with FluentAssertions. In-memory SQLite (Data Source=:memory:) with OpenConnection() + EnsureCreated() — NOT the EF Core InMemory provider (it does not enforce FK constraints). Each test creates and disposes its own CalendarDbContext. Pattern matches existing DatabaseInfrastructureTests.cs. New tests go in GoogleCalendarManagement.Tests/Integration/SchemaTests.cs. No Moq needed — real SQLite in-memory is preferred for schema-level tests.</standards>
+    <locations>
+      <location>GoogleCalendarManagement.Tests/Integration/SchemaTests.cs — new schema integration tests</location>
+      <location>GoogleCalendarManagement.Tests/Integration/DatabaseInfrastructureTests.cs — reference factory pattern from Story 1.2</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC-1, AC-4">AllPhase1Tables_ExistAfterEnsureCreated — after EnsureCreated(), query "SELECT name FROM sqlite_master WHERE type='table'" and assert all 7 table names are present</idea>
+      <idea acRef="AC-4">GcalEvent_CrudRoundTrip_Succeeds — insert GcalEvent with a string PK, assert it reads back with matching properties, update summary, assert update persisted, delete, assert gone</idea>
+      <idea acRef="AC-3, AC-4">GcalEventVersion_ForeignKey_EnforcedOnInsert — attempt to insert GcalEventVersion with a non-existent gcal_event_id; assert DbUpdateException (FK violation) is thrown. Requires real SQLite in-memory, not EF InMemory.</idea>
+      <idea acRef="AC-3, AC-4">Config_SeedData_PresentAfterMigration — after MigrateAsync(), query Configs DbSet; assert Count() == 6, assert specific ConfigKey "min_event_duration_minutes" with value "5" exists</idea>
+      <idea acRef="AC-3">AllIndexes_PresentAfterMigration — query "SELECT name FROM sqlite_master WHERE type='index'" and assert all 9 index names are present</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -35,13 +35,16 @@ workflow_status:
   # Phase 1: Planning
   prd: docs/PRD.md
   validate-prd: optional
-  create-design: conditional  # Will be required - this project has UI
+  create-design: docs/ux-design-specification.md
 
   # Phase 2: Solutioning
-  create-architecture: required
+  create-architecture: docs/architecture.md
   validate-architecture: optional
-  solutioning-gate-check: required
+  solutioning-gate-check: docs/implementation-readiness-report-2026-01-30.md
 
-  # Phase 3: Implementation
+  # Phase 3: Story Creation
+  create-epics-and-stories: required
+
+  # Phase 4: Implementation
   sprint-planning: required
   # Note: After sprint-planning, subsequent work tracked in sprint-status.yaml

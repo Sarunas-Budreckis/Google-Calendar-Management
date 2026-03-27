@@ -1,0 +1,192 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>5</storyId>
+    <title>Set Up Development Environment and Deployment Pipeline</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-5-set-up-development-environment-and-deployment-pipeline.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>a documented development environment setup and optimized build and publish configuration</iWant>
+    <soThat>I can build, test, and deploy the application reliably on any compatible Windows machine</soThat>
+    <tasks>
+      - Create README.md at repository root: prerequisites (VS 2022 17.9+, .NET 9 SDK, Windows App SDK 1.8.x), step-by-step setup, build commands, troubleshooting (Platform=x64 requirement, hot reload XAML-only, ContentDialog XamlRoot)
+      - Add Version (1.0.0), AssemblyVersion, FileVersion, TreatWarningsAsErrors, and Debug/Release-specific PropertyGroups to GoogleCalendarManagement.csproj
+      - Validate existing publish profiles at Properties/PublishProfiles/win-x64.pubxml — run dotnet publish, confirm .exe launches, calendar.db created, MigrationService runs
+      - Run full test suite and manual build/publish/launch checklist to confirm all ACs pass
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1">
+      Given the project repository
+      When I follow the README setup instructions
+      Then I can build and run the application locally.
+      README.md exists at repository root with: prerequisites, step-by-step setup, build commands, required VS workloads, troubleshooting section.
+    </criterion>
+    <criterion id="AC-2">
+      Build configuration is optimized in GoogleCalendarManagement.csproj:
+      - Version 1.0.0 in project file
+      - TreatWarningsAsErrors=true
+      - Debug: Optimize=false, DebugType=full
+      - Release: Optimize=true, DebugType=none
+    </criterion>
+    <criterion id="AC-3">
+      Self-contained publish is functional:
+      - dotnet publish -p:PublishProfile=win-x64 -c Release succeeds
+      - Published .exe launches without pre-installed .NET runtime
+      - MigrationService.RunStartupAsync() executes correctly in published build
+      - No hard-coded paths — all use Environment.GetFolderPath(SpecialFolder.LocalApplicationData)
+    </criterion>
+    <criterion id="AC-4">
+      Deployment artifact is validated:
+      - All DLL dependencies present in publish output
+      - %LOCALAPPDATA%\GoogleCalendarManagement\calendar.db created on first launch
+      - No unhandled exceptions on first run
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>AC-1.5: Development Environment (Story 1.5)</section>
+        <snippet>AC-1.5.1: README complete (prerequisites, setup, troubleshooting). AC-1.5.2: Debug symbols, Release optimized, version in .csproj. AC-1.5.3: dotnet publish -c Release -r win-x64 --self-contained succeeds; migrations work in published build; no hard-coded paths. AC-1.5.4: All deps included, DB created on first run.</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Development Tools (Story 1.5) and NuGet Package Dependencies</section>
+        <snippet>VS 2022 17.9+ with .NET desktop development + Windows App SDK workloads. .NET 9 SDK 9.0.12. Windows App SDK 1.8.3. Target: Windows 10 1809+. NuGet packages already in place from Stories 1.1-1.4 (WindowsAppSDK 1.8.x, EF Core 9.0.12, Extensions 10.0.2).</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Story 1.5 Manual Tests</section>
+        <snippet>Clone on clean machine → follow README → build → publish self-contained → run published .exe on clean Windows 10 VM → verify DB created, logs written.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 1.5 Definition</section>
+        <snippet>NFR-M1 (code quality), NFR-M4 (documentation). Self-contained publish, version in .csproj, build warnings as errors. Minimum Windows version: Windows 10 1809. Manual updates for MVP.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>GoogleCalendarManagement.csproj</path>
+        <kind>project-file</kind>
+        <symbol>Project/PropertyGroup</symbol>
+        <lines>1-81</lines>
+        <reason>Story 1.5 adds Version, AssemblyVersion, FileVersion, TreatWarningsAsErrors, and Debug/Release-specific PropertyGroups. Read current state before editing to avoid duplicating existing PropertyGroups or conflicting with RuntimeIdentifier/Platform conditionals already present.</reason>
+      </artifact>
+      <artifact>
+        <path>Properties/PublishProfiles/win-x64.pubxml</path>
+        <kind>publish-profile</kind>
+        <symbol>PublishProfile</symbol>
+        <lines>1-19</lines>
+        <reason>Publish profile already exists with SelfContained=true and conditional PublishTrimmed=true (Release only). Story 1.5 validates this profile works end-to-end. If trimming causes runtime failures, set PublishTrimmed=false and document the reason.</reason>
+      </artifact>
+      <artifact>
+        <path>App.xaml.cs</path>
+        <kind>app-entry</kind>
+        <symbol>App.OnLaunched</symbol>
+        <lines>1-60</lines>
+        <reason>MigrationService.RunStartupAsync() is called in OnLaunched (Story 1.4). Story 1.5 validates this works in the published build. Confirm no hard-coded paths in AppDataDir — must use Environment.GetFolderPath(SpecialFolder.LocalApplicationData).</reason>
+      </artifact>
+      <artifact>
+        <path>Services/MigrationService.cs</path>
+        <kind>service</kind>
+        <symbol>MigrationService.AppDataDir</symbol>
+        <lines>1-20</lines>
+        <reason>Verify AppDataDir is constructed via Environment.GetFolderPath(SpecialFolder.LocalApplicationData), not a hard-coded path. Hard-coded paths break the published build on machines with different user profiles.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <ecosystem name="dotnet-main-project">
+        <current>
+          <package name="Microsoft.WindowsAppSDK" version="1.*" note="WinUI 3 framework" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" note="EF Core SQLite provider" />
+          <package name="Microsoft.Extensions.DependencyInjection" version="10.0.2" note="DI container" />
+          <package name="Microsoft.Extensions.Logging" version="10.0.2" note="Logging abstractions" />
+        </current>
+        <toAdd />
+      </ecosystem>
+      <ecosystem name="dotnet-test-project">
+        <current>
+          <package name="xunit" version="2.9.2" />
+          <package name="FluentAssertions" version="8.8.0" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+        </current>
+        <toAdd />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C-1">NO AUTOMATED TESTS FOR THIS STORY. All acceptance criteria are validated manually (build, publish, launch). The existing test suite must continue to pass after .csproj changes, but no new test files are created for Story 1.5.</constraint>
+    <constraint id="C-2">TREAT-WARNINGS-AS-ERRORS: AUDIT FIRST. Before adding TreatWarningsAsErrors=true, run dotnet build -p:Platform=x64 to surface all current warnings. Address each warning before enabling the flag. Do NOT add NoWarn suppressions as a shortcut.</constraint>
+    <constraint id="C-3">TRIMMING CAVEAT. PublishTrimmed=true is already in the Release publish profile. If the published app crashes due to reflection-based code paths (EF Core migrations, WinUI 3 XAML loader), set PublishTrimmed=false in win-x64.pubxml and document why in Dev Notes. Do not leave a silently broken published artifact.</constraint>
+    <constraint id="C-4">NO HARD-CODED PATHS. MigrationService.AppDataDir and any other file path must use Environment.GetFolderPath(SpecialFolder.LocalApplicationData) — not literal strings like "C:\Users\..." or "%USERPROFILE%\...". Verify this before declaring AC-3 done.</constraint>
+    <constraint id="C-5">VERSION IN .CSPROJ ONLY. Add Version/AssemblyVersion/FileVersion to GoogleCalendarManagement.csproj. Do not create AssemblyInfo.cs or maintain version strings anywhere else. The .csproj is the single source of truth.</constraint>
+    <constraint id="C-6">PLATFORM MUST BE SPECIFIED. All dotnet build, dotnet test, and dotnet publish commands require -p:Platform=x64 (or matching arch). Without it, the build defaults to AnyCPU and fails due to WinUI 3 MSIX requirements. Document this clearly in README.md.</constraint>
+    <constraint id="C-7">WINDOWSPACKAGETYPE=NONE MUST REMAIN. The .csproj has WindowsPackageType=None to run unpackaged. Do not remove or change this — it is required for dotnet run and self-contained publish to work without MSIX registration infrastructure.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>GoogleCalendarManagement.csproj — version and build config additions</name>
+      <kind>project-file-edit</kind>
+      <signature>
+&lt;PropertyGroup&gt;
+  &lt;Version&gt;1.0.0&lt;/Version&gt;
+  &lt;AssemblyVersion&gt;1.0.0.0&lt;/AssemblyVersion&gt;
+  &lt;FileVersion&gt;1.0.0.0&lt;/FileVersion&gt;
+  &lt;TreatWarningsAsErrors&gt;true&lt;/TreatWarningsAsErrors&gt;
+&lt;/PropertyGroup&gt;
+
+&lt;PropertyGroup Condition="'$(Configuration)' == 'Debug'"&gt;
+  &lt;Optimize&gt;false&lt;/Optimize&gt;
+  &lt;DebugType&gt;full&lt;/DebugType&gt;
+  &lt;DebugSymbols&gt;true&lt;/DebugSymbols&gt;
+&lt;/PropertyGroup&gt;
+
+&lt;PropertyGroup Condition="'$(Configuration)' == 'Release'"&gt;
+  &lt;Optimize&gt;true&lt;/Optimize&gt;
+  &lt;DebugType&gt;none&lt;/DebugType&gt;
+  &lt;DebugSymbols&gt;false&lt;/DebugSymbols&gt;
+&lt;/PropertyGroup&gt;
+      </signature>
+      <path>GoogleCalendarManagement.csproj (to be updated)</path>
+    </interface>
+    <interface>
+      <name>Publish command</name>
+      <kind>cli-command</kind>
+      <signature>
+dotnet publish GoogleCalendarManagement.csproj -p:PublishProfile=win-x64 -c Release
+# Output: bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/GoogleCalendarManagement.exe
+      </signature>
+      <path>Properties/PublishProfiles/win-x64.pubxml</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>No automated tests for Story 1.5. All validation is manual. After .csproj changes, run the full existing test suite to confirm nothing regressed. Manual checklist: (1) dotnet build Debug succeeds + PDB present, (2) dotnet build Release succeeds + no PDB, (3) dotnet test passes, (4) dotnet publish win-x64 Release succeeds, (5) published .exe launches + calendar.db created.</standards>
+    <locations>
+      <location>GoogleCalendarManagement.Tests/ — existing tests must continue passing; no new test files for Story 1.5</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC-2">Build_Debug_ProducesPdbSymbols — manual: check bin/Debug/ for .pdb files after dotnet build -c Debug</idea>
+      <idea acRef="AC-2">Build_Release_NoPdbSymbols — manual: confirm no .pdb in bin/Release/ after dotnet build -c Release</idea>
+      <idea acRef="AC-3">Publish_WinX64_Release_ExecutableLaunches — manual: dotnet publish, navigate to publish folder, double-click .exe, verify window opens</idea>
+      <idea acRef="AC-4">PublishedApp_CreatesDatabase_OnFirstLaunch — manual: delete %LOCALAPPDATA%\GoogleCalendarManagement\calendar.db, launch published .exe, verify calendar.db recreated</idea>
+    </ideas>
+  </tests>
+</story-context>

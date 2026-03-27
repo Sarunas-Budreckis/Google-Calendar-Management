@@ -1,0 +1,245 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>4</storyId>
+    <title>Implement Automatic Database Versioning and Migration System</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-4-implement-automatic-database-versioning-and-migration-system.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>automatic database schema migrations applied on app startup with pre-migration backups and integrity checks</iWant>
+    <soThat>schema updates are applied seamlessly when the app is updated, and the local database is protected from data loss</soThat>
+    <tasks>
+      - Create IMigrationService interface and MigrationService class in Services/ with RunStartupAsync(), ApplyMigrationsAsync(), CheckDatabaseIntegrityAsync(), and CreateBackupAsync(string reason) methods
+      - Implement ApplyMigrationsAsync(): detect pending migrations via GetPendingMigrationsAsync(), if any → CreateBackupAsync("pre-migration") → MigrateAsync() → upsert DatabaseSchemaVersion in system_state
+      - Implement CheckDatabaseIntegrityAsync(): open connection, run PRAGMA integrity_check, return result == "ok"
+      - Implement CreateBackupAsync(): File.Copy to timestamped path in AppData, cleanup backups keeping only 5 most recent
+      - Register IMigrationService in App.xaml.cs DI and call RunStartupAsync() explicitly in OnLaunched; show ContentDialog + exit on failure
+      - Write integration tests in Tests/Integration/MigrationServiceTests.cs covering migration apply, backup creation, DatabaseSchemaVersion row, integrity check, and backup cleanup
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1">
+      Given a new or existing database
+      When the application starts
+      Then pending EF Core migrations are automatically detected and applied via MigrationService.RunStartupAsync()
+    </criterion>
+    <criterion id="AC-2">
+      Migration safety checks are performed:
+      - If pending migrations exist, a backup is created first: calendar_backup_{yyyyMMdd_HHmmss}_pre-migration.db in %LOCALAPPDATA%\GoogleCalendarManagement\
+      - Backup uses File.Copy (atomic for SQLite with WAL mode)
+      - Migration failures are caught, logged, and re-thrown — app surfaces error to user
+      - Only 5 most recent calendar_backup_*.db files are kept (older deleted)
+    </criterion>
+    <criterion id="AC-3">
+      Database schema version is tracked:
+      - After successful migration, system_state row with state_name = 'DatabaseSchemaVersion' is upserted with the last applied migration name
+      - If no migrations pending, the row is left unchanged
+    </criterion>
+    <criterion id="AC-4">
+      Database integrity is validated on every startup:
+      - PRAGMA integrity_check; runs after migration step
+      - If result != "ok", InvalidOperationException is thrown
+      - App surfaces error with recovery instructions (backup location)
+    </criterion>
+    <criterion id="AC-5">
+      Service is integrated via DI and tested:
+      - IMigrationService registered as scoped in App.xaml.cs
+      - RunStartupAsync() called in App.OnLaunched (not IHostedService)
+      - Integration tests: migration applies, backup file created, DatabaseSchemaVersion present
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>MigrationService — full interface and implementation skeleton</section>
+        <snippet>IMigrationService: ApplyMigrationsAsync(), CheckDatabaseIntegrityAsync(), CreateBackupAsync(). MigrationService: GetPendingMigrationsAsync() → CreateBackupAsync("pre-migration") → MigrateAsync() → upsert SystemState "DatabaseSchemaVersion". Cleanup: Directory.GetFiles("calendar_backup_*.db").OrderByDescending(GetCreationTimeUtc).Skip(5) → Delete.</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Database Migration Workflow (Story 1.4) — startup sequence</section>
+        <snippet>App → MigrationService.RunStartupAsync() → GetPendingMigrationsAsync() → [if any] CreateBackupAsync → MigrateAsync → update SystemState → CheckDatabaseIntegrityAsync (PRAGMA integrity_check) → return startup complete. Backup naming: calendar_backup_{yyyyMMdd_HHmmss}_pre-migration.db.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 1.4 Definition</section>
+        <snippet>NFR-D1 (data loss prevention), NFR-D3 (database integrity). context.Database.Migrate() on startup. SQLite backup API (or File.Copy). Keep last 5 backups. Log to AppData/logs/migrations.log.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>NFR-D1 / NFR-D3 / NFR-I3</section>
+        <snippet>NFR-D1: Data loss prevention — automatic backup before any migration. NFR-D3: Database integrity check on every app launch (PRAGMA integrity_check). NFR-I3: Error handling — migration failure must be surfaced to user, not silently swallowed.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Services layer</section>
+        <snippet>Services/ folder in main project. MigrationService registered as scoped, invoked explicitly in App.OnLaunched. WinUI 3 does not use Generic Host — no AddHostedService.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>Data/CalendarDbContext.cs</path>
+        <kind>data-context</kind>
+        <symbol>CalendarDbContext</symbol>
+        <lines>1-20</lines>
+        <reason>MigrationService depends on CalendarDbContext for GetPendingMigrationsAsync(), MigrateAsync(), GetAppliedMigrationsAsync(), and SystemStates DbSet. Verify 7 DbSet properties and ApplyConfigurationsFromAssembly are present (Story 1.3).</reason>
+      </artifact>
+      <artifact>
+        <path>Data/Entities/SystemState.cs</path>
+        <kind>entity</kind>
+        <symbol>SystemState</symbol>
+        <lines>1-20</lines>
+        <reason>MigrationService upserts the 'DatabaseSchemaVersion' row in system_state. SystemState entity must have StateName (string PK or unique), StateValue (string), UpdatedAt (DateTime) properties. Created in Story 1.3.</reason>
+      </artifact>
+      <artifact>
+        <path>App.xaml.cs</path>
+        <kind>app-entry</kind>
+        <symbol>App.OnLaunched</symbol>
+        <lines>1-60</lines>
+        <reason>Story 1.4 adds DI registration for IMigrationService and calls RunStartupAsync() in OnLaunched. Understand current DI setup, _serviceProvider initialization, and window activation flow before adding migration call.</reason>
+      </artifact>
+      <artifact>
+        <path>GoogleCalendarManagement.Tests/Integration/DatabaseInfrastructureTests.cs</path>
+        <kind>test</kind>
+        <symbol>CreateInMemoryContext factory</symbol>
+        <lines>1-50</lines>
+        <reason>MigrationServiceTests.cs should reuse or adapt the in-memory SQLite factory pattern established here. Understand OpenConnection() + EnsureCreated() vs MigrateAsync() distinction (Story 1.4 tests use MigrateAsync on a real temp-file SQLite).</reason>
+      </artifact>
+      <artifact>
+        <path>GoogleCalendarManagement.Tests/Integration/SchemaTests.cs</path>
+        <kind>test</kind>
+        <symbol>SchemaTests</symbol>
+        <lines>1-30</lines>
+        <reason>Reference xUnit test structure, IDisposable cleanup pattern, and FluentAssertions usage for integration tests. MigrationServiceTests.cs follows same style.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <ecosystem name="dotnet-main-project">
+        <current>
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" note="GetPendingMigrationsAsync, MigrateAsync, GetAppliedMigrationsAsync" />
+          <package name="Microsoft.EntityFrameworkCore.Design" version="9.0.12" note="Required for dotnet ef CLI commands" />
+          <package name="Microsoft.Extensions.Logging.Abstractions" version="9.0.12" note="ILogger&lt;MigrationService&gt; — already in DI" />
+        </current>
+        <toAdd />
+      </ecosystem>
+      <ecosystem name="dotnet-test-project">
+        <current>
+          <package name="xunit" version="2.9.2" />
+          <package name="FluentAssertions" version="8.8.0" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" note="Real temp-file SQLite for backup tests" />
+        </current>
+        <toAdd />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C-1">NO IHOSTEDSERVICE. WinUI 3 apps do not use .NET Generic Host by default. MigrationService must be invoked explicitly via App.OnLaunched, not AddHostedService&lt;T&gt;(). Using IHostedService will silently not run without Generic Host setup.</constraint>
+    <constraint id="C-2">SYSTEM_STATE FOR VERSION TRACKING. Store 'DatabaseSchemaVersion' in the system_state table (SystemState entity, state_name UNIQUE), NOT in the config table. Config is for application settings; system_state is for internal system metadata. Use SingleOrDefaultAsync on state_name for upsert.</constraint>
+    <constraint id="C-3">BACKUP BEFORE MIGRATE, NOT AFTER. CreateBackupAsync("pre-migration") must complete successfully before MigrateAsync() is called. If backup fails, do not proceed with migration — throw and let the caller handle it.</constraint>
+    <constraint id="C-4">FILE.COPY FOR BACKUPS. Use File.Copy, not SQLite Online Backup API. SQLite WAL mode from Story 1.2 ensures the source file is consistent at startup before any writes. File.Copy is atomic at the OS level for reads.</constraint>
+    <constraint id="C-5">CLEANUP BY CREATION TIME. When pruning old backups, use File.GetCreationTimeUtc (not LastWriteTime). File.Copy sets creation time to the copy timestamp, making this the correct ordering signal.</constraint>
+    <constraint id="C-6">INTEGRITY CHECK USES RAW PRAGMA. EF Core does not expose PRAGMA integrity_check via a managed API. Use _context.Database.GetDbConnection().CreateCommand() with CommandText = "PRAGMA integrity_check;". Ensure connection is open before executing.</constraint>
+    <constraint id="C-7">STARTUP FAILURE MUST EXIT APP. If RunStartupAsync() throws, the app must show a WinUI 3 ContentDialog with backup location info and then call Application.Current.Exit(). Do not continue with a corrupted or unmigratable database.</constraint>
+    <constraint id="C-8">WINUI 3 DIALOG REQUIRES XAMLROOT. ContentDialog.XamlRoot must be set to the activated window's XamlRoot before ShowAsync(). Call _window.Activate() before RunStartupAsync() to ensure XamlRoot is available.</constraint>
+    <constraint id="C-9">TESTS USE REAL TEMP-FILE SQLITE FOR BACKUP TESTS. File.Copy requires a real file path. Backup-related tests must use Path.GetTempFileName() or a temp directory, not in-memory SQLite. Clean up temp files in test Dispose/finally.</constraint>
+    <constraint id="C-10">MIGRATION TESTS USE MIGREASYNC, NOT ENSURECREATED. Schema tests (Story 1.3) use EnsureCreated(). Migration tests (Story 1.4) must use MigrateAsync() to exercise the full migration pipeline including __EFMigrationsHistory tracking.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>IMigrationService</name>
+      <kind>service-interface</kind>
+      <signature>
+public interface IMigrationService
+{
+    Task RunStartupAsync();
+    Task ApplyMigrationsAsync();
+    Task&lt;bool&gt; CheckDatabaseIntegrityAsync();
+    Task CreateBackupAsync(string backupReason);
+}
+      </signature>
+      <path>Services/IMigrationService.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>MigrationService.ApplyMigrationsAsync</name>
+      <kind>service-method</kind>
+      <signature>
+var pending = (await _context.Database.GetPendingMigrationsAsync()).ToList();
+if (!pending.Any()) { _logger.LogInformation("No pending migrations."); return; }
+await CreateBackupAsync("pre-migration");
+await _context.Database.MigrateAsync();
+var latest = (await _context.Database.GetAppliedMigrationsAsync()).Last();
+// upsert system_state where state_name = 'DatabaseSchemaVersion'
+      </signature>
+      <path>Services/MigrationService.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>MigrationService.CheckDatabaseIntegrityAsync</name>
+      <kind>service-method</kind>
+      <signature>
+using var conn = _context.Database.GetDbConnection();
+await _context.Database.OpenConnectionAsync();
+using var cmd = conn.CreateCommand();
+cmd.CommandText = "PRAGMA integrity_check;";
+var result = await cmd.ExecuteScalarAsync();
+return result?.ToString() == "ok";
+      </signature>
+      <path>Services/MigrationService.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>MigrationService.CreateBackupAsync</name>
+      <kind>service-method</kind>
+      <signature>
+var backupPath = Path.Combine(AppDataDir, $"calendar_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{backupReason}.db");
+File.Copy(Path.Combine(AppDataDir, "calendar.db"), backupPath, overwrite: false);
+Directory.GetFiles(AppDataDir, "calendar_backup_*.db")
+    .OrderByDescending(File.GetCreationTimeUtc).Skip(5)
+    .ToList().ForEach(File.Delete);
+      </signature>
+      <path>Services/MigrationService.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>App.OnLaunched — startup wiring</name>
+      <kind>app-startup</kind>
+      <signature>
+using var scope = _serviceProvider.CreateScope();
+var migrationService = scope.ServiceProvider.GetRequiredService&lt;IMigrationService&gt;();
+try { await migrationService.RunStartupAsync(); }
+catch (Exception ex) { /* show ContentDialog, Application.Current.Exit() */ }
+      </signature>
+      <path>App.xaml.cs (to be updated)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Integration tests use xUnit with FluentAssertions. Backup-related tests require real temp-file SQLite (Path.GetTempFileName()); cleanup in Dispose or finally. Migration-apply tests use MigrateAsync() (not EnsureCreated()) on in-memory or temp-file SQLite to exercise __EFMigrationsHistory. Each test creates and disposes its own CalendarDbContext. No Moq needed — real implementations used throughout. New tests go in GoogleCalendarManagement.Tests/Integration/MigrationServiceTests.cs.</standards>
+    <locations>
+      <location>GoogleCalendarManagement.Tests/Integration/MigrationServiceTests.cs — new Story 1.4 integration tests</location>
+      <location>GoogleCalendarManagement.Tests/Integration/DatabaseInfrastructureTests.cs — reference factory pattern from Story 1.2</location>
+      <location>GoogleCalendarManagement.Tests/Integration/SchemaTests.cs — reference xUnit structure and FluentAssertions style from Story 1.3</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC-1, AC-5">ApplyMigrationsAsync_OnFreshDatabase_AppliesMigrationsSuccessfully — create CalendarDbContext on a temp-file SQLite, call ApplyMigrationsAsync(), assert GetAppliedMigrationsAsync() returns at least 1 migration, assert __EFMigrationsHistory has rows</idea>
+      <idea acRef="AC-2, AC-5">ApplyMigrationsAsync_WhenPendingMigrations_CreatesBackupFile — ensure calendar.db exists in temp dir, call ApplyMigrationsAsync(), assert Directory.GetFiles(tempDir, "calendar_backup_*_pre-migration.db").Length == 1</idea>
+      <idea acRef="AC-3">ApplyMigrationsAsync_AfterMigration_DatabaseSchemaVersionRowPresent — after ApplyMigrationsAsync(), query SystemStates where state_name == "DatabaseSchemaVersion", assert row exists with non-empty StateValue</idea>
+      <idea acRef="AC-4">CheckDatabaseIntegrityAsync_OnHealthyDatabase_ReturnsTrue — call MigrateAsync() on temp-file SQLite, then CheckDatabaseIntegrityAsync(), assert result is true</idea>
+      <idea acRef="AC-2">CreateBackupAsync_WhenMoreThanFiveBackupsExist_DeletesOldest — create 6 fake calendar_backup_*.db files with distinct creation times in temp dir, call CreateBackupAsync("test"), assert exactly 6 files remain (5 pre-existing kept + 1 new), assert oldest pre-existing file is deleted</idea>
+      <idea acRef="AC-1">ApplyMigrationsAsync_WhenNoMigrationsPending_DoesNotCreateBackup — apply migrations once, call ApplyMigrationsAsync() again, assert no new backup file created in AppData dir</idea>
+    </ideas>
+  </tests>
+</story-context>

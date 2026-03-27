@@ -350,8 +350,9 @@ Measured by:
 **Single Calendar View:**
 - WinUI 3 CalendarView component
 - Display existing Google Calendar events
-- Overlay generated/pending events (yellow/banana color)
+- Overlay generated/pending events (translucent 60% opacity)
 - Click event to edit title, times, description
+- Selected events have red outline (2px)
 
 **Approval Workflow:**
 - User selects events to publish (individual, day-by-day, or date range)
@@ -386,29 +387,29 @@ Append to event description: "Published by Google Calendar Management on {dateti
 
 ### Out of Scope for MVP
 
-**Future data sources:**
-- Chrome extension for YouTube real-time tracking
-- Google search history
-- Spotify listen history
-- Apple Screen Time
-- Google Maps timeline
-- Physical NFC tags
-- Google Takeout automation
+**Phase 2+ data sources:**
+- Chrome extension for YouTube real-time tracking (Phase 2)
+- Google search history (Phase 3)
+- Spotify listen history (Phase 3)
+- Apple Screen Time (Phase 3)
+- Google Maps timeline (Phase 3)
+- Physical NFC tags (Phase 3)
+- Google Takeout automation (Phase 2)
 
-**Advanced features:**
-- 24/7 server backend with email reminders
-- Google AppScripts integration (auto-recolor)
-- Data analysis dashboard (time budgets, activity breakdowns)
-- Fuzzy search across all events
-- Privacy layers (secret events, fake events, encryption)
-- Custom local UI (alternative to Google Calendar)
-- Chrome extension / GCal Add-on
+**Phase 2+ features:**
+- 24/7 server backend with email reminders (Phase 3)
+- Google AppScripts integration (auto-recolor) (Phase 2)
+- Data analysis dashboard (time budgets, activity breakdowns) (Phase 3)
+- Fuzzy search across all events (Phase 2)
+- Privacy layers (secret events, fake events, encryption) (Phase 3)
+- Custom local UI (alternative to Google Calendar) (Phase 3)
+- Chrome extension / GCal Add-on (Phase 2)
 
-**Color system enhancements:**
-- Sub-colors or gradients
-- Split mental state from activity type (dual tracking)
-- Automated color suggestions via AI
-- Color mood tracking independent of activity
+**Phase 2+ color system enhancements:**
+- Sub-colors or gradients (Phase 2)
+- Split mental state from activity type (dual tracking) (Phase 3)
+- Automated color suggestions via AI (Phase 3)
+- Color mood tracking independent of activity (Phase 3)
 
 ### MVP Success Criteria
 

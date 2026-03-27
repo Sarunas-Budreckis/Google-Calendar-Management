@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33103.201
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{348ADACA-6F04-4549-9896-78DA319B9C35}") = "GoogleCalendarManagement", "GoogleCalendarManagement.csproj", "{21B17A42-E0CC-43D7-B970-C77795381D55}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GoogleCalendarManagement.Tests", "GoogleCalendarManagement.Tests\GoogleCalendarManagement.Tests.csproj", "{F2C498CA-D070-445A-B200-7A14F1CED61E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|ARM64 = Debug|ARM64
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|ARM64 = Release|ARM64
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Debug|ARM64.Build.0 = Debug|ARM64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Debug|ARM64.Deploy.0 = Debug|ARM64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Debug|x64.ActiveCfg = Debug|x64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Debug|x64.Build.0 = Debug|x64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Debug|x64.Deploy.0 = Debug|x64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Debug|x86.ActiveCfg = Debug|x86
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Debug|x86.Build.0 = Debug|x86
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Debug|x86.Deploy.0 = Debug|x86
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Release|ARM64.ActiveCfg = Release|ARM64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Release|ARM64.Build.0 = Release|ARM64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Release|ARM64.Deploy.0 = Release|ARM64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Release|x64.ActiveCfg = Release|x64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Release|x64.Build.0 = Release|x64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Release|x64.Deploy.0 = Release|x64
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Release|x86.ActiveCfg = Release|x86
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Release|x86.Build.0 = Release|x86
+		{21B17A42-E0CC-43D7-B970-C77795381D55}.Release|x86.Deploy.0 = Release|x86
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Debug|x64.Build.0 = Debug|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Debug|x86.Build.0 = Debug|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Release|ARM64.Build.0 = Release|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Release|x64.ActiveCfg = Release|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Release|x64.Build.0 = Release|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Release|x86.ActiveCfg = Release|Any CPU
+		{F2C498CA-D070-445A-B200-7A14F1CED61E}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {27CBA4F8-190F-4FB8-BD19-D71AE82E4B5C}
+	EndGlobalSection
+EndGlobal

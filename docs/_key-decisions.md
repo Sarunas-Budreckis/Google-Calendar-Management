@@ -31,7 +31,7 @@ This document captures critical decisions made during the planning and design ph
 
 **Trade-offs Accepted:**
 - ✅ Windows-only for Phase 1 (acceptable for primary user)
-- ✅ Slightly steeper learning curve than WPF (worth it for future)
+- ✅ Slightly steeper learning curve than WPF (worth it for Phase 2+)
 
 ---
 
@@ -210,7 +210,7 @@ published_to_gcal = TRUE
 4. Cache everything locally
 5. Apply coalescing
 
-**Phase 2+ Enhancement:**
+**Phase 2 Enhancement:**
 - Chrome extension for real-time tracking (user already has historical data from Takeout)
 - Investigate existing extensions: "Local YouTube Video History Tracker", "Watchmarker"
 - Or build custom extension with export feature
@@ -673,7 +673,7 @@ Every time app modifies event, update the timestamp.
 
 **Trade-offs Accepted:**
 - ✅ More initial architecture (worth it for long-term)
-- ✅ May over-engineer for Phase 1 (acceptable, we know Phase 2+ is coming)
+- ✅ May over-engineer for Phase 1 (acceptable, we know Phase 2 and 3 are coming)
 
 ---
 

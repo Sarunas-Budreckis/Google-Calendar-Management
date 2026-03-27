@@ -6,7 +6,7 @@
 
 ## Overview
 
-This document contains research findings for all technologies, APIs, and libraries used in Phase 1 of the Google Calendar Management application.
+This document contains research findings for all technologies, APIs, and libraries used in the Google Calendar Management application across all phases.
 
 ---
 
@@ -60,7 +60,7 @@ This document contains research findings for all technologies, APIs, and librari
 - **Syncfusion WinUI Calendar** - Advanced features, commercial license
 - **ComponentOne WinUI Edition** - Enterprise-grade controls, commercial
 
-**Recommendation:** Start with built-in CalendarView, evaluate third-party if needed for Phase 2+
+**Recommendation:** Start with built-in CalendarView, evaluate third-party if needed for Phase 2 or 3
 
 **Resources:**
 - Official docs: https://learn.microsoft.com/en-us/windows/apps/winui/
@@ -427,7 +427,7 @@ foreach (var item in history)
 }
 ```
 
-**Future Enhancement:**
+**Phase 2 Enhancement:**
 Chrome extension for real-time tracking (see Future Work section)
 
 **Resources:**
@@ -767,7 +767,7 @@ function exportHistory() {
 }
 ```
 
-**Phase:** Post-Phase 1 investigation story
+**Phase:** Phase 2 investigation story
 
 ---
 

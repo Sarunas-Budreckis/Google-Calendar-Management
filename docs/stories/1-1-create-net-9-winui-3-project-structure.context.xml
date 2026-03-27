@@ -1,0 +1,326 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>1</storyId>
+    <title>Create .NET 9 WinUI 3 Project Structure</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-01-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-1-project-structure.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>a properly configured .NET 9 WinUI 3 desktop application project</iWant>
+    <soThat>I have a working Windows desktop app shell to build features upon</soThat>
+    <tasks>
+      <task id="1" ac="1,2">Create WinUI 3 solution with .NET 9
+        <subtask>Create new WinUI 3 App project using Visual Studio 2022 or dotnet CLI</subtask>
+        <subtask>Verify target framework is net9.0-windows10.0.19041.0 or later</subtask>
+        <subtask>Verify Windows App SDK 1.5+ is referenced</subtask>
+        <subtask>Test compilation succeeds with no errors</subtask>
+      </task>
+      <task id="2" ac="2">Establish project structure with folder organization
+        <subtask>Create /Models folder in project root</subtask>
+        <subtask>Create /Views folder in project root</subtask>
+        <subtask>Create /ViewModels folder in project root</subtask>
+        <subtask>Create /Services folder in project root</subtask>
+        <subtask>Create /Data folder in project root</subtask>
+        <subtask>Verify folder structure matches architecture document</subtask>
+      </task>
+      <task id="3" ac="2">Configure dependency injection in App.xaml.cs
+        <subtask>Add Microsoft.Extensions.DependencyInjection NuGet package</subtask>
+        <subtask>Create ServiceCollection in App.xaml.cs OnLaunched</subtask>
+        <subtask>Register placeholder service (e.g., ILogger) to verify DI works</subtask>
+        <subtask>Verify services can be resolved in MainWindow</subtask>
+      </task>
+      <task id="4" ac="2">Set up development configuration files
+        <subtask>Create .editorconfig with C# formatting rules (4 spaces, UTF-8, CRLF for Windows)</subtask>
+        <subtask>Create/update .gitignore for .NET, Visual Studio, WinUI 3 (bin/, obj/, .vs/, data/)</subtask>
+        <subtask>Verify files are properly excluded from git tracking</subtask>
+        <subtask>Commit configuration files to repository</subtask>
+      </task>
+      <task id="5" ac="3">Create basic MainWindow with placeholder UI
+        <subtask>Update MainWindow.xaml with Grid layout</subtask>
+        <subtask>Add TextBlock with "Google Calendar Management - Loading..." placeholder text</subtask>
+        <subtask>Set window default size to 1024x768</subtask>
+        <subtask>Set MinWidth="800" MinHeight="600" on Window element</subtask>
+        <subtask>Verify window launches with correct size and constraints</subtask>
+      </task>
+      <task id="6" ac="4" critical="true">Create GoogleCalendarManagement.Tests project
+        <subtask>Add xUnit test project to solution (.NET 9)</subtask>
+        <subtask>Install NuGet packages: xunit, xunit.runner.visualstudio, FluentAssertions, Moq</subtask>
+        <subtask>Add project reference to GoogleCalendarManagement project</subtask>
+        <subtask>Create /Unit and /Integration folders in test project</subtask>
+        <subtask>Verify test project compiles successfully</subtask>
+      </task>
+      <task id="7" ac="4">Write sample smoke test to verify test framework
+        <subtask>Create SmokeTests.cs in /Unit folder</subtask>
+        <subtask>Write simple test: CanCreateMainWindow_ReturnsTrue()</subtask>
+        <subtask>Run test and verify it passes in Visual Studio Test Explorer</subtask>
+        <subtask>Verify test discovery works (test appears in Test Explorer)</subtask>
+      </task>
+      <task id="8" note="technical">Enable hot reload for faster development
+        <subtask>Verify Hot Reload is enabled in Visual Studio project properties</subtask>
+        <subtask>Test hot reload by changing XAML TextBlock text while app running</subtask>
+        <subtask>Verify change appears without restarting application</subtask>
+      </task>
+      <task id="9" ac="all">Validate final project setup
+        <subtask>Build solution in Release configuration - verify no errors</subtask>
+        <subtask>Build solution in Debug configuration - verify no errors</subtask>
+        <subtask>Launch application and verify window appears correctly</subtask>
+        <subtask>Run all tests and verify they pass</subtask>
+        <subtask>Verify project structure matches architecture document layout</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">
+      <given>a clean development environment</given>
+      <when>I create the project using .NET 9 and Windows App SDK</when>
+      <then>the application compiles and launches with a basic window</then>
+    </criterion>
+    <criterion id="2">
+      <condition>the project structure follows .NET best practices:</condition>
+      <requirements>
+        <requirement>Proper folder organization (Models, Views, ViewModels, Services, Data)</requirement>
+        <requirement>Dependency injection configured in App.xaml.cs</requirement>
+        <requirement>.editorconfig and .gitignore configured</requirement>
+        <requirement>Target framework set to net9.0-windows10.0.19041.0 or later</requirement>
+      </requirements>
+    </criterion>
+    <criterion id="3">
+      <condition>basic WinUI 3 window displays:</condition>
+      <requirements>
+        <requirement>MainWindow.xaml with placeholder UI</requirement>
+        <requirement>Application launches to 1024x768 default window size</requirement>
+        <requirement>Window is resizable with min-width/min-height constraints</requirement>
+      </requirements>
+    </criterion>
+    <criterion id="4" critical="true">
+      <condition>testing infrastructure is established:</condition>
+      <requirements>
+        <requirement>GoogleCalendarManagement.Tests project created in solution</requirement>
+        <requirement>xUnit test project configured with FluentAssertions, Moq packages</requirement>
+        <requirement>Test project can discover and run tests successfully</requirement>
+        <requirement>Sample smoke test verifies test framework works</requirement>
+      </requirements>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <artifact>
+        <path>docs/epics.md</path>
+        <title>Epic 1: Foundation & Project Setup</title>
+        <section>Story 1.1: Create .NET 9 WinUI 3 Project Structure</section>
+        <snippet>Establishes .NET 9 + WinUI 3 project structure. Testing framework established in first story with xUnit, FluentAssertions, Moq. Use Visual Studio 2022 with Windows App SDK 1.5+. Enable hot reload for faster development iterations.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Project Initialization</section>
+        <snippet>Create WinUI 3 project with .NET 9 using dotnet CLI or Visual Studio 2022. Establishes base architecture with WinUI 3 UI framework (Windows App SDK 1.8.3), .NET 9.0.12 runtime, XAML-based declarative UI, MVVM pattern support.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Project Structure Overview</section>
+        <snippet>Three-layer architecture: GoogleCalendarManagement (WinUI 3 UI), GoogleCalendarManagement.Core (Business Logic), GoogleCalendarManagement.Data (Data Access). Story 1.1 creates main UI project with folder structure: Models, Views, ViewModels, Services, Data, plus separate Tests project.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Technology Stack Details</section>
+        <snippet>.NET 9.0.12, Windows App SDK 1.8.3, C# 13, WinUI 3 with XAML, MVVM with CommunityToolkit.Mvvm. Key packages: Microsoft.Extensions.DependencyInjection, Entity Framework Core 9.0.12, xUnit 2.x, Moq 4.x, FluentAssertions 6.x.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Folder Organization and Naming Patterns</section>
+        <snippet>One class per file, file name = class name. Namespaces follow folder structure. PascalCase for classes/methods, _camelCase for private fields. XAML controls use PascalCase with type suffix. Tests co-located by namespace.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Dependency Injection Patterns</section>
+        <snippet>Configure DI in App.xaml.cs. AddSingleton for app-level state (Logger), AddScoped for per-operation services, AddTransient for stateless algorithms. DbContext: Scoped. Use IHttpClientFactory for all HTTP services.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Testing Infrastructure</section>
+        <snippet>Test project organization: Unit/ and Integration/ folders. xUnit test runner, Moq for mocking, FluentAssertions for assertions. Algorithms require 100% unit test coverage. Services use integration tests with in-memory SQLite.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>8. Non-Functional Requirements</section>
+        <snippet>NFR-M1: Code quality with dependency injection for testability. NFR-M2: Test project created in Story 1.1. NFR-M4: Comprehensive documentation required.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/ux-design-specification.md</path>
+        <title>UX Design Specification</title>
+        <section>Visual Design System</section>
+        <snippet>Application window: 1024x768 default size, min 800x600. Uses Fluent Design System with WinUI 3 controls. Resizable window with min-width/min-height constraints.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Story 1.1: Project Structure</section>
+        <snippet>Create .NET 9 WinUI 3 desktop application with folder organization, dependency injection, editorconfig, gitignore. Testing framework (xUnit, FluentAssertions, Moq) from first story. Solution contains 4 projects: main WinUI 3 app, Core class library, Data class library, Tests project.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Dependencies - NuGet Packages</section>
+        <snippet>Main project: Microsoft.WindowsAppSDK 1.8.3, Microsoft.Extensions.DependencyInjection 9.0.x, CommunityToolkit.Mvvm 8.3.2. Test project: xUnit 2.9.2, xunit.runner.visualstudio 2.8.2, Moq 4.20.72, FluentAssertions 6.12.2, Microsoft.NET.Test.Sdk 17.11.1.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Acceptance Criteria AC-1.1</section>
+        <snippet>4 projects in solution: GoogleCalendarManagement (WinUI 3 executable), GoogleCalendarManagement.Core (Class library .NET 9), GoogleCalendarManagement.Data (Class library .NET 9), GoogleCalendarManagement.Tests (xUnit test project .NET 9). Views/, ViewModels/, Services/, Repositories/, Entities/, Configurations/ folders must exist.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Test Strategy - Story 1.1</section>
+        <snippet>Unit tests for dependency injection: ServiceProvider should resolve DbContext and ILogger. Manual tests: launch application, verify window appears, verify folder structure, build solution with 0 errors. Sample smoke test required in SmokeTests.cs.</snippet>
+      </artifact>
+    </docs>
+    <code>
+      <note>No existing code - this is the first story creating the project foundation</note>
+    </code>
+    <dependencies>
+      <dotnet>
+        <runtime>.NET 9.0.12</runtime>
+        <targetFramework>net9.0-windows10.0.19041.0</targetFramework>
+        <languageVersion>C# 13</languageVersion>
+        <sdk>Windows App SDK 1.5+ (latest stable: 1.8.3)</sdk>
+      </dotnet>
+      <nuget>
+        <mainProject>
+          <package name="Microsoft.WindowsAppSDK" version="1.8.3" purpose="WinUI 3 framework and Windows App SDK"/>
+          <package name="Microsoft.Windows.SDK.BuildTools" version="10.0.26100.1742" purpose="Windows SDK build tools"/>
+          <package name="CommunityToolkit.Mvvm" version="8.3.2" purpose="MVVM Toolkit for future ViewModels"/>
+          <package name="Microsoft.Extensions.DependencyInjection" version="9.0.x" purpose="Dependency injection container configuration"/>
+        </mainProject>
+        <testProject>
+          <package name="xunit" version="2.9.2" purpose="Test framework and runner"/>
+          <package name="xunit.runner.visualstudio" version="2.8.2" purpose="Visual Studio test integration"/>
+          <package name="FluentAssertions" version="6.12.2" purpose="Expressive assertion library"/>
+          <package name="Moq" version="4.20.72" purpose="Mocking framework for unit tests"/>
+          <package name="Microsoft.NET.Test.Sdk" version="17.11.1" purpose="Test SDK for .NET"/>
+        </testProject>
+      </nuget>
+      <prerequisites>
+        <tool name="Visual Studio 2022" version="17.8+" workload="Windows application development"/>
+        <tool name=".NET SDK" version="9.0.12" source="https://dotnet.microsoft.com/download/dotnet/9.0"/>
+        <tool name="Windows 10 SDK" version="10.0.19041.0 or later" source="Visual Studio Installer"/>
+      </prerequisites>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <architectural>
+      <constraint>MUST use .NET 9.0.12 runtime with target framework net9.0-windows10.0.19041.0 or later</constraint>
+      <constraint>MUST use Windows App SDK 1.8.3 (not just 1.5+)</constraint>
+      <constraint>MUST use WinUI 3 for UI framework with XAML</constraint>
+      <constraint>MUST follow MVVM pattern - prepare folder structure for ViewModels from start</constraint>
+      <constraint>MUST implement dependency injection from Story 1.1 using Microsoft.Extensions.DependencyInjection 9.0.x</constraint>
+      <constraint>MUST create test project in Story 1.1, not added later - critical for TDD approach</constraint>
+      <constraint>MUST create exactly 4 projects: GoogleCalendarManagement (WinUI 3 exe), GoogleCalendarManagement.Core (class lib), GoogleCalendarManagement.Data (class lib), GoogleCalendarManagement.Tests (xUnit)</constraint>
+      <constraint>MUST create folders: Views/, ViewModels/, Services/, Repositories/, Entities/, Configurations/</constraint>
+      <constraint>CommunityToolkit.Mvvm 8.3.2 for future MVVM implementation</constraint>
+    </architectural>
+    <projectStructure>
+      <constraint>One class per file, file name must match class name</constraint>
+      <constraint>Folder structure must follow: Models, Views, ViewModels, Services, Data</constraint>
+      <constraint>Tests must be co-located by namespace (e.g., Services/ → Tests/Unit/Services/)</constraint>
+      <constraint>No hard-coded paths - all relative or AppData based</constraint>
+    </projectStructure>
+    <naming>
+      <constraint>C# Classes: PascalCase</constraint>
+      <constraint>Interfaces: IPascalCase</constraint>
+      <constraint>Methods: PascalCase verbs</constraint>
+      <constraint>Private fields: _camelCase</constraint>
+      <constraint>XAML Controls: PascalCase with type suffix (e.g., MainCalendarView, PublishButton)</constraint>
+      <constraint>Namespaces: GoogleCalendarManagement.{Layer} format</constraint>
+    </naming>
+    <testing>
+      <constraint>MUST use xUnit 2.x as test runner</constraint>
+      <constraint>MUST use Moq 4.x for mocking</constraint>
+      <constraint>MUST use FluentAssertions 6.x for assertions</constraint>
+      <constraint>Test project must be .NET 9 targeting same framework as main app</constraint>
+      <constraint>Create /Unit and /Integration folders in test project structure</constraint>
+      <constraint>Sample smoke test required to verify test framework works</constraint>
+    </testing>
+    <configuration>
+      <constraint>MUST create .editorconfig with C# formatting rules (4 spaces, UTF-8, CRLF for Windows)</constraint>
+      <constraint>MUST create .gitignore for .NET, Visual Studio, WinUI 3 (bin/, obj/, .vs/, data/)</constraint>
+      <constraint>Window default size: 1024x768, minimum size: 800x600</constraint>
+    </configuration>
+    <qualityStandards>
+      <constraint>NFR-M1: Code quality - dependency injection for testability</constraint>
+      <constraint>NFR-M2: Testing framework established in first story</constraint>
+      <constraint>Application must compile with no errors in both Debug and Release configurations</constraint>
+      <constraint>Hot reload should be enabled for faster development iterations</constraint>
+    </qualityStandards>
+  </constraints>
+  <interfaces>
+    <interface>
+      <name>IServiceCollection (DI Container)</name>
+      <kind>Framework interface - Microsoft.Extensions.DependencyInjection</kind>
+      <signature>Standard .NET DI container configured in App.xaml.cs OnLaunched method</signature>
+      <usage>Register services using AddSingleton, AddScoped, AddTransient methods</usage>
+    </interface>
+    <interface>
+      <name>MainWindow</name>
+      <kind>WinUI 3 Window class</kind>
+      <signature>Standard WinUI 3 window with XAML layout and code-behind</signature>
+      <usage>Entry point window, configured with 1024x768 default size, min 800x600, placeholder UI</usage>
+    </interface>
+    <note>Future stories will define business logic interfaces - this story establishes infrastructure only</note>
+  </interfaces>
+  <tests>
+    <standards>
+      Test project GoogleCalendarManagement.Tests uses xUnit 2.x as test runner with Moq 4.x for mocking and FluentAssertions 6.x for assertions. Tests are organized into /Unit and /Integration folders, co-located by namespace with source code. Story 1.1 requires a smoke test to verify the test framework is properly configured. Future stories will add meaningful tests for services, algorithms, and data access. Algorithms require 100% unit test coverage. Services use integration tests with in-memory SQLite. UI testing is manual (WinUI 3 automated UI testing is complex).
+    </standards>
+    <locations>
+      <testProject>GoogleCalendarManagement.Tests/</testProject>
+      <unitTests>GoogleCalendarManagement.Tests/Unit/</unitTests>
+      <integrationTests>GoogleCalendarManagement.Tests/Integration/</integrationTests>
+      <testData>GoogleCalendarManagement.Tests/TestData/</testData>
+    </locations>
+    <ideas>
+      <test id="smoke-1" ac="4" type="unit">
+        <name>CanCreateMainWindow_ReturnsTrue</name>
+        <description>Smoke test to verify xUnit test framework is configured correctly. Tests that a simple assertion passes using FluentAssertions syntax.</description>
+        <location>GoogleCalendarManagement.Tests/Unit/SmokeTests.cs</location>
+      </test>
+      <test id="discovery-1" ac="4" type="integration">
+        <name>TestExplorer_DiscoversTests</name>
+        <description>Verify Visual Studio Test Explorer can discover and list the smoke test.</description>
+        <verification>Manual verification in Visual Studio Test Explorer</verification>
+      </test>
+      <test id="framework-1" ac="4" type="unit">
+        <name>FluentAssertions_SyntaxWorks</name>
+        <description>Verify FluentAssertions package is installed and syntax works correctly.</description>
+        <example>canCreate.Should().BeTrue()</example>
+      </test>
+      <test id="framework-2" ac="4" type="unit">
+        <name>Moq_PackageAvailable</name>
+        <description>Verify Moq package is installed and available for future mocking needs.</description>
+        <note>No actual mocking in Story 1.1, just verify package availability</note>
+      </test>
+      <futureTests>
+        <note>Story 1.2 will add DbContext instantiation tests</note>
+        <note>Story 1.3 will add database schema validation tests</note>
+        <note>Epic 2+ will add service layer tests with Moq mocking</note>
+        <note>Epic 3+ will add algorithm tests requiring 100% coverage</note>
+      </futureTests>
+    </ideas>
+  </tests>
+</story-context>

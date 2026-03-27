@@ -1,0 +1,242 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>2</storyId>
+    <title>Configure SQLite Database with Entity Framework Core</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-2-configure-sqlite-database-with-entity-framework-core.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>Entity Framework Core configured with SQLite provider</iWant>
+    <soThat>I have a robust ORM for local data persistence</soThat>
+    <tasks>
+      - Install required NuGet packages (Microsoft.EntityFrameworkCore.Sqlite 9.0.12, Design, Tools to main project; Sqlite to test project)
+      - Create Data/CalendarDbContext.cs inheriting DbContext, constructor accepting DbContextOptions, OnModelCreating placeholder, WAL mode + FK enforcement via PRAGMA
+      - Configure database path: resolve %LOCALAPPDATA%\GoogleCalendarManagement\ at runtime in App.xaml.cs, create directory if missing, store in DatabaseOptions class
+      - Register CalendarDbContext with DI via services.AddDbContext in App.xaml.cs ConfigureServices, pass computed connection string
+      - Apply initial migration on startup: create InitialCreate migration, call dbContext.Database.MigrateAsync() during app launch
+      - Write integration tests in Tests/Integration/DatabaseInfrastructureTests.cs: CanBeInstantiated, CreatesFileAtExpectedPath, BasicCrudOperations, MigrationApplied
+      - Validate: build Debug+Release, launch app and verify calendar.db at AppData path, inspect WAL files, confirm __EFMigrationsHistory, run all tests
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1">
+      Given the .NET 9 WinUI 3 project from Story 1.1
+      When I configure Entity Framework Core with SQLite
+      Then the application creates and connects to a SQLite database on first launch
+    </criterion>
+    <criterion id="AC-2">
+      The DbContext is properly configured:
+      - CalendarDbContext class created with dependency injection registration
+      - Database file stored in %LOCALAPPDATA%\GoogleCalendarManagement\calendar.db
+      - Connection string managed via configuration (not hardcoded)
+      - EF Core migrations system enabled
+    </criterion>
+    <criterion id="AC-3">
+      Database infrastructure is testable:
+      - CalendarDbContext can be instantiated in unit tests using in-memory SQLite
+      - Database file is created at the expected location on first launch
+      - Basic CRUD round-trip operations succeed
+      - Database schema version is tracked via EF Core migrations (__EFMigrationsHistory table)
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Data Persistence / Technology Stack</section>
+        <snippet>SQLite (embedded, file-based). Entity Framework Core 9.0.12. Code-First migrations. Location: {AppData}/GoogleCalendarManagement/calendar.db. 14 tables in full schema.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>NuGet Packages (Verified January 2026)</section>
+        <snippet>Microsoft.EntityFrameworkCore.Sqlite Version="9.0.12", Microsoft.EntityFrameworkCore.Tools Version="9.0.12", Microsoft.EntityFrameworkCore.Design Version="9.0.12"</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>LIFECYCLE PATTERNS - Service Registration (DI)</section>
+        <snippet>services.AddDbContext&lt;CalendarDbContext&gt;(options => options.UseSqlite("Data Source=calendar.db")); Register as scoped (default for AddDbContext).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>DbContext Usage</section>
+        <snippet>ALWAYS dispose DbContext (use using or DI scoped). Preferred: inject via constructor. Scoped lifetime — disposed automatically at end of scope.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Layer Separation / Testing Strategy</section>
+        <snippet>UI (WinUI 3) → Core (Business Logic) → Data (EF Core) → Database (SQLite). Services: Integration tests with in-memory SQLite. Dependency rule: inner layers don't reference outer layers.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Database Overview / Integrity Constraints</section>
+        <snippet>WAL mode enabled for crash recovery (NFR-D1). Foreign key constraints enforced via PRAGMA foreign_keys = ON. Transaction safety required.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Data Architecture - Core Data Model</section>
+        <snippet>Full schema is 14 tables: gcal_event, gcal_event_version, date_state, tracked_gap, toggl_data, youtube_data, call_log_data, generated_event_source, weekly_state, save_state, audit_log, system_state, data_source_refresh, config. Story 1.2 establishes the DbContext only — Story 1.3 adds entities.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 1.2 Definition</section>
+        <snippet>Install NuGet: Microsoft.EntityFrameworkCore.Sqlite, Microsoft.EntityFrameworkCore.Design. Database path: %LOCALAPPDATA%\GoogleCalendarManagement\calendar.db. Enable WAL mode for crash recovery (NFR-D1). Set up database factory pattern for testability. Reference: FR-8.1, NFR-D3.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>FR-8.1 Local Storage / NFR-D1 Crash Recovery / NFR-D3 Database Integrity</section>
+        <snippet>FR-8.1: SQLite as local storage, database in user AppData. NFR-D1: WAL journal mode for crash recovery. NFR-D3: Foreign key constraints and referential integrity enforced.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schema Reference</title>
+        <section>Full Schema</section>
+        <snippet>Reference document for all 14 table definitions. Story 1.2 does not implement tables — Story 1.3 adds the Phase 1 schema. Consult for column types, naming conventions (snake_case), and index patterns.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>App.xaml.cs</path>
+        <kind>application-entry</kind>
+        <symbol>App.ConfigureServices</symbol>
+        <lines>74-85</lines>
+        <reason>Existing DI registration point. Story 1.2 adds AddDbContext and DatabaseOptions here. Pattern: ServiceCollection → BuildServiceProvider in OnLaunched.</reason>
+      </artifact>
+      <artifact>
+        <path>App.xaml.cs</path>
+        <kind>application-entry</kind>
+        <symbol>App.OnLaunched</symbol>
+        <lines>28-68</lines>
+        <reason>App startup sequence where MigrateAsync() call must be added after DI setup and before window.Activate().</reason>
+      </artifact>
+      <artifact>
+        <path>GoogleCalendarManagement.Tests/Unit/SmokeTests.cs</path>
+        <kind>test</kind>
+        <symbol>SmokeTests</symbol>
+        <lines>1-42</lines>
+        <reason>Existing test pattern. Integration tests for Story 1.2 should follow same xUnit + FluentAssertions style. New tests go in Tests/Integration/ folder.</reason>
+      </artifact>
+      <artifact>
+        <path>GoogleCalendarManagement.csproj</path>
+        <kind>project-file</kind>
+        <symbol>PackageReference ItemGroup</symbol>
+        <lines>50-58</lines>
+        <reason>Current dependencies. EF Core packages not yet added. Add Microsoft.EntityFrameworkCore.Sqlite, .Tools, .Design v9.0.12 to this ItemGroup.</reason>
+      </artifact>
+      <artifact>
+        <path>GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj</path>
+        <kind>project-file</kind>
+        <symbol>PackageReference ItemGroup</symbol>
+        <lines>10-17</lines>
+        <reason>Test project dependencies. Add Microsoft.EntityFrameworkCore.Sqlite v9.0.12 for in-memory SQLite test support.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <ecosystem name="dotnet-main-project">
+        <current>
+          <package name="Microsoft.Extensions.DependencyInjection" version="10.0.2" />
+          <package name="Microsoft.Extensions.Logging" version="10.0.2" />
+          <package name="Microsoft.Extensions.Logging.Debug" version="10.0.2" />
+          <package name="Microsoft.WindowsAppSDK" version="1.*" />
+        </current>
+        <toAdd>
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+          <package name="Microsoft.EntityFrameworkCore.Tools" version="9.0.12" />
+          <package name="Microsoft.EntityFrameworkCore.Design" version="9.0.12" />
+        </toAdd>
+      </ecosystem>
+      <ecosystem name="dotnet-test-project">
+        <current>
+          <package name="xunit" version="2.9.2" />
+          <package name="xunit.runner.visualstudio" version="2.8.2" />
+          <package name="FluentAssertions" version="8.8.0" />
+          <package name="Moq" version="4.20.72" />
+          <package name="Microsoft.NET.Test.Sdk" version="17.11.1" />
+          <package name="coverlet.collector" version="6.0.2" />
+        </current>
+        <toAdd>
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" note="Required for in-memory SQLite test factory" />
+        </toAdd>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C-1">WAL journal mode MUST be enabled (NFR-D1). Set via SQLite connection string ("Mode=WALJournal") or PRAGMA journal_mode=WAL after connection open. Do not skip.</constraint>
+    <constraint id="C-2">Foreign key enforcement MUST be set per-connection: PRAGMA foreign_keys=ON. SQLite resets this per-connection; it is NOT a persistent database setting.</constraint>
+    <constraint id="C-3">CalendarDbContext must be registered as SCOPED (default for AddDbContext). Never singleton — causes threading and concurrency issues.</constraint>
+    <constraint id="C-4">Connection string must NOT be hardcoded. Use a typed DatabaseOptions class populated from runtime path resolution. Path: %LOCALAPPDATA%\GoogleCalendarManagement\calendar.db</constraint>
+    <constraint id="C-5">Directory %LOCALAPPDATA%\GoogleCalendarManagement\ must be created via Directory.CreateDirectory() before connection is first opened. App will crash otherwise.</constraint>
+    <constraint id="C-6">EF Core CLI tools require Microsoft.EntityFrameworkCore.Design in the startup project. Migration commands: dotnet ef migrations add InitialCreate, dotnet ef database update.</constraint>
+    <constraint id="C-7">Story 1.2 creates the DbContext and migration infrastructure ONLY. Entity/table definitions (the 14-table schema) are added in Story 1.3. Do not define DbSet properties for business entities in this story.</constraint>
+    <constraint id="C-8">All code must use C# nullable reference types (Nullable enabled in .csproj). DbContextOptions parameter must be non-nullable.</constraint>
+    <constraint id="C-9">Layer rule: CalendarDbContext lives in the Data/ folder of the main project (not a separate library) for this story. Future refactoring to GoogleCalendarManagement.Data project is deferred.</constraint>
+    <constraint id="C-10">Integration tests MUST use in-memory SQLite (Data Source=:memory:) with OpenConnection() + EnsureCreated() — not the real AppData file — to remain fast and isolated.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>CalendarDbContext constructor</name>
+      <kind>class-constructor</kind>
+      <signature>public CalendarDbContext(DbContextOptions&lt;CalendarDbContext&gt; options) : base(options)</signature>
+      <path>Data/CalendarDbContext.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>AddDbContext DI registration</name>
+      <kind>dependency-injection</kind>
+      <signature>services.AddDbContext&lt;CalendarDbContext&gt;(options => options.UseSqlite(connectionString));</signature>
+      <path>App.xaml.cs — ConfigureServices method</path>
+    </interface>
+    <interface>
+      <name>DatabaseOptions configuration class</name>
+      <kind>configuration-class</kind>
+      <signature>public class DatabaseOptions { public string ConnectionString { get; init; } = ""; }</signature>
+      <path>Data/DatabaseOptions.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>Database startup migration</name>
+      <kind>startup-call</kind>
+      <signature>await dbContext.Database.MigrateAsync();</signature>
+      <path>App.xaml.cs — OnLaunched, after serviceProvider built, before window.Activate()</path>
+    </interface>
+    <interface>
+      <name>In-memory test factory</name>
+      <kind>test-helper</kind>
+      <signature>var options = new DbContextOptionsBuilder&lt;CalendarDbContext&gt;().UseSqlite("Data Source=:memory:").Options; var ctx = new CalendarDbContext(options); ctx.Database.OpenConnection(); ctx.Database.EnsureCreated();</signature>
+      <path>GoogleCalendarManagement.Tests/Integration/DatabaseInfrastructureTests.cs</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Integration tests use xUnit with FluentAssertions. Test project targets net9.0 (not windows-specific). Use in-memory SQLite (Data Source=:memory:) for all DB tests — never the real AppData file. Each test creates and disposes its own CalendarDbContext instance. Pattern matches existing SmokeTests.cs: [Fact] methods, Arrange/Act/Assert comments, FluentAssertions .Should() syntax. New tests live in GoogleCalendarManagement.Tests/Integration/ folder. No Moq needed for database infrastructure tests (real in-memory SQLite preferred over mocks for this layer, per architecture.md "Services: Integration tests with in-memory SQLite").</standards>
+    <locations>
+      <location>GoogleCalendarManagement.Tests/Integration/ — new integration tests for Story 1.2</location>
+      <location>GoogleCalendarManagement.Tests/Unit/SmokeTests.cs — existing pattern reference</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC-3">CalendarDbContext_CanBeInstantiated_WithInMemorySqlite — create context with in-memory SQLite, assert not null, dispose cleanly</idea>
+      <idea acRef="AC-2, AC-3">Database_CreatesFile_AtExpectedPath — resolve AppData path, call MigrateAsync, assert file exists at %LOCALAPPDATA%\GoogleCalendarManagement\calendar.db, cleanup after test</idea>
+      <idea acRef="AC-3">Database_CanExecute_BasicCrudOperations — insert a test record (use a minimal stub entity or raw SQL), read it back, delete it; assert round-trip succeeds</idea>
+      <idea acRef="AC-2, AC-3">Database_MigrationApplied_SchemaVersionTracked — after EnsureCreated/MigrateAsync, query sqlite_master or __EFMigrationsHistory; assert InitialCreate migration entry exists</idea>
+      <idea acRef="AC-2">Database_WALMode_IsEnabled — open connection, execute "PRAGMA journal_mode;", assert result is "wal"</idea>
+      <idea acRef="AC-2">Database_ForeignKeys_AreEnforced — execute "PRAGMA foreign_keys;", assert result is 1</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -91,19 +91,34 @@ Measured by:
 
 ## Product Scope
 
-### MVP - Minimum Viable Product (Phase 1)
+### MVP - Minimum Viable Product (Phase 1 + 2)
 
-**Core Value:** Single-pane view with approval workflow for 4 data sources
+**Core Value:** Local-first calendar viewer with full manual editing capabilities
 
-**Data Source Integration:**
+**Phase 1 - Basic UI & Pull from GCal (Read-Only):**
+- Year/Month/Week/Day views displaying existing Google Calendar events
+- Pull from GCal to sync events locally
+- Save/Export functionality for backups
+- Green/grey sync status indicators per date
+- App launches to year view with date selection
+
+**Phase 2 - Editing & Push to GCal:**
+- Event creation (drag-to-create OR "+ Add Event" button)
+- Full event editing (title, time, color, description)
+- Event selection with red outline visual feedback
+- Translucent display for unpushed events (60% opacity)
+- Push to GCal with confirmation dialog
+- Auto-save to local DB (instant, 0-lag)
+
+**Phase 3 - Data Sources (Post-MVP):**
 1. **Toggl Track API** - Time entries with phone activity coalescing (sliding window, 8/15 rounding)
 2. **iOS Call Logs** - iMazing CSV parsing with duration filtering
 3. **YouTube Watch History** - Google Takeout JSON with session coalescing and video metadata
 4. **Outlook Calendar** - Microsoft Graph API OAuth 2.0 (or .ics fallback)
 
 **Core Workflows:**
-- **Single Calendar View:** WinUI 3 CalendarView displaying existing Google Calendar events + pending approvals (yellow/banana overlay)
-- **Approval Workflow:** Click to edit events, select individual/day/range to approve, batch publish to Google Calendar
+- **Single Calendar View:** WinUI 3 CalendarView displaying existing Google Calendar events
+- **Visual State Language:** Published events (100% opacity), unpushed events (60% translucent), selected events (red 2px outline)
 - **8/15 Rounding Algorithm:** Divide time into 15-min blocks, keep blocks with ≥8 minutes activity
 - **Phone Activity Coalescing:** Sliding window with 15-min gap auto-stop, quality checks
 - **YouTube Session Coalescing:** Sliding window including videos within (duration + 30 min)
@@ -112,15 +127,28 @@ Measured by:
 
 **Data Management:**
 - **Local SQLite Database:** 14 tables storing all data with complete version history
-- **App-Published Notation:** Append "Published by Google Calendar Management on {datetime}" to event descriptions
-- **Weekly Status Tracking:** Calculate completion per data source, sync to Excel cloud via Microsoft Graph
+- **App-Published Notation:** Append "Published by Google Calendar Management on {datetime}" to event descriptions (Phase 2)
+- **Weekly Status Tracking:** Calculate completion per data source, sync to Excel cloud via Microsoft Graph (Phase 3)
 
-**Must Work For Launch:**
+**Must Work For Phase 1 Launch:**
+- View existing Google Calendar in year/month/week/day views
+- Pull from GCal to sync events locally
+- Save and export local backups
+- Green/grey sync status indicators
+- Read-only event viewing (no editing)
+
+**Must Work For Phase 2 Launch:**
+- Create and edit events locally (instant, 0-lag)
+- Push edited events to Google Calendar
+- Visual distinction: translucent unpushed events, red outline for selected
+- Confirmation dialog before publishing
+
+**Must Work For Phase 3 Launch:**
 - All 4 data sources successfully import and publish
-- Single-app experience (no tab juggling)
-- Reliable save/restore functionality
-- No data loss
-- Backfilling 1 week takes <2 hours
+- Coalescing algorithms process data correctly
+- Hover system shows data source timeline (0-100ms)
+- Day naming and weekly status tracking
+- Backfilling 1 week takes <2 hours (down from current 2-4)
 
 ### Growth Features (Phase 2+)
 
@@ -272,27 +300,29 @@ In 10 years, this system contains a decade of rich personal history, supports ev
 ### Key Interactions
 
 **1. Calendar View (Primary Interface)**
-- Month/week/day views with smooth transitions
-- Existing events in their assigned colors
-- Pending approval events overlaid in yellow/banana (distinctive but non-intrusive)
-- Click event → inline edit panel (title, time, description, color)
-- Hover shows preview without modal interruption
+- Year/month/week/day views with smooth transitions (app launches to year view)
+- Existing events in their assigned colors (100% opacity)
+- Unpushed events shown as translucent (60% opacity) - Phase 2
+- Click event → right-side edit panel (title, time, description, color) - Phase 2
+- Hover shows preview without modal interruption (Phase 1: basic tooltip, Phase 3: data source timeline 0-100ms)
 - Keyboard navigation for power users
 
-**2. Approval Workflow (Core Experience)**
-- **Select mode:** Click to select individual events, shift-click for ranges, "select day" button
-- **Visual feedback:** Selected events highlighted with checkmark or border
-- **Batch actions:** "Approve selected" button with count badge
-- **One-click publish:** Big, satisfying "Publish to Google Calendar" button
-- **Success animation:** Smooth transition from yellow → final color with subtle celebration
+**2. Event Editing & Publishing (Phase 2)**
+- **Event creation:** Drag-to-create on calendar OR "+ Add Event" button
+- **Select mode:** Click to select individual events, shift-click for ranges
+- **Visual feedback:** Selected events highlighted with red 2px outline
+- **Batch actions:** "Push to GCal" button with count badge and confirmation dialog
+- **One-click publish:** Big, satisfying "Push to Google Calendar" button
+- **Success animation:** Smooth transition from translucent → full opacity
 - **Undo safety net:** Recent publish visible with quick undo option
 
-**3. Data Import (Frequent Operation)**
+**3. Data Import (Phase 3 - Frequent Operation)**
 - Drag-and-drop for files (call logs CSV, YouTube JSON)
 - "Fetch from Toggl/Outlook" buttons with last sync timestamp
 - Progress indication for API calls
 - Import summary: "Found 47 new events, 3 conflicts"
 - Auto-navigate to date range with new data
+- Hover system shows data source timeline (0-100ms tooltips)
 
 **4. Color Picker & Event Editing**
 - Quick color selector showing all 9 colors with labels
@@ -302,7 +332,7 @@ In 10 years, this system contains a decade of rich personal history, supports ev
 - Description templates for common patterns
 
 **5. Navigation & Context**
-- Date picker with indicators: green (complete), yellow (partial), grey (empty)
+- Date picker with sync status: green (synced with GCal), grey (not synced)
 - "Jump to today," "Jump to contiguity edge" quick nav
 - Breadcrumb showing current view and date range
 - Search/filter by color, source, date range
@@ -426,70 +456,74 @@ Requirements organized by capability, each with acceptance criteria and domain c
 ### FR-3: Calendar Display & Interaction
 
 **FR-3.1: Unified Calendar View**
-- **Capability:** Display existing Google Calendar events alongside pending approval events in single view
+- **Capability:** Display Google Calendar events (Phase 1: read-only, Phase 2: with unpushed events)
 - **Visual Distinction:**
-  - Published events: Show in their assigned Google Calendar colors
-  - Pending events: Yellow/banana overlay (distinctive but harmonious)
-  - Selected events: Highlight with checkmark or border
-- **View Modes:** Month, week, day with smooth transitions
+  - Published events: Show in their assigned colors with full opacity (100%)
+  - Unpushed/pending events: Translucent (60% opacity) - Phase 2
+  - Selected events: Red 2px solid outline - Phase 2
+- **View Modes:** Year, month, week, day with smooth transitions
+- **Launch Behavior:** App opens to year view with date selection
 - **Acceptance Criteria:**
   - Fetch and cache Google Calendar events on launch
-  - Render both published and pending events simultaneously
+  - Phase 1: Display published events in read-only mode
+  - Phase 2: Render both published and unpushed events with visual distinction
   - Visual distinction between states clear at a glance
   - Smooth transitions between view modes
   - Performance: <1 second to render month with 200+ events
 
-**FR-3.2: Event Editing**
+**FR-3.2: Event Editing (Phase 2)**
 - **Capability:** Click any event to edit title, start/end times, description, color
-- **Interface:** Inline edit panel (not modal) for fluid workflow
+- **Interface:** Right-side edit panel (slide-in, not modal) for fluid workflow
 - **Time Picker:** 15-minute increments aligned with 8/15 rounding
-- **Color Picker:** Show all 9 colors with labels (Azure, Purple, Yellow, etc.)
+- **Color Picker:** Show all 9 colors with labels and hex codes (Azure #0088CC, Purple, Yellow, Navy, Sage, Grey, Flamingo, Orange, Lavender)
 - **Acceptance Criteria:**
-  - Click event → inline editor appears
+  - Click event → right-side panel slides in instantly
   - All fields editable with validation
   - Time picker enforces 15-minute increments
-  - Color picker shows custom color codes
-  - Changes saved to local database immediately
-  - Esc key cancels edit, Enter confirms
+  - Color picker shows custom color taxonomy
+  - Changes auto-save to local database immediately (0-lag)
+  - Esc key closes panel, changes already saved
 
-**FR-3.3: Event Selection & Batch Operations**
-- **Capability:** Select multiple events for batch approval
+**FR-3.3: Event Selection & Batch Operations (Phase 2)**
+- **Capability:** Select multiple events for batch publishing
 - **Selection Modes:**
   - Click individual events
-  - Shift-click for ranges
-  - "Select day" button selects all pending events on that day
-  - "Select date range" for bulk selection
-- **Visual Feedback:** Selected events show checkmark or highlight
+  - Shift-click for multi-select
+  - Drag-select for ranges
+- **Visual Feedback:** Selected events show red 2px solid outline
 - **Acceptance Criteria:**
   - Multiple selection modes work correctly
-  - Visual feedback immediate and clear
+  - Red outline visual feedback immediate and clear
   - Selection state persists during navigation
   - "Clear selection" button
-  - Selection count badge visible
+  - Selection count badge visible ("3 events selected")
 
 ### FR-4: Approval & Publishing Workflow
 
-**FR-4.1: Event Approval**
-- **Capability:** Review and approve events before publishing to Google Calendar
+**FR-4.1: Event Selection for Publishing (Phase 2)**
+- **Capability:** Select events for publishing to Google Calendar
 - **Workflow:**
-  - Select events to approve (individual, day, range)
-  - "Approve selected" marks events ready for publish
-  - Approved events remain yellow until published
+  - Create/edit events locally (auto-saved, marked as unpushed)
+  - Unpushed events shown as translucent (60% opacity)
+  - Select events to publish (individual or multi-select)
+  - "Push to GCal" button shows count
 - **Acceptance Criteria:**
-  - Approval state stored in local database
-  - Approved events distinguishable from pending (subtle indicator)
-  - Batch approval of multiple events
-  - Unapprove capability (change mind)
+  - Unpushed state clearly visible (translucent)
+  - Selection via red outline feedback
+  - Push to GCal button updates count dynamically
+  - Can deselect before publishing
 
-**FR-4.2: Batch Publishing**
-- **Capability:** Publish approved events to Google Calendar in batch
+**FR-4.2: Batch Publishing (Phase 2)**
+- **Capability:** Publish selected events to Google Calendar in batch
 - **Workflow:**
-  - "Publish to Google Calendar" button shows count of approved events
+  - "Push to Google Calendar" button shows count of selected events
+  - Confirmation dialog before publishing
   - Batch API request to Google Calendar (minimize quota usage)
   - Receive event IDs, update local database
-  - Success animation: Yellow → final color transition
+  - Success animation: Translucent (60%) → full opacity (100%) transition
 - **Acceptance Criteria:**
   - Batch publish 50+ events reliably
+  - Confirmation dialog appears before any publish
   - Handle API rate limits with retries
   - Store Google Calendar event IDs
   - Update local database with published status
@@ -508,7 +542,7 @@ Requirements organized by capability, each with acceptance criteria and domain c
 
 ### FR-5: Date State Tracking
 
-**FR-5.1: Per-Date State Flags**
+**FR-5.1: Per-Date State Flags (Phase 3)**
 - **Capability:** Track which data sources have been published for each date
 - **Flags:**
   - `call_log_data_published`
@@ -522,9 +556,9 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - Flags stored per date in database
   - Auto-update when events published
   - Manual override capability
-  - Visual indicators in calendar view (green/yellow/grey dots)
+  - Visual indicators for data source completeness per date
 
-**FR-5.2: Contiguity Edge Calculation**
+**FR-5.2: Contiguity Edge Calculation (Phase 3)**
 - **Capability:** Calculate the last date with complete walkthrough approval
 - **Purpose:** Know where to start "fill to present" workflow
 - **Logic:** Most recent date where `complete_walkthrough_approval = true` and all subsequent dates are incomplete (except tracked gaps)
@@ -569,9 +603,9 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - Updates local database (marks unpublished)
   - Undo expires after next publish or app close
 
-### FR-7: Weekly Status Tracking
+### FR-7: Weekly Status Tracking (Phase 3)
 
-**FR-7.1: Calculate Weekly Completion**
+**FR-7.1: Calculate Weekly Completion (Phase 3)**
 - **Capability:** Calculate completion status per data source per ISO 8601 week
 - **Logic:**
   - Week starts Monday
@@ -583,7 +617,7 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - Historical weeks calculated on demand
   - Current week updates in real-time
 
-**FR-7.2: Sync to Excel Cloud**
+**FR-7.2: Sync to Excel Cloud (Phase 3)**
 - **Capability:** Write weekly status to Excel file on OneDrive/SharePoint via Microsoft Graph
 - **Format:** Rows = weeks, Columns = data sources, Values = Yes/Partial/No
 - **Authentication:** OAuth 2.0 (shared with Outlook integration)
