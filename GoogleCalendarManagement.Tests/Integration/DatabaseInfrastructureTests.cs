@@ -32,10 +32,9 @@ public class DatabaseInfrastructureTests
     public async Task Database_CreatesFile_AtExpectedPath()
     {
         // Arrange
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var dbFolder = Path.Combine(localAppData, "GoogleCalendarManagement");
-        Directory.CreateDirectory(dbFolder);
-        var dbPath = Path.Combine(dbFolder, $"calendar_test_{Guid.NewGuid():N}.db");
+        var tempDir = Path.Combine(Path.GetTempPath(), $"db-file-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var dbPath = Path.Combine(tempDir, "calendar.db");
 
         var options = new DbContextOptionsBuilder<CalendarDbContext>()
             .UseSqlite($"Data Source={dbPath}")
@@ -51,9 +50,7 @@ public class DatabaseInfrastructureTests
 
             // Assert
             File.Exists(dbPath).Should().BeTrue();
-            dbFolder.Should().Be(Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "GoogleCalendarManagement"));
+            Path.GetDirectoryName(dbPath).Should().Be(tempDir);
         }
         finally
         {
@@ -61,6 +58,7 @@ public class DatabaseInfrastructureTests
             if (File.Exists(dbPath)) File.Delete(dbPath);
             if (File.Exists(dbPath + "-wal")) File.Delete(dbPath + "-wal");
             if (File.Exists(dbPath + "-shm")) File.Delete(dbPath + "-shm");
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
         }
     }
 

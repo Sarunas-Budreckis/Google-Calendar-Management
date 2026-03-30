@@ -49,6 +49,7 @@ The deliverable at the close of Epic 2 is a Tier 1 application that authenticate
 - **Prerequisite:** Epic 1 complete — `gcal_event`, `gcal_event_version`, `audit_log`, `config`, `data_source_refresh`, `system_state` tables must exist
 - **Enables:** Epic 3 (reads `gcal_event` to render calendar UI)
 - **External:** Google Cloud project with Calendar API enabled and OAuth 2.0 credentials (client ID / secret)
+- **Developer setup:** Download the Desktop App OAuth client JSON from Google Cloud Console and place it at `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\client_secret.json` on the local machine. Do not store this file in the repository.
 
 ## System Architecture Alignment
 
@@ -272,6 +273,7 @@ Pagination fetches up to 250 events per page, targeting ≤ 4 API round-trips fo
 - **Token encryption:** `TokenResponse` JSON serialized and encrypted with `ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser)` before storage. Decrypted in-process only; never written to disk unencrypted.
 - **Token storage location:** `AppMetadata` table row (`Key = "GcalTokenResponse"`) in the SQLite database file at `%LOCALAPPDATA%\GoogleCalendarManagement\calendar.db` — user-private directory.
 - **Client secret handling:** `client_secret.json` must **not** be committed to source control. Loaded from `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\client_secret.json` at runtime. Documented in README.
+- **Credential setup steps:** In Google Cloud Console, enable Calendar API, create a Desktop App OAuth client, download the JSON, copy it to `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\`, and rename it to `client_secret.json`.
 - **PKCE:** Enforced automatically by `GoogleWebAuthorizationBroker` — no additional implementation required.
 - **TLS:** All API calls use HTTPS enforced by the Google SDK's `HttpClientFactory`. No HTTP fallback permitted.
 - **Refresh token rotation:** `DpapiTokenStorageService` must update stored token on every `TokenResponse` received (including refreshes), because Google may issue a new refresh token.

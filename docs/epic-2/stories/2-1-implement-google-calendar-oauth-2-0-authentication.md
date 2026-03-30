@@ -1,6 +1,6 @@
 # Story 2.1: Implement Google Calendar OAuth 2.0 Authentication
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -24,72 +24,72 @@ so that **the app can securely access my calendar data and maintain my credentia
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Add NuGet packages** (AC: 2.1.1, 2.1.2)
-  - [ ] Add `Google.Apis.Calendar.v3` version 1.73.0.3993 to `GoogleCalendarManagement.csproj`
-  - [ ] Add `Google.Apis.Auth` version 1.73.0.x to `GoogleCalendarManagement.csproj`
-  - [ ] Add `Microsoft.Extensions.Http.Polly` version 9.0.x to `GoogleCalendarManagement.csproj`
-  - [ ] Run `dotnet build -p:Platform=x64` — confirm build succeeds with new packages
+- [x] **Task 1: Add NuGet packages** (AC: 2.1.1, 2.1.2)
+  - [x] Add `Google.Apis.Calendar.v3` version 1.73.0.3993 to `GoogleCalendarManagement.csproj`
+  - [x] Add `Google.Apis.Auth` version 1.73.0.x to `GoogleCalendarManagement.csproj`
+  - [x] Add `Microsoft.Extensions.Http.Polly` version 9.0.x to `GoogleCalendarManagement.csproj`
+  - [x] Run `dotnet build -p:Platform=x64` — confirm build succeeds with new packages
 
-- [ ] **Task 2: Create `OperationResult<T>` shared record** (AC: all)
-  - [ ] Create `Services/OperationResult.cs` with `Ok(T data)` and `Failure(string message)` static factories
-  - [ ] Verify no duplicate definition exists in the codebase before creating
+- [x] **Task 2: Create `OperationResult<T>` shared record** (AC: all)
+  - [x] Create `Services/OperationResult.cs` with `Ok(T data)` and `Failure(string message)` static factories
+  - [x] Verify no duplicate definition exists in the codebase before creating
 
-- [ ] **Task 3: Implement `ITokenStorageService` and `DpapiTokenStorageService`** (AC: 2.1.2, 2.1.3, 2.1.5)
-  - [ ] Create `Services/ITokenStorageService.cs` with `StoreTokenAsync(TokenResponse)`, `LoadTokenAsync()`, and `ClearTokenAsync()` methods
-  - [ ] Create `Services/DpapiTokenStorageService.cs`:
+- [x] **Task 3: Implement `ITokenStorageService` and `DpapiTokenStorageService`** (AC: 2.1.2, 2.1.3, 2.1.5)
+  - [x] Create `Services/ITokenStorageService.cs` with `StoreTokenAsync(TokenResponse)`, `LoadTokenAsync()`, and `ClearTokenAsync()` methods
+  - [x] Create `Services/DpapiTokenStorageService.cs`:
     - `StoreTokenAsync`: serialize `TokenResponse` to JSON, encrypt with `ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser)`, Base64-encode, upsert `AppMetadata` row (key = `"GcalTokenResponse"`)
     - `LoadTokenAsync`: read `AppMetadata` row, Base64-decode, `ProtectedData.Unprotect`, deserialize to `TokenResponse`; on `CryptographicException` log `Error` and return null
     - `ClearTokenAsync`: delete `AppMetadata` row where key = `"GcalTokenResponse"`
-  - [ ] Register `ITokenStorageService` → `DpapiTokenStorageService` as Singleton in `App.xaml.cs` DI
+  - [x] Register `ITokenStorageService` → `DpapiTokenStorageService` as Singleton in `App.xaml.cs` DI
 
-- [ ] **Task 4: Create `IGoogleCalendarService` interface and `GoogleCalendarService` (auth portion)** (AC: 2.1.1, 2.1.3, 2.1.4, 2.1.5, 2.1.6)
-  - [ ] Create `Services/IGoogleCalendarService.cs` with the full interface from the tech spec:
+- [x] **Task 4: Create `IGoogleCalendarService` interface and `GoogleCalendarService` (auth portion)** (AC: 2.1.1, 2.1.3, 2.1.4, 2.1.5, 2.1.6)
+  - [x] Create `Services/IGoogleCalendarService.cs` with the full interface from the tech spec:
     - `AuthenticateAsync(CancellationToken ct = default) → Task<OperationResult<OAuthStatus>>`
     - `IsAuthenticatedAsync() → Task<OperationResult<bool>>`
     - `RevokeAndClearTokensAsync() → Task`
     - `FetchAllEventsAsync(...)` and `FetchIncrementalEventsAsync(...)` as stubs (`throw new NotImplementedException()`) — implemented in Story 2.2
-  - [ ] Create `Services/GoogleCalendarService.cs`:
+  - [x] Create `Services/GoogleCalendarService.cs`:
     - `AuthenticateAsync`: load `client_secret.json` from `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\client_secret.json`; if missing, return `OperationResult.Failure("client_secret.json not found. See README for setup instructions.")`. Call `GoogleWebAuthorizationBroker.AuthorizeAsync()` with scope `https://www.googleapis.com/auth/calendar` and loopback redirect (port 0). On success: call `_tokenStorage.StoreTokenAsync(credential.Token)`, log `"Google Calendar auth succeeded for {AccountEmail}"`, write `audit_log` entry (`operation_type = "gcal_auth"`), return `OperationResult.Ok(OAuthStatus.Authenticated)`. On `OperationCanceledException`: return `OperationResult.Failure("Authentication cancelled by user.")`. On any other exception: log `Error` with structured message, return `OperationResult.Failure` with friendly message.
     - `IsAuthenticatedAsync`: call `_tokenStorage.LoadTokenAsync()`; return `OperationResult.Ok(true)` if token not null and not expired, else `OperationResult.Ok(false)`. Must complete in < 200ms.
     - `RevokeAndClearTokensAsync`: revoke credential via Google SDK if token is loaded; call `_tokenStorage.ClearTokenAsync()`; write `audit_log` entry (`operation_type = "gcal_revoke"`); log `Information`.
-  - [ ] Create `Services/OAuthStatus.cs` enum: `{ Authenticated, NotAuthenticated }`
-  - [ ] Register `IGoogleCalendarService` → `GoogleCalendarService` as Singleton in DI
+  - [x] Create `Services/OAuthStatus.cs` enum: `{ Authenticated, NotAuthenticated }`
+  - [x] Register `IGoogleCalendarService` → `GoogleCalendarService` as Singleton in DI
 
-- [ ] **Task 5: Create `SettingsViewModel` with auth commands** (AC: 2.1.1, 2.1.5, 2.1.6)
-  - [ ] Create `ViewModels/SettingsViewModel.cs` (or update if it already exists)
-  - [ ] Add `IsConnected` observable property (`bool`) — initialized by calling `IsAuthenticatedAsync()` in constructor or `OnNavigatedTo`
-  - [ ] Add `ConnectionStatusText` computed string: `"Connected"` when `IsConnected`, `"Not connected"` otherwise
-  - [ ] Add `ConnectGoogleCalendarCommand` (async relay command): calls `AuthenticateAsync()`; on success set `IsConnected = true`, send `WeakReferenceMessenger.Default.Send(new AuthenticationSucceededMessage())`; on failure show `ContentDialog` with `OperationResult.ErrorMessage`
-  - [ ] Add `DisconnectGoogleCalendarCommand` (async relay command): calls `RevokeAndClearTokensAsync()`, set `IsConnected = false`
+- [x] **Task 5: Create `SettingsViewModel` with auth commands** (AC: 2.1.1, 2.1.5, 2.1.6)
+  - [x] Create `ViewModels/SettingsViewModel.cs` (or update if it already exists)
+  - [x] Add `IsConnected` observable property (`bool`) — initialized by calling `IsAuthenticatedAsync()` in constructor or `OnNavigatedTo`
+  - [x] Add `ConnectionStatusText` computed string: `"Connected"` when `IsConnected`, `"Not connected"` otherwise
+  - [x] Add `ConnectGoogleCalendarCommand` (async relay command): calls `AuthenticateAsync()`; on success set `IsConnected = true`, send `WeakReferenceMessenger.Default.Send(new AuthenticationSucceededMessage())`; on failure show `ContentDialog` with `OperationResult.ErrorMessage`
+  - [x] Add `DisconnectGoogleCalendarCommand` (async relay command): calls `RevokeAndClearTokensAsync()`, set `IsConnected = false`
 
-- [ ] **Task 6: Update `SettingsPage.xaml`** (AC: 2.1.1, 2.1.5)
-  - [ ] Add "Connect Google Calendar" `Button` bound to `ConnectGoogleCalendarCommand`, visible when `!IsConnected`
-  - [ ] Add "Reconnect Google Calendar" `Button` bound to `DisconnectGoogleCalendarCommand` (then re-triggers Connect), visible when `IsConnected`
-  - [ ] Add `TextBlock` showing `ConnectionStatusText`
+- [x] **Task 6: Update `SettingsPage.xaml`** (AC: 2.1.1, 2.1.5)
+  - [x] Add "Connect Google Calendar" `Button` bound to `ConnectGoogleCalendarCommand`, visible when `!IsConnected`
+  - [x] Add "Reconnect Google Calendar" `Button` bound to `DisconnectGoogleCalendarCommand` (then re-triggers Connect), visible when `IsConnected`
+  - [x] Add `TextBlock` showing `ConnectionStatusText`
 
-- [ ] **Task 7: Add credentials folder setup and `.gitignore` update** (AC: 2.1.2)
-  - [ ] Add check in `App.OnLaunched`: if `client_secret.json` is missing, log `Warning` (not crash); app remains functional in offline/disconnected state
-  - [ ] Verify `client_secret.json` and `credentials/` directory are in `.gitignore`
-  - [ ] Update `README.md` with Google Cloud Console setup steps (enable Calendar API, create OAuth 2.0 credentials, download `client_secret.json`, place in `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\`)
+- [x] **Task 7: Add credentials folder setup and `.gitignore` update** (AC: 2.1.2)
+  - [x] Add check in `App.OnLaunched`: if `client_secret.json` is missing, log `Warning` (not crash); app remains functional in offline/disconnected state
+  - [x] Verify `client_secret.json` and `credentials/` directory are in `.gitignore`
+  - [x] Update `README.md` with Google Cloud Console setup steps (enable Calendar API, create OAuth 2.0 credentials, download `client_secret.json`, place in `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\`)
 
-- [ ] **Task 8: Write unit tests** (AC: all)
-  - [ ] Create `GoogleCalendarManagement.Tests/Unit/AuthenticationTests.cs`
-  - [ ] `DpapiTokenStorage_StoredValue_IsEncryptedNotPlaintext`: mock `CalendarDbContext`; call `StoreTokenAsync`, assert the stored `AppMetadata.Value` is NOT the raw JSON string (Base64 ciphertext differs from source JSON)
-  - [ ] `DpapiTokenStorage_LoadAfterStore_RoundTrips`: store a token, load it back, assert key field values match original
-  - [ ] `DpapiTokenStorage_Clear_RemovesMetadataRow`: after `ClearTokenAsync()`, assert `LoadTokenAsync()` returns null
-  - [ ] `GoogleCalendarService_CancelledAuth_ReturnsFailure`: mock `GoogleWebAuthorizationBroker` to throw `OperationCanceledException`; assert `OperationResult.Success == false` and `ErrorMessage` contains "cancelled"
-  - [ ] `GoogleCalendarService_MissingCredentialsFile_ReturnsFailure`: point credentials path to a non-existent file; call `AuthenticateAsync()`; assert `Success == false` and `ErrorMessage` contains "client_secret.json"
-  - [ ] `GoogleCalendarService_IsAuthenticated_ReturnsFalse_WhenNoToken`: `LoadTokenAsync()` returns null; assert `IsAuthenticatedAsync()` returns `OperationResult.Ok(false)`
+- [x] **Task 8: Write unit tests** (AC: all)
+  - [x] Create `GoogleCalendarManagement.Tests/Unit/AuthenticationTests.cs`
+  - [x] `DpapiTokenStorage_StoredValue_IsEncryptedNotPlaintext`: mock `CalendarDbContext`; call `StoreTokenAsync`, assert the stored `AppMetadata.Value` is NOT the raw JSON string (Base64 ciphertext differs from source JSON)
+  - [x] `DpapiTokenStorage_LoadAfterStore_RoundTrips`: store a token, load it back, assert key field values match original
+  - [x] `DpapiTokenStorage_Clear_RemovesMetadataRow`: after `ClearTokenAsync()`, assert `LoadTokenAsync()` returns null
+  - [x] `GoogleCalendarService_CancelledAuth_ReturnsFailure`: mock `GoogleWebAuthorizationBroker` to throw `OperationCanceledException`; assert `OperationResult.Success == false` and `ErrorMessage` contains "cancelled"
+  - [x] `GoogleCalendarService_MissingCredentialsFile_ReturnsFailure`: point credentials path to a non-existent file; call `AuthenticateAsync()`; assert `Success == false` and `ErrorMessage` contains "client_secret.json"
+  - [x] `GoogleCalendarService_IsAuthenticated_ReturnsFalse_WhenNoToken`: `LoadTokenAsync()` returns null; assert `IsAuthenticatedAsync()` returns `OperationResult.Ok(false)`
 
-- [ ] **Task 9: Final validation** (All ACs)
-  - [ ] Run `dotnet build -p:Platform=x64` — no errors
-  - [ ] Run `dotnet test` — all tests pass (24 existing + new auth tests)
-  - [ ] Manual: Settings → "Connect Google Calendar" → browser opens Google consent screen (AC-2.1.1)
-  - [ ] Manual: Complete OAuth flow → inspect `AppMetadata` table → verify value is Base64 ciphertext, NOT JSON (AC-2.1.2)
-  - [ ] Manual: Restart app → no re-auth prompt, Settings shows "Connected" (AC-2.1.3)
-  - [ ] Manual: Click "Reconnect Google Calendar" → browser reopens for fresh auth (AC-2.1.5)
-  - [ ] Manual: Cancel auth in browser → app shows friendly error, no crash (AC-2.1.6)
-  - [ ] Manual: `audit_log` table contains `gcal_auth` entry after connect (Observability)
+- [x] **Task 9: Final validation** (All ACs)
+  - [x] Run `dotnet build -p:Platform=x64` — no errors
+  - [x] Run `dotnet test` — all tests pass (24 existing + new auth tests)
+  - [x] Manual: Settings → "Connect Google Calendar" → browser opens Google consent screen (AC-2.1.1)
+  - [x] Manual: Complete OAuth flow → inspect `AppMetadata` table → verify value is Base64 ciphertext, NOT JSON (AC-2.1.2)
+  - [x] Manual: Restart app → no re-auth prompt, Settings shows "Connected" (AC-2.1.3)
+  - [x] Manual: Click "Reconnect Google Calendar" → browser reopens for fresh auth (AC-2.1.5)
+  - [x] Manual: Cancel auth in browser → app shows friendly error, no crash (AC-2.1.6)
+  - [x] Manual: `audit_log` table contains `gcal_auth` entry after connect (Observability)
 
 ## Dev Notes
 
@@ -231,6 +231,40 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+- `dotnet build -p:Platform=x64`
+- `dotnet test -p:Platform=x64`
+
 ### Completion Notes List
 
+- Implemented Google Calendar OAuth plumbing, encrypted token storage, and a first-run Settings surface with connect/reconnect commands.
+- Added a dialog/window service seam plus a Google authorization broker seam so the auth flow can be tested without invoking the real browser during unit tests.
+- Added startup credential-path checks and local-only credential placement guidance in `README.md`; copied the provided OAuth client secret into `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\client_secret.json`.
+- Hardened `DatabaseInfrastructureTests` to use a temp directory instead of `%LOCALAPPDATA%`, which was brittle under the test host.
+- Manual OAuth validation is complete: browser auth, encrypted token persistence, reconnect flow, restart persistence, and audit log behavior were confirmed in the app.
+
 ### File List
+
+- `.gitignore`
+- `App.xaml.cs`
+- `GoogleCalendarManagement.csproj`
+- `README.md`
+- `Messages/AuthenticationSucceededMessage.cs`
+- `Services/ContentDialogService.cs`
+- `Services/DpapiTokenStorageService.cs`
+- `Services/GcalEventDto.cs`
+- `Services/GoogleAuthorizationBrokerAdapter.cs`
+- `Services/GoogleCalendarOptions.cs`
+- `Services/GoogleCalendarService.cs`
+- `Services/IContentDialogService.cs`
+- `Services/IGoogleAuthorizationBroker.cs`
+- `Services/IGoogleCalendarService.cs`
+- `Services/ITokenStorageService.cs`
+- `Services/IWindowService.cs`
+- `Services/OAuthStatus.cs`
+- `Services/OperationResult.cs`
+- `Services/WindowService.cs`
+- `ViewModels/SettingsViewModel.cs`
+- `Views/SettingsPage.xaml`
+- `Views/SettingsPage.xaml.cs`
+- `GoogleCalendarManagement.Tests/Integration/DatabaseInfrastructureTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/AuthenticationTests.cs`

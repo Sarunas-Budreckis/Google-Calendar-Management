@@ -1,0 +1,191 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>5</storyId>
+    <title>Implement Background Sync and Cache Management</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-2/stories/2-5-implement-background-sync-and-cache-management.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>the app to keep my Google Calendar cache up to date in the background</iWant>
+    <soThat>I always have current data without needing to trigger manual sync repeatedly</soThat>
+    <tasks>
+      - Verify Stories 2.2-2.4 prerequisites and reuse their sync/status contracts instead of creating a second sync stack
+      - Add a machine-readable failure reason so expired Google sync tokens do not require brittle string parsing
+      - Implement GoogleCalendarService.FetchIncrementalEventsAsync with sync-token pagination and 410 detection
+      - Extend SyncManager for background incremental sync, missing-token fallback, and full-resync recovery
+      - Add INetworkMonitor/NetworkMonitor and BackgroundSyncService using PeriodicTimer plus NetworkChange
+      - Seed gcal_background_sync_interval_minutes and start the background service from App.OnLaunched
+      - Publish a SyncCompletedMessage for Story 2.4 status-refresh consumers
+      - Add unit and integration coverage for timer, offline, no-overlap, and 410 fallback behavior
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-2.5.1">When the app is running and online, a configurable 30-minute background timer triggers incremental sync.</ac>
+    <ac id="AC-2.5.2">When the timer fires offline, the sync is skipped silently and retried later without showing an error.</ac>
+    <ac id="AC-2.5.3">When Google returns HTTP 410 for an expired sync token, SyncManager clears the token and falls back to a full re-sync.</ac>
+    <ac id="AC-2.5.4">After background sync completes, the UI sync-status surface refreshes and data_source_refresh stores the new token and timestamp.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Flow 3 - Incremental Sync</section>
+        <snippet>Defines the canonical background flow: timer fire, network check, SyncManager incremental path, token lookup in data_source_refresh, 410 fallback to full sync, then metadata update.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Story 2.5 AC #21-24</section>
+        <snippet>Authoritative acceptance criteria limit Story 2.5 to configurable timer-driven incremental sync, silent offline skip, 410 fallback, and status/refresh updates after completion.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Reliability/Availability</section>
+        <snippet>Offline sync attempts log and retry later; Polly retries transient failures; expired sync tokens produce a deterministic full-resync recovery path.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 2.5</section>
+        <snippet>Provides the business intent for background sync and notes offline-capable behavior, while the tech spec supplies the narrower implementation contract.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Cache strategy / incremental sync tokens</section>
+        <snippet>Confirms the local-first cache strategy and that Google Calendar change tracking is based on incremental sync tokens stored in refresh metadata.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schemas</title>
+        <section>config, gcal_event, and data_source_refresh</section>
+        <snippet>Confirms that config values are persisted in the config table, gcal_event is the local cache, and data_source_refresh is the sync bookkeeping table.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-1/stories/1-6-implement-application-logging-and-error-handling-infrastructure.md</path>
+        <title>Story 1.6</title>
+        <section>Dev Agent Record</section>
+        <snippet>Reinforces current logging/DI rules: constructor-injected ILogger, services.AddLogging(builder =&gt; builder.AddSerilog()), and friendly user-facing errors.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>App.xaml.cs</path>
+        <kind>application</kind>
+        <symbol>App.OnLaunched / App.ConfigureServices</symbol>
+        <reason>The app uses plain ServiceCollection, not the generic host. Background sync must be registered and started manually from startup code.</reason>
+      </file>
+      <file>
+        <path>Services/IGoogleCalendarService.cs</path>
+        <kind>service-contract</kind>
+        <symbol>IGoogleCalendarService</symbol>
+        <reason>Already contains the FetchIncrementalEventsAsync signature that Story 2.5 must finally implement.</reason>
+      </file>
+      <file>
+        <path>Services/GoogleCalendarService.cs</path>
+        <kind>service</kind>
+        <symbol>GoogleCalendarService</symbol>
+        <reason>Auth flow already exists here. Both fetch methods are still NotImplemented and the existing CreateUserCredential path should be reused for incremental sync.</reason>
+      </file>
+      <file>
+        <path>Services/GcalEventDto.cs</path>
+        <kind>dto</kind>
+        <symbol>GcalEventDto</symbol>
+        <reason>Currently an empty placeholder record. Story 2.5 depends on the real DTO introduced by Story 2.2.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/DataSourceRefresh.cs</path>
+        <kind>entity</kind>
+        <symbol>DataSourceRefresh</symbol>
+        <reason>Must already include SyncToken support from Story 2.2 so background incremental sync can persist and rotate the Google token.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/ConfigConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>ConfigConfiguration</symbol>
+        <reason>Current seeded settings live here; add gcal_background_sync_interval_minutes rather than inventing a new settings store.</reason>
+      </file>
+      <file>
+        <path>ViewModels/SettingsViewModel.cs</path>
+        <kind>view-model</kind>
+        <symbol>SettingsViewModel</symbol>
+        <reason>Shows the current WeakReferenceMessenger and existing Google-settings surface that background sync should complement, not replace.</reason>
+      </file>
+      <file>
+        <path>Messages/AuthenticationSucceededMessage.cs</path>
+        <kind>message</kind>
+        <symbol>AuthenticationSucceededMessage</symbol>
+        <reason>Demonstrates the current message-pattern footprint; Story 2.5 should add SyncCompletedMessage in the same folder and style.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj</path>
+        <kind>test-project</kind>
+        <symbol>GoogleCalendarManagement.Tests</symbol>
+        <reason>Confirms xUnit/Moq/FluentAssertions and the x64 project-reference pattern required for new timer and sync tests.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="CommunityToolkit.Mvvm" version="8.4.0" />
+          <package name="Google.Apis.Auth" version="1.73.0" />
+          <package name="Google.Apis.Calendar.v3" version="1.73.0.3993" />
+          <package name="Microsoft.Extensions.Http.Polly" version="9.0.3" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+          <package name="Serilog" version="4.1.0" />
+        </existing>
+        <builtin>
+          <package name="System.Net.NetworkInformation.NetworkChange" note="Use for network-availability notifications via the BCL." />
+          <package name="System.Threading.PeriodicTimer" note="Use for the background sync loop without blocking the UI thread." />
+        </builtin>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="repo-shape">Keep implementation in the existing root-level Services/Data/ViewModels/Messages layout. Do not introduce a new Core project or generic-host stack.</constraint>
+    <constraint id="C2" category="prerequisites">Story 2.5 depends on Story 2.2 sync plumbing and Story 2.3 update/delete handling. Reuse those paths instead of duplicating them.</constraint>
+    <constraint id="C3" category="status-ui-boundary">Story 2.4 owns sync-status indicator rendering. Story 2.5 should publish refresh notifications and integrate with that surface, not redesign the UI.</constraint>
+    <constraint id="C4" category="incremental-contract">Do not use string matching on ErrorMessage to detect expired tokens. Add a structured failure reason for sync-token expiry.</constraint>
+    <constraint id="C5" category="token-strategy">Follow the tech spec's sync-token incremental design. Do not pivot to a separate updatedMin-only design for background sync.</constraint>
+    <constraint id="C6" category="settings-store">Persist the timer interval in the existing config table under gcal_background_sync_interval_minutes. Do not add a new settings table or JSON file.</constraint>
+    <constraint id="C7" category="lifecycle">Background work must be started manually from App.OnLaunched and disposed on app shutdown. It must never block the UI thread.</constraint>
+    <constraint id="C8" category="concurrency">Prevent overlapping manual and background sync runs with a single-flight guard such as SemaphoreSlim.</constraint>
+    <constraint id="C9" category="observability">Use ILogger&lt;T&gt; and audit-log patterns already established in the repo. Offline skips and 410 fallback should be logged, but routine background events must not surface modal dialogs.</constraint>
+    <constraint id="C10" category="scope-control">The high-level epic text mentions cache-size warnings, but the authoritative Story 2.5 tech spec does not. Do not add speculative database-size monitoring in this story.</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit + Moq + FluentAssertions. Prefer unit tests for timer, network, and 410 branching; use SQLite-backed integration tests for refresh-metadata persistence and seeded config verification.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Unit/BackgroundSyncServiceTests.cs
+      GoogleCalendarManagement.Tests/Unit/GoogleCalendarIncrementalSyncTests.cs
+      GoogleCalendarManagement.Tests/Unit/SyncManagerIncrementalTests.cs
+      GoogleCalendarManagement.Tests/Integration/BackgroundSyncIntegrationTests.cs
+    </locations>
+    <ideas>
+      <test name="BackgroundSyncService_TimerTickWhileOnline_CallsSyncManagerOnce">Fake one timer tick with network available and assert one incremental sync invocation.</test>
+      <test name="BackgroundSyncService_TimerTickWhileOffline_SkipsSilently">Return offline from INetworkMonitor and assert no sync call, no exception, and no UI interaction.</test>
+      <test name="BackgroundSyncService_NetworkRestoreAfterOfflineSkip_TriggersCatchUpSync">Simulate an offline skip followed by NetworkAvailabilityChanged(true) and assert one catch-up run occurs.</test>
+      <test name="BackgroundSyncService_ActiveSync_DoesNotStartOverlap">Hold SyncManager in-flight and assert a second timer fire is skipped.</test>
+      <test name="GoogleCalendarService_FetchIncrementalEventsAsync_ConsumesAllPages">Mock multi-page delta responses and assert all items plus the final replacement sync token are returned.</test>
+      <test name="GoogleCalendarService_FetchIncrementalEventsAsync_MapsHttp410ToStructuredFailure">Mock Google 410 and assert the returned failure reason is sync-token-expired.</test>
+      <test name="SyncManager_BackgroundIncremental_MissingTokenFallsBackToFullSync">No stored token should route to the existing full-sync path exactly once.</test>
+      <test name="SyncManager_BackgroundIncremental_ExpiredTokenClearsTokenAndReRunsFullSync">Simulate sync-token-expired and assert token cleared, full sync rerun, and replacement token persisted.</test>
+      <test name="BackgroundSyncIntegration_Success_UpdatesDataSourceRefreshAndPublishesNotification">Run a successful background-triggered sync against SQLite-backed persistence and assert refresh metadata plus a sync-completed notification.</test>
+      <test name="ConfigConfiguration_SeedsBackgroundSyncInterval">Verify the config table contains gcal_background_sync_interval_minutes with default value 30 after migration.</test>
+    </ideas>
+  </tests>
+</story-context>

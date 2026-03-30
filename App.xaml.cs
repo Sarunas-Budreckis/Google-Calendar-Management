@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Reflection;
 using GoogleCalendarManagement.Data;
 using GoogleCalendarManagement.Services;
+using GoogleCalendarManagement.ViewModels;
+using GoogleCalendarManagement.Views;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -72,6 +74,9 @@ namespace GoogleCalendarManagement
 
             window.Activate();
 
+            var windowService = serviceProvider.GetRequiredService<IWindowService>();
+            windowService.SetWindow(window);
+
             startupTimer.Stop();
             var appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
             Log.Information("Google Calendar Management v{Version} started. Launch to window: {ElapsedMs}ms",
@@ -110,8 +115,21 @@ namespace GoogleCalendarManagement
                 }
             }
 
-            // Verify DI works by resolving a service
             var logger = serviceProvider.GetService<ILogger<App>>();
+            var googleCalendarOptions = serviceProvider.GetRequiredService<GoogleCalendarOptions>();
+            // Keep the OAuth client secret in LocalAppData\GoogleCalendarManagement\credentials\client_secret.json,
+            // not in the workspace, so local setup does not leak into source control.
+            Directory.CreateDirectory(googleCalendarOptions.CredentialsDirectoryPath);
+            if (!File.Exists(googleCalendarOptions.ClientSecretPath))
+            {
+                logger?.LogWarning(
+                    "Google Calendar credentials file not found at {CredentialsPath}. The app will remain available in a disconnected state.",
+                    googleCalendarOptions.ClientSecretPath);
+            }
+
+            var settingsPage = serviceProvider.GetRequiredService<SettingsPage>();
+            window.Content = settingsPage;
+
             logger?.LogInformation("Application started successfully.");
         }
 
@@ -137,11 +155,22 @@ namespace GoogleCalendarManagement
                 ConnectionString = $"Data Source={dbPath}"
             };
             services.AddSingleton(dbOptions);
+            services.AddSingleton(new GoogleCalendarOptions(dbFolder));
             services.AddDbContext<CalendarDbContext>(options =>
+                options.UseSqlite(dbOptions.ConnectionString)
+                       .AddInterceptors(new SqliteConnectionInterceptor()));
+            services.AddDbContextFactory<CalendarDbContext>(options =>
                 options.UseSqlite(dbOptions.ConnectionString)
                        .AddInterceptors(new SqliteConnectionInterceptor()));
 
             services.AddScoped<IMigrationService, MigrationService>();
+            services.AddSingleton<IWindowService, WindowService>();
+            services.AddSingleton<IContentDialogService, ContentDialogService>();
+            services.AddSingleton<ITokenStorageService, DpapiTokenStorageService>();
+            services.AddSingleton<IGoogleAuthorizationBroker, GoogleAuthorizationBrokerAdapter>();
+            services.AddSingleton<IGoogleCalendarService, GoogleCalendarService>();
+            services.AddSingleton<SettingsViewModel>();
+            services.AddTransient<SettingsPage>();
         }
     }
 }

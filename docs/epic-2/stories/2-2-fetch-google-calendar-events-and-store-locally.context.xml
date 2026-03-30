@@ -1,0 +1,168 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>2</storyId>
+    <title>Fetch Google Calendar Events and Store Locally</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-2/stories/2-2-fetch-google-calendar-events-and-store-locally.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to fetch my Google Calendar events and store them locally</iWant>
+    <soThat>I can view my calendar offline and keep a local cache of my existing events</soThat>
+    <tasks>
+      - Reuse Story 2.1 authentication and settings surface
+      - Extend GoogleCalendarService with paginated full-sync fetch methods
+      - Add GcalEventDto, SyncProgress, SyncResult, and SyncManager
+      - Add SyncToken persistence to DataSourceRefresh via EF migration
+      - Upsert fetched events into gcal_event using the existing entity
+      - Add manual sync UI, progress display, and cancellation
+      - Add unit and integration tests for pagination, mapping, persistence, and cancellation
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-2.2.1">Manual sync fetches all events for the default 6-month-back / 1-month-forward range after authentication.</ac>
+    <ac id="AC-2.2.2">Pagination is exhaustive; all pages are fetched before sync completes.</ac>
+    <ac id="AC-2.2.3">Progress is visible and cancellation stops further API fetches cleanly while preserving already-written rows.</ac>
+    <ac id="AC-2.2.4">Timed, all-day, deleted, and recurring-instance events are mapped correctly into the existing GcalEvent schema using UTC-normalized timestamps.</ac>
+    <ac id="AC-2.2.5">Successful sync writes or updates gcal_event rows, audit log metadata, data_source_refresh metadata, and the returned nextSyncToken.</ac>
+    <ac id="AC-2.2.6">Empty calendars complete successfully without user-facing errors.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Flow 2 - Full Sync</section>
+        <snippet>Defines the canonical full-sync flow: fetch paginated events, upsert into gcal_event, mark deleted rows, update data_source_refresh, and log sync completion.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Authoritative Acceptance Criteria #7-12</section>
+        <snippet>Story 2.2 requires configured-range fetch, exhaustive pagination, progress plus cancellation, correct all-day and recurring-event mapping, and graceful empty-calendar handling.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 2.2</section>
+        <snippet>Story definition and original acceptance criteria from epic planning. Use this for business intent and dependency sequencing.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schemas</title>
+        <section>gcal_event and data_source_refresh</section>
+        <snippet>Confirms current table intent: gcal_event is the local cache, data_source_refresh is the sync bookkeeping table. The documented schema lacks sync_token, so Story 2.2 must add it explicitly.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Epic 2 mapping and package choices</section>
+        <snippet>Confirms Epic 2 service responsibilities, Google.Apis.Calendar.v3 package choice, and Polly-backed HTTP resilience requirements.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-1/stories/1-6-implement-application-logging-and-error-handling-infrastructure.md</path>
+        <title>Story 1.6</title>
+        <section>Dev Agent Record</section>
+        <snippet>Use the repo's actual logging and DI conventions: constructor-injected ILogger, services.AddLogging(builder =&gt; builder.AddSerilog()), and friendly user-visible error handling.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>App.xaml.cs</path>
+        <kind>application</kind>
+        <symbol>App.ConfigureServices</symbol>
+        <reason>Current DI and Serilog bridge pattern. New sync services must follow this registration style.</reason>
+      </file>
+      <file>
+        <path>Data/CalendarDbContext.cs</path>
+        <kind>DbContext</kind>
+        <symbol>CalendarDbContext</symbol>
+        <reason>Already exposes GcalEvents, GcalEventVersions, DataSourceRefreshes, AuditLogs, and Configs. Reuse it directly.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/GcalEvent.cs</path>
+        <kind>entity</kind>
+        <symbol>GcalEvent</symbol>
+        <reason>Existing local event cache entity. Story 2.2 must map Google API results onto this schema instead of inventing a new one.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/DataSourceRefresh.cs</path>
+        <kind>entity</kind>
+        <symbol>DataSourceRefresh</symbol>
+        <reason>Current sync bookkeeping entity. Missing SyncToken today; Story 2.2 must add it via migration.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/DataSourceRefreshConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>DataSourceRefreshConfiguration</symbol>
+        <reason>Needs mapping for the new sync_token column while preserving current table and index names.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/AuditLog.cs</path>
+        <kind>entity</kind>
+        <symbol>AuditLog</symbol>
+        <reason>Manual sync should record OperationType = gcal_sync here.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj</path>
+        <kind>test-project</kind>
+        <symbol>GoogleCalendarManagement.Tests</symbol>
+        <reason>Confirms xUnit/Moq/FluentAssertions and the x64 project-reference pattern to keep tests aligned with the main project.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+          <package name="Microsoft.Extensions.Logging" version="10.0.2" />
+          <package name="Serilog" version="4.1.0" />
+        </existing>
+        <expectedFromStory21>
+          <package name="Google.Apis.Calendar.v3" version="1.73.0.3993" />
+          <package name="Google.Apis.Auth" version="1.73.0.x" />
+          <package name="Microsoft.Extensions.Http.Polly" version="9.0.x" />
+          <package name="CommunityToolkit.Mvvm" version="8.x" />
+        </expectedFromStory21>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="repo-shape">Use the current root-level Services/Data/ViewModels/Views layout. Do not create new Core or Repository projects for this story.</constraint>
+    <constraint id="C2" category="auth-reuse">Story 2.2 must reuse Story 2.1 OAuth and token-storage services. Do not introduce a second authentication path.</constraint>
+    <constraint id="C3" category="entity-reuse">Persist fetched events through the existing GcalEvent entity and CalendarDbContext.GcalEvents. Do not add a duplicate Google event table or DTO-backed persistence layer.</constraint>
+    <constraint id="C4" category="sync-token-gap">DataSourceRefresh currently lacks SyncToken. Story 2.2 must add a nullable sync_token column and persist Google's nextSyncToken for future incremental sync work.</constraint>
+    <constraint id="C5" category="story-boundary">Do not write version-history snapshots in this story. gcal_event_version changes belong to Story 2.3.</constraint>
+    <constraint id="C6" category="ui-boundary">Use the Story 2.1 settings/auth surface for manual sync, progress, and cancel controls. Do not build a second sync UI in MainWindow.</constraint>
+    <constraint id="C7" category="logging">Use constructor-injected ILogger&lt;T&gt; and the existing Serilog bridge. User-visible failures must be friendly and must not expose raw exception details.</constraint>
+    <constraint id="C8" category="api-shape">Use Events.List with SingleEvents=true, ShowDeleted=true, explicit range bounds, pagination, and cancellation support.</constraint>
+    <constraint id="C9" category="time-handling">Normalize stored timestamps to UTC before writing StartDatetime and EndDatetime. All-day events must still be represented consistently using the current GcalEvent schema.</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit + Moq + FluentAssertions. Use unit tests for pagination and mapping, and SQLite-backed integration tests for SyncManager persistence and cancellation behavior.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Unit/GoogleCalendarServiceTests.cs
+      GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs
+    </locations>
+    <ideas>
+      <test name="FetchAllEventsAsync_ConsumesAllPages">Mock three paginated Google responses and assert all items are returned before completion.</test>
+      <test name="MapGoogleEvent_AllDayEvent_SetsIsAllDayAndNormalizedTimes">Verify all-day events map to IsAllDay = true with consistent UTC-normalized dates.</test>
+      <test name="MapGoogleEvent_RecurringInstance_PopulatesRecurringFields">Verify recurring instances set IsRecurringInstance = true and carry RecurringEventId.</test>
+      <test name="SyncManager_FullSync_UpsertsRowsWithoutDuplicates">Run sync twice and assert existing rows update rather than duplicate.</test>
+      <test name="SyncManager_CancelledEvent_MarksRowDeleted">Seed an existing row, sync a cancelled Google event, and assert IsDeleted = true.</test>
+      <test name="SyncManager_Success_WritesRefreshMetadataIncludingSyncToken">Assert DataSourceRefresh stores source name, timestamps, records fetched, success, and sync token.</test>
+      <test name="SyncManager_Cancellation_PreservesPartialWrites">Cancel after the first page and assert already-written rows remain persisted while later pages are skipped.</test>
+      <test name="SyncManager_EmptyCalendar_ReturnsSuccess">Mock zero events and assert success with zero added rows and no error state.</test>
+    </ideas>
+  </tests>
+</story-context>

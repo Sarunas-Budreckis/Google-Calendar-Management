@@ -1,0 +1,187 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>3</storyId>
+    <title>Implement Version History on Calendar Sync</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-2/stories/2-3-implement-version-history-on-calendar-sync.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>Google Calendar re-syncs to overwrite my local mirror while preserving the prior state of changed events</iWant>
+    <soThat>the app stays aligned with Google Calendar without losing historical context for updates and deletions</soThat>
+    <tasks>
+      - Reuse Story 2.2's sync orchestration instead of adding a second sync path
+      - Create version snapshots with the existing GcalEventVersion entity and table
+      - Snapshot before overwrite and before soft delete
+      - Skip history rows for new events and unchanged events
+      - Keep gcal_event_version insert-only and retained indefinitely
+      - Add SQLite-backed integration tests for update, delete, new, unchanged, and repeated-sync behavior
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-2.3.1">When an existing local event is updated by Google, sync writes the prior local state to gcal_event_version with ChangedBy = "gcal_sync" and ChangeReason = "updated" before overwriting the gcal_event row.</ac>
+    <ac id="AC-2.3.2">New Google events are inserted into gcal_event without creating gcal_event_version rows.</ac>
+    <ac id="AC-2.3.3">Deleted or cancelled Google events write a snapshot to gcal_event_version with ChangedBy = "gcal_sync" and ChangeReason = "deleted" before the local row is soft deleted.</ac>
+    <ac id="AC-2.3.4">Unchanged events do not create version-history rows; sync-only bookkeeping updates must not spam history.</ac>
+    <ac id="AC-2.3.5">Version history remains insert-only, ordered by CreatedAt and VersionId, and is never automatically deleted.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Story 2.3 — Version History on Sync</section>
+        <snippet>Authoritative requirements for Story 2.3: snapshot existing local state before overwriting or soft deleting, create no history row for first-time inserts, and preserve history indefinitely.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Traceability Mapping and Test Strategy</section>
+        <snippet>AC 13-16 explicitly map Story 2.3 to SyncManager update/delete paths and require integration coverage proving changed_by values, deleted-event handling, and indefinite history retention.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schemas</title>
+        <section>gcal_event_version</section>
+        <snippet>The existing history table already stores snapshots through concrete columns: gcal_event_id, gcal_etag, summary, description, start_datetime, end_datetime, is_all_day, color_id, changed_by, change_reason, and created_at.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Version History and GoogleWins</section>
+        <snippet>The architecture requires local version history because Google Calendar does not provide rollback. Tier 1 conflict resolution is GoogleWins, and version history is preserved regardless of resolution.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 2.3</section>
+        <snippet>Story 2.3 sits after fetch-and-store sync work and adds the overwrite-with-history behavior for changed and deleted Google events.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/stories/2-2-fetch-google-calendar-events-and-store-locally.md</path>
+        <title>Story 2.2</title>
+        <section>Tasks and Dev Notes</section>
+        <snippet>Story 2.2 establishes the expected SyncManager-based sync pipeline. Story 2.3 must extend that path rather than re-implementing sync in UI or service code.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>Data/Entities/GcalEvent.cs</path>
+        <kind>entity</kind>
+        <symbol>GcalEvent</symbol>
+        <reason>Current local mirror entity. Story 2.3 snapshots the pre-sync values from this row before overwriting or soft deleting it.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/GcalEventVersion.cs</path>
+        <kind>entity</kind>
+        <symbol>GcalEventVersion</symbol>
+        <reason>Existing insert-only history entity. Use this schema as-is; do not replace it with JSON snapshots or a second history model.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/GcalEventConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>GcalEventConfiguration</symbol>
+        <reason>Shows GcalEventId is the PK and that GcalEventVersion is FK-linked through Versions with cascade delete from the parent. This makes soft delete on gcal_event mandatory for Story 2.3.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/GcalEventVersionConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>GcalEventVersionConfiguration</symbol>
+        <reason>Confirms the existing gcal_event_version table mapping and idx_version_event index used for newest-first history lookup.</reason>
+      </file>
+      <file>
+        <path>Data/CalendarDbContext.cs</path>
+        <kind>DbContext</kind>
+        <symbol>CalendarDbContext</symbol>
+        <reason>Already exposes DbSet&lt;GcalEvent&gt; and DbSet&lt;GcalEventVersion&gt;; Story 2.3 should reuse this context directly.</reason>
+      </file>
+      <file>
+        <path>Services/IGoogleCalendarService.cs</path>
+        <kind>service-contract</kind>
+        <symbol>IGoogleCalendarService</symbol>
+        <reason>Defines the Google API boundary. Story 2.3 should keep history logic outside this interface and in the sync orchestration/persistence layer.</reason>
+      </file>
+      <file>
+        <path>Services/GoogleCalendarService.cs</path>
+        <kind>service</kind>
+        <symbol>GoogleCalendarService</symbol>
+        <reason>Current Google-facing service already contains auth work and fetch stubs. Keep it focused on Google API concerns instead of inserting version-history persistence here.</reason>
+      </file>
+      <file>
+        <path>App.xaml.cs</path>
+        <kind>application</kind>
+        <symbol>App.ConfigureServices</symbol>
+        <reason>Current DI pattern and root service layout. Story 2.3 must follow the existing single-project Services/Data/ViewModels/Views organization.</reason>
+      </file>
+      <file>
+        <path>Data/Migrations/20260327203341_Phase1Schema.cs</path>
+        <kind>migration</kind>
+        <symbol>Phase1Schema</symbol>
+        <reason>The initial migration already created gcal_event_version. Story 2.3 should not add a new history table unless a concrete schema change is intentionally required.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+          <package name="Microsoft.Extensions.Logging" version="10.0.2" />
+          <package name="Serilog" version="4.1.0" />
+          <package name="Google.Apis.Calendar.v3" version="1.73.0.3993" note="Expected from Stories 2.1-2.2" />
+          <package name="Google.Apis.Auth" version="1.73.0.x" note="Expected from Stories 2.1-2.2" />
+          <package name="CommunityToolkit.Mvvm" version="8.x" note="Already used by the current SettingsViewModel" />
+        </existing>
+        <newPackagesNeeded>None expected for Story 2.3 if Story 2.2 groundwork is already present.</newPackagesNeeded>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="sequencing">Story 2.3 extends Story 2.2's sync pipeline. Do not start from the auth-only Story 2.1 branch state and do not build a second sync flow.</constraint>
+    <constraint id="C2" category="schema-preservation">Use the existing GcalEventVersion entity and gcal_event_version table. Do not introduce EventDataJson, ChangeType, or a second version-history table by default.</constraint>
+    <constraint id="C3" category="ownership-boundary">GoogleCalendarService remains responsible for Google API communication. Version snapshot creation belongs in SyncManager or an adjacent persistence helper, not in the UI or Google API client.</constraint>
+    <constraint id="C4" category="snapshot-timing">For updates and deletions, create the GcalEventVersion row before mutating the GcalEvent row so the history record reflects the true pre-sync local state.</constraint>
+    <constraint id="C5" category="new-event-boundary">First-time inserts do not produce history rows because there is no prior local state to preserve.</constraint>
+    <constraint id="C6" category="unchanged-boundary">Do not generate snapshots for unchanged events or for bookkeeping-only writes such as LastSyncedAt updates.</constraint>
+    <constraint id="C7" category="delete-strategy">Google deletions stay soft deletes on gcal_event. Do not physically delete local event rows because the FK chain and future rollback flows depend on them.</constraint>
+    <constraint id="C8" category="tier1-conflict-resolution">Tier 1 remains GoogleWins. Story 2.3 adds version capture around the overwrite path; it does not change conflict-resolution behavior.</constraint>
+    <constraint id="C9" category="history-retention">gcal_event_version is append-only. Sync must never edit or delete existing history rows, and no cleanup job belongs in this story.</constraint>
+    <constraint id="C10" category="change-reason">Use stable string values for sync-generated snapshots: ChangedBy = "gcal_sync" and ChangeReason = "updated" or "deleted".</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit + Moq + FluentAssertions, with SQLite-backed integration tests for persistence behavior. Favor integration coverage over pure mocks for snapshot ordering, insert-only guarantees, and soft-delete verification.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs
+      GoogleCalendarManagement.Tests/Unit/GoogleCalendarServiceTests.cs
+    </locations>
+    <ideas>
+      <test name="SyncManager_UpdatedEvent_CreatesSnapshotBeforeOverwrite">
+        Seed an existing GcalEvent row, run sync with changed Google payload, and assert one GcalEventVersion row exists containing the original summary, description, timestamps, and color values while the live GcalEvent row contains the new Google values.
+      </test>
+      <test name="SyncManager_DeletedEvent_CreatesSnapshotBeforeSoftDelete">
+        Seed an existing active GcalEvent row, sync a cancelled Google event, and assert a GcalEventVersion row is written before the live row becomes IsDeleted = true.
+      </test>
+      <test name="SyncManager_NewEvent_DoesNotCreateVersionRow">
+        Sync a first-time Google event and assert the gcal_event row is inserted while gcal_event_version remains unchanged.
+      </test>
+      <test name="SyncManager_UnchangedEvent_DoesNotCreateVersionRow">
+        Seed a row whose Google-facing values match the incoming payload and assert sync does not append history rows when only sync bookkeeping updates occur.
+      </test>
+      <test name="SyncManager_RepeatedUpdates_AppendHistoryWithoutMutatingOldRows">
+        Run multiple syncs with different Google payloads for the same event and assert history rows accumulate in newest-first order while prior rows remain unchanged.
+      </test>
+      <test name="SyncManager_Snapshots_SetChangedByAndChangeReason">
+        Verify update snapshots set ChangedBy = "gcal_sync" and ChangeReason = "updated", while delete snapshots set ChangeReason = "deleted".
+      </test>
+    </ideas>
+  </tests>
+</story-context>

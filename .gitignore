@@ -57,6 +57,8 @@ Package.StoreAssociation.xml
 
 ## Secrets and credentials (NEVER commit these)
 client_secret.json
+credentials/
+**/credentials/
 **/credentials/client_secret.json
 *.client_secret.json
 
