@@ -1,0 +1,147 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>3A</storyId>
+    <title>Harden Version History Schema and Sync Semantics</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-2/stories/2-3a-harden-version-history-schema-and-sync-semantics.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>the version-history schema and sync overwrite semantics hardened immediately after Story 2.3</iWant>
+    <soThat>later sync, status, and rollback work builds on the correct event-history contract instead of carrying avoidable data-loss and metadata bugs forward</soThat>
+    <tasks>
+      - Add GcalUpdatedAt, RecurringEventId, and IsRecurringInstance to gcal_event_version
+      - Update SyncManager snapshots to copy the new fields
+      - Stop sync overwrite/delete paths from resetting AppCreated, AppPublished, and SourceSystem
+      - Change the gcal_event_version FK away from cascade delete
+      - Clean up EventDataJson planning drift
+      - Leave rollback implementation itself for Epic 8, but document snapshot-before-rollback and optional full-payload archival as future work
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-2.3A.1">Each gcal_event_version snapshot row also stores GcalUpdatedAt, RecurringEventId, and IsRecurringInstance.</ac>
+    <ac id="AC-2.3A.2">Sync overwrite and delete handling no longer forcibly resets AppCreated, AppPublished, or SourceSystem on the live gcal_event row.</ac>
+    <ac id="AC-2.3A.3">The gcal_event_version foreign key no longer cascades deletes from gcal_event.</ac>
+    <ac id="AC-2.3A.4">Planning and implementation docs stop describing EventDataJson as the active version-history contract.</ac>
+    <ac id="AC-2.3A.5">Rollback implementation is still deferred, but the future requirements to snapshot before rollback and optionally archive full observed Google payloads are documented explicitly.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-2/stories/2-3-implement-version-history-on-calendar-sync.md</path>
+        <title>Story 2.3</title>
+        <section>Dev Notes and Constraints</section>
+        <snippet>Story 2.3 standardized the current sync-history contract around the existing fielded GcalEventVersion table and explicitly rejected EventDataJson for that implementation.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Out of Scope and Dependencies</section>
+        <snippet>Epic 2 excludes save/restore rollback implementation, so Story 2.3A should harden the sync contract without partially implementing Epic 8.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Stories 2.3-2.5</section>
+        <snippet>The epic breakdown still contains older EventDataJson language that should be aligned to the implemented snapshot-table design before more story generation propagates the drift.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-1/stories/1-3-implement-core-database-schema-tier-1-tables.md</path>
+        <title>Story 1.3</title>
+        <section>Schema notes and examples</section>
+        <snippet>Story 1.3 still contains a historical cascade-delete example and older rollback wording that now needs to reflect the hardened event-history contract.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>Data/Entities/GcalEvent.cs</path>
+        <kind>entity</kind>
+        <symbol>GcalEvent</symbol>
+        <reason>Contains GcalUpdatedAt, RecurringEventId, IsRecurringInstance, and local ownership fields that define the live-row source values and preservation rules.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/GcalEventVersion.cs</path>
+        <kind>entity</kind>
+        <symbol>GcalEventVersion</symbol>
+        <reason>Needs the additional fields required for better rollback fidelity and recurring-event history.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/GcalEventConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>GcalEventConfiguration</symbol>
+        <reason>Currently configures cascade delete from gcal_event to GcalEventVersion and must be changed.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/GcalEventVersionConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>GcalEventVersionConfiguration</symbol>
+        <reason>Needs new column mappings for gcal_updated_at, recurring_event_id, and is_recurring_instance.</reason>
+      </file>
+      <file>
+        <path>Services/SyncManager.cs</path>
+        <kind>service</kind>
+        <symbol>SyncManager</symbol>
+        <reason>Owns snapshot creation and currently wipes AppCreated, AppPublished, and SourceSystem during overwrite/delete handling.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs</path>
+        <kind>integration-test</kind>
+        <symbol>GoogleCalendarSyncTests</symbol>
+        <reason>Already covers update/delete/new/unchanged history behavior and should be extended rather than creating a second test harness.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+          <package name="Microsoft.Extensions.Logging" version="10.0.2" />
+          <package name="Serilog" version="4.1.0" />
+        </existing>
+        <newPackagesNeeded>None expected.</newPackagesNeeded>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="sequencing">This story is inserted after Story 2.3 and should land before Stories 2.4 and 2.5 so later sync work inherits the hardened contract.</constraint>
+    <constraint id="C2" category="schema-shape">Keep gcal_event_version as a fielded snapshot table. Do not reintroduce EventDataJson, ChangeType, or a second history table here.</constraint>
+    <constraint id="C3" category="ownership-metadata">AppCreated, AppPublished, and SourceSystem are local metadata. GoogleWins applies to Google-facing event content, not to wiping those local ownership fields.</constraint>
+    <constraint id="C4" category="delete-behavior">Changing FK delete behavior is a safety improvement; soft delete in gcal_event remains the standard operational path for Google deletions.</constraint>
+    <constraint id="C5" category="epic-boundary">Do not implement SaveRestoreService or rollback UI here. Only document that rollback should snapshot current live state before restore.</constraint>
+    <constraint id="C6" category="future-archival">If full historical Google-payload archival is added later, treat it as explicit local capture of every observed Google version, not as a hidden expansion of the operational history table.</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit + FluentAssertions with SQLite-backed integration coverage for persistence and relationship behavior.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs
+      GoogleCalendarManagement.Tests/Integration/SchemaTests.cs
+    </locations>
+    <ideas>
+      <test name="SyncManager_UpdatedSnapshot_CopiesRecurringAndUpdatedFields">
+        Seed a recurring instance row with GcalUpdatedAt, RecurringEventId, and IsRecurringInstance set, run an update sync, and assert the inserted history row preserves those original values.
+      </test>
+      <test name="SyncManager_Overwrite_PreservesOwnershipMetadata">
+        Seed a row with AppCreated = true, AppPublished = true, and SourceSystem = manual, run a Google overwrite sync, and assert those fields remain intact on the live row.
+      </test>
+      <test name="SyncManager_Delete_PreservesOwnershipMetadata">
+        Seed a row with local ownership flags, process a deleted Google event, and assert soft delete occurs without wiping AppCreated, AppPublished, or SourceSystem.
+      </test>
+      <test name="Schema_GcalEventVersionRelationship_IsNonCascading">
+        Verify the EF model / SQLite FK definition does not cascade delete history rows when the parent is removed.
+      </test>
+      <test name="Docs_NoLongerDescribeEventDataJsonAsActiveContract">
+        Optional documentation regression check or manual review step to ensure story-generation source docs no longer instruct developers to use EventDataJson.
+      </test>
+    </ideas>
+  </tests>
+</story-context>

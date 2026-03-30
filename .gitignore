@@ -62,21 +62,11 @@ credentials/
 **/credentials/client_secret.json
 *.client_secret.json
 
-## Data directory (local SQLite database)
-data/
-!Data/
-Data/*
-!Data/Entities/
-Data/Entities/*
-!Data/Entities/DataSourceRefresh.cs
-!Data/Configurations/
-Data/Configurations/*
-!Data/Configurations/DataSourceRefreshConfiguration.cs
-!Data/Migrations/
-Data/Migrations/*
-!Data/Migrations/20260330181722_AddDataSourceRefreshSyncToken.cs
-!Data/Migrations/20260330181722_AddDataSourceRefreshSyncToken.Designer.cs
-!Data/Migrations/CalendarDbContextModelSnapshot.cs
+## Runtime database artifacts
+# The app's real SQLite database is NOT stored in this repository.
+# Runtime files live under %LOCALAPPDATA%\GoogleCalendarManagement\calendar.db.
+# Do not ignore the repo's `Data/` folder here: `Data/Entities`, `Data/Configurations`,
+# and `Data/Migrations` are tracked C# source files, not local user data.
 *.db
 *.db-shm
 *.db-wal

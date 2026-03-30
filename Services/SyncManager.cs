@@ -338,6 +338,9 @@ public sealed class SyncManager : ISyncManager
             EndDatetime = existingEvent.EndDatetime,
             IsAllDay = existingEvent.IsAllDay,
             ColorId = existingEvent.ColorId,
+            GcalUpdatedAt = existingEvent.GcalUpdatedAt,
+            RecurringEventId = existingEvent.RecurringEventId,
+            IsRecurringInstance = existingEvent.IsRecurringInstance,
             ChangedBy = "gcal_sync",
             ChangeReason = changeReason,
             CreatedAt = createdAt
@@ -358,13 +361,17 @@ public sealed class SyncManager : ISyncManager
             return true;
         }
 
-        return existingEvent.Summary != incomingEvent.Summary ||
+        return existingEvent.CalendarId != incomingEvent.CalendarId ||
+               existingEvent.Summary != incomingEvent.Summary ||
                existingEvent.Description != incomingEvent.Description ||
                existingEvent.StartDatetime != incomingEvent.StartDateTimeUtc ||
                existingEvent.EndDatetime != incomingEvent.EndDateTimeUtc ||
                existingEvent.IsAllDay != incomingEvent.IsAllDay ||
                existingEvent.ColorId != incomingEvent.ColorId ||
-               existingEvent.GcalEtag != incomingEvent.GcalEtag;
+               existingEvent.GcalEtag != incomingEvent.GcalEtag ||
+               existingEvent.GcalUpdatedAt != incomingEvent.GcalUpdatedAtUtc ||
+               existingEvent.RecurringEventId != incomingEvent.RecurringEventId ||
+               existingEvent.IsRecurringInstance != incomingEvent.IsRecurringInstance;
     }
 
     private static bool ApplyIncomingValues(GcalEvent existingEvent, GcalEventDto incomingEvent, DateTime syncedAt)
@@ -381,10 +388,7 @@ public sealed class SyncManager : ISyncManager
             existingEvent.GcalUpdatedAt != incomingEvent.GcalUpdatedAtUtc ||
             existingEvent.IsDeleted != incomingEvent.IsDeleted ||
             existingEvent.RecurringEventId != incomingEvent.RecurringEventId ||
-            existingEvent.IsRecurringInstance != incomingEvent.IsRecurringInstance ||
-            existingEvent.AppCreated ||
-            existingEvent.AppPublished ||
-            existingEvent.SourceSystem is not null;
+            existingEvent.IsRecurringInstance != incomingEvent.IsRecurringInstance;
 
         existingEvent.CalendarId = incomingEvent.CalendarId;
         existingEvent.Summary = incomingEvent.Summary;
@@ -396,9 +400,6 @@ public sealed class SyncManager : ISyncManager
         existingEvent.GcalEtag = incomingEvent.GcalEtag;
         existingEvent.GcalUpdatedAt = incomingEvent.GcalUpdatedAtUtc;
         existingEvent.IsDeleted = incomingEvent.IsDeleted;
-        existingEvent.AppCreated = false;
-        existingEvent.SourceSystem = null;
-        existingEvent.AppPublished = false;
         existingEvent.RecurringEventId = incomingEvent.RecurringEventId;
         existingEvent.IsRecurringInstance = incomingEvent.IsRecurringInstance;
         existingEvent.LastSyncedAt = syncedAt;
@@ -413,9 +414,6 @@ public sealed class SyncManager : ISyncManager
         existingEvent.GcalEtag = incomingEvent.GcalEtag ?? existingEvent.GcalEtag;
         existingEvent.GcalUpdatedAt = incomingEvent.GcalUpdatedAtUtc;
         existingEvent.IsDeleted = true;
-        existingEvent.AppCreated = false;
-        existingEvent.SourceSystem = null;
-        existingEvent.AppPublished = false;
         existingEvent.RecurringEventId = incomingEvent.RecurringEventId;
         existingEvent.IsRecurringInstance = incomingEvent.IsRecurringInstance;
         existingEvent.LastSyncedAt = syncedAt;

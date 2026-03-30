@@ -147,14 +147,17 @@ So that **I can store fetched calendar data locally**.
 - UpdatedAt (DateTime, required)
 - Proper indexes on GoogleEventId, StartTime, IsPublished
 
-**EventVersionHistory table:**
-- Id (GUID, primary key)
-- GoogleCalendarEventId (GUID, foreign key)
-- VersionTimestamp (DateTime, required)
-- ChangeType (enum: Created, Updated, Deleted)
-- EventDataJson (string - full event snapshot)
-- TriggeredBy (string - "UserEdit", "GoogleCalendarSync", etc.)
-- Index on GoogleCalendarEventId and VersionTimestamp
+**gcal_event_version table (fielded snapshot — no JSON blob):**
+- version_id (integer, primary key, auto-increment)
+- gcal_event_id (string, FK → gcal_event with Restrict delete)
+- gcal_etag, summary, description, start_datetime, end_datetime, is_all_day, color_id (snapshot of Google-facing fields)
+- gcal_updated_at (nullable DateTime — Google's last-modified timestamp at snapshot time)
+- recurring_event_id (nullable string)
+- is_recurring_instance (boolean, default false)
+- changed_by (string — e.g. "gcal_sync")
+- change_reason (string — "updated" or "deleted")
+- created_at (DateTime, required)
+- Index on (gcal_event_id, created_at)
 
 **AppMetadata table:**
 - Key (string, primary key)
@@ -171,7 +174,7 @@ So that **I can store fetched calendar data locally**.
 **Technical Notes:**
 - Reference: FR-8.1 (database schema), NFR-D1 (version history), NFR-D4 (audit trail)
 - Use EF Core fluent API for configuration, not data annotations
-- EventDataJson stores full event state for rollback capability
+- gcal_event_version is a fielded snapshot table (not a JSON blob); each row captures the pre-overwrite state of the live gcal_event row; rollback implementation belongs to Epic 8
 - This is Tier 1 schema - additional tables added in later epics (Toggl, Calls, YouTube, DateStates, SavePoints)
 - Consider using DateTimeOffset for timezone handling
 
@@ -398,16 +401,16 @@ So that **I never lose data and can see what changed**.
 **Then** updated events overwrite current data
 
 **And** version history is preserved:
-- Before overwriting, current event state saved to EventVersionHistory table
-- VersionTimestamp set to current DateTime
-- ChangeType set to "Updated"
-- EventDataJson contains full JSON snapshot of event before update
-- TriggeredBy = "GoogleCalendarSync"
+- Before overwriting, current event state saved to `gcal_event_version`
+- Snapshot stores the prior Google-facing event fields needed for restore and comparison
+- `changed_by = "gcal_sync"`
+- `change_reason = "updated"`
+- Historical rows are append-only and queryable by event and timestamp
 
 **And** version history handles different change types:
-- New events from GCal: Create new row in GoogleCalendarEvents
+- New events from GCal: Create new row in `gcal_event`
 - Updated events: Save old version to history, update main row
-- Deleted events: Save to history with ChangeType = "Deleted", mark IsPublished = false
+- Deleted events: Save to history with `change_reason = "deleted"`, mark `is_deleted = true`
 
 **And** history is queryable:
 - Can view version history for any event
@@ -418,10 +421,51 @@ So that **I never lose data and can see what changed**.
 
 **Technical Notes:**
 - Reference: NFR-D1 (data loss prevention), NFR-D4 (audit trail)
-- Detect changes by comparing GoogleEventId + UpdatedAt timestamp
-- Store complete event as JSON for future rollback capability
-- Consider compression for EventDataJson if storage becomes issue
+- Detect changes primarily from Google ETag, with field-level fallback if needed
+- Use the existing `gcal_event_version` schema rather than a JSON snapshot column
 - Automatic version history creation - no user intervention needed
+
+---
+
+### Story 2.3A: Harden Version History Schema and Sync Semantics
+
+As a **developer**,
+I want **the version-history model and sync overwrite rules hardened immediately after Story 2.3**,
+So that **future sync, status, and rollback work builds on the correct data contract instead of carrying avoidable history and metadata bugs forward**.
+
+**Acceptance Criteria:**
+
+**Given** `gcal_event_version` stores pre-overwrite snapshots
+**When** Story 2.3A is implemented
+**Then** the history schema is expanded to capture additional rollback-relevant fields:
+- `recurring_event_id`
+- `is_recurring_instance`
+- `gcal_updated_at`
+
+**And** sync preserves local ownership metadata correctly:
+- Re-sync overwrite does not forcibly reset `app_created`
+- Re-sync overwrite does not forcibly reset `app_published`
+- Re-sync overwrite does not forcibly reset `source_system`
+
+**And** history retention is protected at the relational level:
+- `gcal_event_version -> gcal_event` no longer uses cascade delete
+- Hard deletion of a live row must not silently erase historical rows
+
+**And** documentation is aligned to the implemented schema:
+- Planning and story docs stop referring to `EventDataJson` as the active version-history contract
+- Story examples and tests use the actual snapshot-table design
+
+**And** rollback enhancements are intentionally staged:
+- Snapshot-before-rollback is planned for Epic 8, not bolted into Epic 2
+- High-fidelity archival of full Google event payloads is evaluated as Epic 8 follow-up work
+
+**Prerequisites:** Story 2.3 (version-history sync path)
+
+**Technical Notes:**
+- This is a hardening story inserted before Stories 2.4 and 2.5 because background and repeated sync work should not amplify the current schema and overwrite semantics
+- The change is still within Epic 2 because it adjusts the sync contract, not a separate product capability
+- Future rollback work in Epic 8 should snapshot current live state before restoring an older version so rollback itself is undoable
+- If exact-fidelity archival of every Google-observed version is desired later, prefer a clearly separate raw payload capture strategy instead of overloading the operational snapshot table by accident
 
 ---
 
@@ -1085,28 +1129,20 @@ public class GoogleCalendarEventTests
 }
 ```
 
-**Story 2.3 - Version History:**
+**Story 2.3 - Version History (fielded snapshot, no JSON blob):**
 ```csharp
-public class VersionHistoryTests
+// gcal_event_version stores individual columns, not EventDataJson.
+// ChangeType is not used; change_reason is a plain string ("updated" / "deleted").
+// See GoogleCalendarSyncTests.cs for the canonical integration-test examples.
+[Fact]
+public async Task SyncAsync_UpdatedEvent_CreatesSnapshotBeforeOverwrite()
 {
-    [Fact]
-    public async Task Sync_WhenEventUpdated_CreatesVersionHistoryEntry()
-    {
-        // Arrange
-        var existingEvent = new GoogleCalendarEvent { GoogleEventId = "123", Title = "Old Title" };
-        await SaveToDatabase(existingEvent);
-
-        var updatedEvent = new GoogleCalendarEvent { GoogleEventId = "123", Title = "New Title" };
-
-        // Act
-        await _syncService.UpdateEventFromGCal(updatedEvent);
-
-        // Assert
-        var history = await GetVersionHistory("123");
-        Assert.Single(history);
-        Assert.Equal("Old Title", JsonSerializer.Deserialize<GoogleCalendarEvent>(history[0].EventDataJson).Title);
-        Assert.Equal(ChangeType.Updated, history[0].ChangeType);
-    }
+    // seed existing event, run sync with updated data...
+    var versions = await context.GcalEventVersions.ToListAsync();
+    Assert.Single(versions);
+    Assert.Equal("Old Title", versions[0].Summary);        // fielded column
+    Assert.Equal("updated", versions[0].ChangeReason);     // string, not enum
+    Assert.Equal("gcal_sync", versions[0].ChangedBy);
 }
 ```
 

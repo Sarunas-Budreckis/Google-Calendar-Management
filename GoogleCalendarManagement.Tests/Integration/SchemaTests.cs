@@ -161,6 +161,51 @@ public class SchemaTests
     }
 
     [Fact]
+    public async Task GcalEventVersionRelationship_IsNonCascading_AfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act — read the FK definition from SQLite schema
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA foreign_key_list('gcal_event_version')";
+
+        string? onDeleteBehavior = null;
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            // PRAGMA foreign_key_list columns: id, seq, table, from, to, on_update, on_delete, match
+            onDeleteBehavior = reader.GetString(6); // on_delete column
+        }
+
+        // Assert — SQLite records "NO ACTION" for both Restrict and NoAction
+        onDeleteBehavior.Should().NotBe("CASCADE", "gcal_event_version FK must not cascade delete history rows");
+    }
+
+    [Fact]
+    public async Task GcalEventVersion_HasNewSnapshotColumns_AfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info('gcal_event_version')";
+
+        var columns = new List<string>();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            columns.Add(reader.GetString(1));
+
+        // Assert
+        columns.Should().Contain("gcal_updated_at");
+        columns.Should().Contain("recurring_event_id");
+        columns.Should().Contain("is_recurring_instance");
+    }
+
+    [Fact]
     public async Task AllIndexes_PresentAfterEnsureCreated()
     {
         // Arrange

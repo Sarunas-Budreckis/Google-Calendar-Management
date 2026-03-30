@@ -312,6 +312,6 @@ All ACs satisfied. 14/14 tests pass (5 new SchemaTests + 9 from Story 1.2).
 - Created 7 entity classes in `Data/Entities/` with no data annotations (C-1 compliant)
 - Created 7 `IEntityTypeConfiguration<T>` classes in `Data/Configurations/` with full snake_case column mapping
 - Updated `CalendarDbContext.cs` with 7 `DbSet<T>` properties and `ApplyConfigurationsFromAssembly`
-- Migration `Phase1Schema` generated and applied cleanly — all 7 tables, 9 indexes, FK cascade, 6 Config seed rows verified in SQL
+- Migration `Phase1Schema` generated and applied cleanly — all 7 tables, 9 indexes, 6 Config seed rows verified in SQL (FK delete behavior subsequently hardened to Restrict in Story 2.3A)
 - `__EFMigrationsHistory` contains `InitialCreate` + `Phase1Schema`
 - Debug and Release builds: 0 errors (IL2026 trim warnings are pre-existing EF Core/WinUI warnings from Story 1.2)

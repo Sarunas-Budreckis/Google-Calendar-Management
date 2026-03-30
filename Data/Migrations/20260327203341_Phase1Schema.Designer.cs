@@ -3,6 +3,7 @@ using System;
 using GoogleCalendarManagement.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace GoogleCalendarManagement.Data.Migrations
 {
     [DbContext(typeof(CalendarDbContext))]
-    partial class CalendarDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260327203341_Phase1Schema")]
+    partial class Phase1Schema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.12");
@@ -181,10 +184,6 @@ namespace GoogleCalendarManagement.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("success");
 
-                    b.Property<string>("SyncToken")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("sync_token");
-
                     b.HasKey("RefreshId");
 
                     b.HasIndex("SourceName", "LastRefreshedAt")
@@ -348,23 +347,9 @@ namespace GoogleCalendarManagement.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("gcal_event_id");
 
-                    b.Property<DateTime?>("GcalUpdatedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("gcal_updated_at");
-
                     b.Property<bool?>("IsAllDay")
                         .HasColumnType("INTEGER")
                         .HasColumnName("is_all_day");
-
-                    b.Property<bool>("IsRecurringInstance")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_recurring_instance");
-
-                    b.Property<string>("RecurringEventId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("recurring_event_id");
 
                     b.Property<DateTime?>("StartDatetime")
                         .HasColumnType("TEXT")
@@ -443,7 +428,7 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.HasOne("GoogleCalendarManagement.Data.Entities.GcalEvent", "GcalEvent")
                         .WithMany("Versions")
                         .HasForeignKey("GcalEventId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("GcalEvent");

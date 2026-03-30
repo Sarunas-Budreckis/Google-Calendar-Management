@@ -519,6 +519,167 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.ErrorMessage.Should().Contain("busy or locked");
     }
 
+    [Fact]
+    public async Task SyncAsync_UpdatedRecurringEvent_SnapshotCopiesRecurringMetadataAndGcalUpdatedAt()
+    {
+        var seedTimestamp = new DateTime(2026, 02, 01, 8, 0, 0, DateTimeKind.Utc);
+        const string recurringParentId = "recurring-parent-1";
+
+        await SeedEventAsync(new GcalEvent
+        {
+            GcalEventId = "event-recurring-1",
+            CalendarId = "primary",
+            Summary = "Recurring instance v1",
+            GcalEtag = "\"etag-v1\"",
+            GcalUpdatedAt = seedTimestamp,
+            RecurringEventId = recurringParentId,
+            IsRecurringInstance = true,
+            CreatedAt = seedTimestamp,
+            UpdatedAt = seedTimestamp
+        });
+
+        var syncManager = CreateSyncManager(new[]
+        {
+            CreateEvent(
+                "event-recurring-1",
+                "Recurring instance v2",
+                etag: "\"etag-v2\"",
+                updatedAt: seedTimestamp.AddDays(1),
+                recurringEventId: recurringParentId,
+                isRecurringInstance: true)
+        });
+
+        await syncManager.SyncAsync("primary");
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var version = await context.GcalEventVersions.SingleAsync(v => v.GcalEventId == "event-recurring-1");
+
+        version.GcalUpdatedAt.Should().Be(seedTimestamp);
+        version.RecurringEventId.Should().Be(recurringParentId);
+        version.IsRecurringInstance.Should().BeTrue();
+        version.ChangeReason.Should().Be("updated");
+    }
+
+    [Fact]
+    public async Task SyncAsync_SameEtagButChangedRecurringMetadata_StillCreatesSnapshotBeforeOverwrite()
+    {
+        var seedTimestamp = new DateTime(2026, 02, 01, 8, 0, 0, DateTimeKind.Utc);
+
+        await SeedEventAsync(new GcalEvent
+        {
+            GcalEventId = "event-recurring-2",
+            CalendarId = "primary",
+            Summary = "Recurring instance v1",
+            GcalEtag = "\"etag-stable\"",
+            GcalUpdatedAt = seedTimestamp,
+            RecurringEventId = null,
+            IsRecurringInstance = false,
+            CreatedAt = seedTimestamp,
+            UpdatedAt = seedTimestamp
+        });
+
+        var syncManager = CreateSyncManager(new[]
+        {
+            CreateEvent(
+                "event-recurring-2",
+                "Recurring instance v1",
+                etag: "\"etag-stable\"",
+                updatedAt: seedTimestamp.AddDays(1),
+                recurringEventId: "recurring-parent-2",
+                isRecurringInstance: true)
+        });
+
+        await syncManager.SyncAsync("primary");
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var liveEvent = await context.GcalEvents.SingleAsync(v => v.GcalEventId == "event-recurring-2");
+        var version = await context.GcalEventVersions.SingleAsync(v => v.GcalEventId == "event-recurring-2");
+
+        version.GcalUpdatedAt.Should().Be(seedTimestamp);
+        version.RecurringEventId.Should().BeNull();
+        version.IsRecurringInstance.Should().BeFalse();
+
+        liveEvent.GcalUpdatedAt.Should().Be(seedTimestamp.AddDays(1));
+        liveEvent.RecurringEventId.Should().Be("recurring-parent-2");
+        liveEvent.IsRecurringInstance.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SyncAsync_Overwrite_DoesNotResetOwnershipMetadata()
+    {
+        var seedTimestamp = new DateTime(2026, 02, 02, 8, 0, 0, DateTimeKind.Utc);
+
+        await SeedEventAsync(new GcalEvent
+        {
+            GcalEventId = "event-owned-1",
+            CalendarId = "primary",
+            Summary = "App-owned event",
+            GcalEtag = "\"etag-original\"",
+            AppCreated = true,
+            AppPublished = true,
+            SourceSystem = "manual",
+            CreatedAt = seedTimestamp,
+            UpdatedAt = seedTimestamp
+        });
+
+        var syncManager = CreateSyncManager(new[]
+        {
+            CreateEvent(
+                "event-owned-1",
+                "App-owned event",
+                etag: "\"etag-updated\"",
+                updatedAt: seedTimestamp.AddDays(1))
+        });
+
+        await syncManager.SyncAsync("primary");
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-owned-1");
+
+        liveEvent.AppCreated.Should().BeTrue();
+        liveEvent.AppPublished.Should().BeTrue();
+        liveEvent.SourceSystem.Should().Be("manual");
+    }
+
+    [Fact]
+    public async Task SyncAsync_Delete_DoesNotResetOwnershipMetadata()
+    {
+        var seedTimestamp = new DateTime(2026, 02, 03, 8, 0, 0, DateTimeKind.Utc);
+
+        await SeedEventAsync(new GcalEvent
+        {
+            GcalEventId = "event-owned-2",
+            CalendarId = "primary",
+            Summary = "App-owned event to be deleted",
+            GcalEtag = "\"etag-original\"",
+            AppCreated = true,
+            AppPublished = true,
+            SourceSystem = "manual",
+            CreatedAt = seedTimestamp,
+            UpdatedAt = seedTimestamp
+        });
+
+        var syncManager = CreateSyncManager(new[]
+        {
+            CreateEvent(
+                "event-owned-2",
+                "App-owned event to be deleted",
+                etag: "\"etag-deleted\"",
+                updatedAt: seedTimestamp.AddDays(1),
+                isDeleted: true)
+        });
+
+        await syncManager.SyncAsync("primary");
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-owned-2");
+
+        liveEvent.IsDeleted.Should().BeTrue();
+        liveEvent.AppCreated.Should().BeTrue();
+        liveEvent.AppPublished.Should().BeTrue();
+        liveEvent.SourceSystem.Should().Be("manual");
+    }
+
     public void Dispose()
     {
         _connection.Dispose();
@@ -560,7 +721,9 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         string? colorId = "5",
         string? etag = null,
         DateTime? updatedAt = null,
-        bool isDeleted = false)
+        bool isDeleted = false,
+        string? recurringEventId = null,
+        bool isRecurringInstance = false)
     {
         return new GcalEventDto(
             eventId,
@@ -574,8 +737,8 @@ public sealed class GoogleCalendarSyncTests : IDisposable
             etag ?? $"\"{eventId}-etag\"",
             updatedAt ?? new DateTime(2026, 01, 14, 18, 0, 0, DateTimeKind.Utc),
             isDeleted,
-            null,
-            false);
+            recurringEventId,
+            isRecurringInstance);
     }
 
     private sealed class CallbackProgress<T> : IProgress<T>
