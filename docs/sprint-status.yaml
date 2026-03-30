@@ -47,8 +47,8 @@ development_status:
 
   epic-2: contexted
   2-1-implement-google-calendar-oauth-2-0-authentication: done
-  2-2-fetch-google-calendar-events-and-store-locally: ready-for-dev
-  2-3-implement-version-history-on-calendar-sync: ready-for-dev
+  2-2-fetch-google-calendar-events-and-store-locally: done
+  2-3-implement-version-history-on-calendar-sync: done
   2-4-display-sync-status-indicators-green-grey-per-date: ready-for-dev
   2-5-implement-background-sync-and-cache-management: ready-for-dev
   epic-2-retrospective: optional

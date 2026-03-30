@@ -1,6 +1,6 @@
 # Story 2.2: Fetch Google Calendar Events and Store Locally
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -24,64 +24,64 @@ so that **I can view my calendar offline and keep a local cache of my existing e
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Verify prerequisites and reuse Story 2.1 auth contracts** (AC: 2.2.1, 2.2.3)
-  - [ ] Confirm Story 2.1's `IGoogleCalendarService`, `GoogleCalendarService`, `OperationResult<T>`, token storage, and Settings sync surface exist on the working branch before starting this story
-  - [ ] If Story 2.1 is not yet merged, complete it first; do not build a second auth path or duplicate OAuth/token logic in this story
-  - [ ] Reuse the same settings surface introduced in Story 2.1 for the manual sync command; do not invent a separate sync page
+- [x] **Task 1: Verify prerequisites and reuse Story 2.1 auth contracts** (AC: 2.2.1, 2.2.3)
+  - [x] Confirm Story 2.1's `IGoogleCalendarService`, `GoogleCalendarService`, `OperationResult<T>`, token storage, and Settings sync surface exist on the working branch before starting this story
+  - [x] If Story 2.1 is not yet merged, complete it first; do not build a second auth path or duplicate OAuth/token logic in this story
+  - [x] Reuse the same settings surface introduced in Story 2.1 for the manual sync command; do not invent a separate sync page
 
-- [ ] **Task 2: Add Google event fetch models and service contract extensions** (AC: 2.2.1, 2.2.2, 2.2.4)
-  - [ ] Create `Services/GcalEventDto.cs` matching the Epic 2 tech spec fields actually needed by local persistence:
+- [x] **Task 2: Add Google event fetch models and service contract extensions** (AC: 2.2.1, 2.2.2, 2.2.4)
+  - [x] Create `Services/GcalEventDto.cs` matching the Epic 2 tech spec fields actually needed by local persistence:
     - `GcalEventId`, `CalendarId`, `Summary`, `Description`
     - `StartDateTimeUtc`, `EndDateTimeUtc`, `IsAllDay`
     - `ColorId`, `GcalEtag`, `GcalUpdatedAtUtc`
     - `IsDeleted`, `RecurringEventId`, `IsRecurringInstance`
-  - [ ] Add `FetchAllEventsAsync(string calendarId, DateTime start, DateTime end, IProgress<int>? progress = null, CancellationToken ct = default)` to `IGoogleCalendarService`
-  - [ ] Add a stub `FetchIncrementalEventsAsync(...)` signature in `IGoogleCalendarService` for Story 2.5, but leave full implementation for that story if not needed yet
+  - [x] Add `FetchAllEventsAsync(string calendarId, DateTime start, DateTime end, IProgress<int>? progress = null, CancellationToken ct = default)` to `IGoogleCalendarService`
+  - [x] Add a stub `FetchIncrementalEventsAsync(...)` signature in `IGoogleCalendarService` for Story 2.5, but leave full implementation for that story if not needed yet
 
-- [ ] **Task 3: Implement paginated fetch logic in `GoogleCalendarService`** (AC: 2.2.1, 2.2.2, 2.2.4, 2.2.6)
-  - [ ] Use the authenticated Google Calendar client from Story 2.1; no new auth mechanism
-  - [ ] Call `Events.List("primary")` with:
+- [x] **Task 3: Implement paginated fetch logic in `GoogleCalendarService`** (AC: 2.2.1, 2.2.2, 2.2.4, 2.2.6)
+  - [x] Use the authenticated Google Calendar client from Story 2.1; no new auth mechanism
+  - [x] Call `Events.List("primary")` with:
     - `TimeMin = rangeStartUtc`
     - `TimeMax = rangeEndUtc`
     - `SingleEvents = true` so recurring events are expanded
     - `ShowDeleted = true` so cancelled items can be represented
     - `MaxResults = 250`
-  - [ ] Iterate `nextPageToken` until exhausted and accumulate all items
-  - [ ] Report page-level progress through `IProgress<int>` after each page
-  - [ ] Map Google API `Event` objects to `GcalEventDto`:
+  - [x] Iterate `nextPageToken` until exhausted and accumulate all items
+  - [x] Report page-level progress through `IProgress<int>` after each page
+  - [x] Map Google API `Event` objects to `GcalEventDto`:
     - Timed events use `EventDateTime.DateTimeDateTimeOffset` converted to UTC
     - All-day events use the `Date` field and store midnight-bounded UTC values consistently
     - Cancelled events map to `IsDeleted = true`
     - Expanded recurring instances set `IsRecurringInstance = true` and `RecurringEventId`
-  - [ ] Return `OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>`
-  - [ ] Catch Google API/network failures and return friendly `OperationResult.Failure(...)` messages instead of throwing to callers
+  - [x] Return `OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>`
+  - [x] Catch Google API/network failures and return friendly `OperationResult.Failure(...)` messages instead of throwing to callers
 
-- [ ] **Task 4: Extend sync bookkeeping schema for later incremental sync** (AC: 2.2.5)
-  - [ ] Add nullable `SyncToken` to `Data/Entities/DataSourceRefresh.cs`
-  - [ ] Update `Data/Configurations/DataSourceRefreshConfiguration.cs` to map the new `sync_token` column
-  - [ ] Create an EF Core migration adding `sync_token TEXT NULL` to `data_source_refresh`
-  - [ ] Keep the existing table and index names unchanged; do not introduce a new metadata table
+- [x] **Task 4: Extend sync bookkeeping schema for later incremental sync** (AC: 2.2.5)
+  - [x] Add nullable `SyncToken` to `Data/Entities/DataSourceRefresh.cs`
+  - [x] Update `Data/Configurations/DataSourceRefreshConfiguration.cs` to map the new `sync_token` column
+  - [x] Create an EF Core migration adding `sync_token TEXT NULL` to `data_source_refresh`
+  - [x] Keep the existing table and index names unchanged; do not introduce a new metadata table
 
-- [ ] **Task 5: Implement sync orchestration and local upsert flow** (AC: 2.2.3, 2.2.4, 2.2.5, 2.2.6)
-  - [ ] Create `Services/SyncProgress.cs` with at minimum `PagesFetched`, `EventsProcessed`, and a user-facing status message
-  - [ ] Create `Services/SyncResult.cs` with `Success`, `EventsAdded`, `EventsUpdated`, `EventsDeleted`, `NewSyncToken`, and `ErrorMessage`
-  - [ ] Create `Services/ISyncManager.cs` and `Services/SyncManager.cs`
-  - [ ] `SyncManager.SyncAsync(...)` should:
+- [x] **Task 5: Implement sync orchestration and local upsert flow** (AC: 2.2.3, 2.2.4, 2.2.5, 2.2.6)
+  - [x] Create `Services/SyncProgress.cs` with at minimum `PagesFetched`, `EventsProcessed`, and a user-facing status message
+  - [x] Create `Services/SyncResult.cs` with `Success`, `EventsAdded`, `EventsUpdated`, `EventsDeleted`, `NewSyncToken`, and `ErrorMessage`
+  - [x] Create `Services/ISyncManager.cs` and `Services/SyncManager.cs`
+  - [x] `SyncManager.SyncAsync(...)` should:
     - Use default range `DateTime.UtcNow.AddMonths(-6)` to `DateTime.UtcNow.AddMonths(1)` when none is supplied
     - Call `IGoogleCalendarService.FetchAllEventsAsync(...)`
     - Upsert each returned event into `CalendarDbContext.GcalEvents`
     - Preserve the existing `GcalEvent` schema and naming; do not create a second event entity
-  - [ ] Map `GcalEventDto` to `GcalEvent` using current entity fields:
+  - [x] Map `GcalEventDto` to `GcalEvent` using current entity fields:
     - `AppCreated = false`
     - `AppPublished = false`
     - `SourceSystem = null`
     - `LastSyncedAt = DateTime.UtcNow`
     - Set `CreatedAt` on inserts and `UpdatedAt` on every write
-  - [ ] For existing rows, update the local entity when incoming Google data differs
-  - [ ] For cancelled Google events, mark `IsDeleted = true` instead of removing rows
-  - [ ] Save in batches or per page so cancellation can stop the sync without rolling back already-written data
-  - [ ] Add an `AuditLog` row for manual sync with `OperationType = "gcal_sync"`
-  - [ ] Add or update a `DataSourceRefresh` row with:
+  - [x] For existing rows, update the local entity when incoming Google data differs
+  - [x] For cancelled Google events, mark `IsDeleted = true` instead of removing rows
+  - [x] Save in batches or per page so cancellation can stop the sync without rolling back already-written data
+  - [x] Add an `AuditLog` row for manual sync with `OperationType = "gcal_sync"`
+  - [x] Add or update a `DataSourceRefresh` row with:
     - `SourceName = "gcal"`
     - synced date range
     - `LastRefreshedAt = DateTime.UtcNow`
@@ -90,28 +90,28 @@ so that **I can view my calendar offline and keep a local cache of my existing e
     - `ErrorMessage`
     - `SyncToken`
 
-- [ ] **Task 6: Add the manual sync UI command, progress, and cancel behavior** (AC: 2.2.1, 2.2.3, 2.2.6)
-  - [ ] Extend the Story 2.1 settings view model rather than creating a new view model tree
-  - [ ] Add `SyncWithGoogleCalendarCommand`
-  - [ ] Add `CancelSyncCommand` backed by a `CancellationTokenSource`
-  - [ ] Add observable state for:
+- [x] **Task 6: Add the manual sync UI command, progress, and cancel behavior** (AC: 2.2.1, 2.2.3, 2.2.6)
+  - [x] Extend the Story 2.1 settings view model rather than creating a new view model tree
+  - [x] Add `SyncWithGoogleCalendarCommand`
+  - [x] Add `CancelSyncCommand` backed by a `CancellationTokenSource`
+  - [x] Add observable state for:
     - `IsSyncing`
     - `SyncStatusText`
     - `SyncProgressValue` or equivalent simple progress display
     - `LastSyncText`
-  - [ ] Update the existing settings page to show:
+  - [x] Update the existing settings page to show:
     - `Sync with Google Calendar` button
     - `Cancel Sync` button during an active sync
     - progress/status text
     - last successful sync timestamp
-  - [ ] On successful sync, refresh the displayed last-sync timestamp from `DataSourceRefresh`
-  - [ ] On cancellation, stop additional page fetches and show a non-error status message
+  - [x] On successful sync, refresh the displayed last-sync timestamp from `DataSourceRefresh`
+  - [x] On cancellation, stop additional page fetches and show a non-error status message
 
-- [ ] **Task 7: Write tests for fetch, mapping, and persistence** (AC: all)
-  - [ ] Add unit tests for `GoogleCalendarService` pagination logic with mocked multi-page responses
-  - [ ] Add unit tests for all-day vs timed event mapping to UTC
-  - [ ] Add unit tests verifying recurring instances set `IsRecurringInstance` and `RecurringEventId`
-  - [ ] Add integration tests for `SyncManager` using SQLite test DB:
+- [x] **Task 7: Write tests for fetch, mapping, and persistence** (AC: all)
+  - [x] Add unit tests for `GoogleCalendarService` pagination logic with mocked multi-page responses
+  - [x] Add unit tests for all-day vs timed event mapping to UTC
+  - [x] Add unit tests verifying recurring instances set `IsRecurringInstance` and `RecurringEventId`
+  - [x] Add integration tests for `SyncManager` using SQLite test DB:
     - Full sync inserts new `GcalEvent` rows
     - Re-sync updates existing rows rather than duplicating them
     - Cancelled Google events mark `IsDeleted = true`
@@ -119,10 +119,10 @@ so that **I can view my calendar offline and keep a local cache of my existing e
     - Successful sync writes `data_source_refresh` including `sync_token`
     - Cancellation preserves already-written rows and exits cleanly
 
-- [ ] **Task 8: Final validation** (AC: all)
-  - [ ] Run `dotnet build -p:Platform=x64`
-  - [ ] Run `dotnet test`
-  - [ ] Manual test with a real Google account:
+- [x] **Task 8: Final validation** (AC: all)
+  - [x] Run `dotnet build -p:Platform=x64`
+  - [x] Run `dotnet test`
+  - [x] Manual test with a real Google account:
     - Authenticate via Story 2.1
     - Trigger sync from the settings surface
     - Confirm rows appear in `gcal_event`
@@ -237,6 +237,42 @@ gpt-5
 
 ### Debug Log References
 
+- `dotnet build -p:Platform=x64`
+- `dotnet ef migrations add AddDataSourceRefreshSyncToken --project GoogleCalendarManagement.csproj --startup-project GoogleCalendarManagement.csproj --context CalendarDbContext --output-dir Data/Migrations`
+- User-ran `dotnet test -p:Platform=x64` successfully: 38 tests passed, 0 failed
+- User manually verified real Google-account sync flow from Settings and confirmed the story acceptance criteria end to end.
+
 ### Completion Notes List
 
+- Implemented authenticated Google Calendar event fetching with exhaustive pagination, UTC/all-day/recurring mapping, friendly failures, and an incremental-sync stub for Story 2.5.
+- Added `SyncManager` orchestration for local upsert/delete handling, audit logging, `data_source_refresh` sync metadata persistence, and cancellation-aware partial-write behavior.
+- Extended the existing Settings surface with manual sync, cancel, live progress/status text, and last successful sync timestamp refresh.
+- Added automated coverage for fetch mapping, pagination, `sync_token` schema migration, sync persistence, empty-calendar success, update/delete behavior, and cancellation.
+- Manual live Google-account verification completed; the story is ready for review.
+
 ### File List
+
+- `.gitignore`
+- `App.xaml.cs`
+- `Data/Configurations/DataSourceRefreshConfiguration.cs`
+- `Data/Entities/DataSourceRefresh.cs`
+- `Data/Migrations/20260330181722_AddDataSourceRefreshSyncToken.cs`
+- `Data/Migrations/20260330181722_AddDataSourceRefreshSyncToken.Designer.cs`
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs`
+- `GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs`
+- `GoogleCalendarManagement.Tests/Integration/SchemaTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/GoogleCalendarServiceTests.cs`
+- `Services/FetchAllEventsResultList.cs`
+- `Services/GcalEventDto.cs`
+- `Services/GoogleCalendarApiClient.cs`
+- `Services/GoogleCalendarService.cs`
+- `Services/ISyncManager.cs`
+- `Services/SyncManager.cs`
+- `Services/SyncProgress.cs`
+- `Services/SyncResult.cs`
+- `ViewModels/SettingsViewModel.cs`
+- `Views/SettingsPage.xaml`
+
+### Change Log
+
+- 2026-03-30: Implemented Story 2.2 sync pipeline, added `sync_token` migration support, expanded automated test coverage, completed live Google-account validation, and marked the story ready for review.

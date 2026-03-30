@@ -142,6 +142,25 @@ public class SchemaTests
     }
 
     [Fact]
+    public async Task DataSourceRefresh_Migration_AddsSyncTokenColumn()
+    {
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info('data_source_refresh')";
+
+        var columns = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            columns.Add(reader.GetString(1));
+        }
+
+        columns.Should().Contain("sync_token");
+    }
+
+    [Fact]
     public async Task AllIndexes_PresentAfterEnsureCreated()
     {
         // Arrange

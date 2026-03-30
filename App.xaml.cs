@@ -169,6 +169,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ITokenStorageService, DpapiTokenStorageService>();
             services.AddSingleton<IGoogleAuthorizationBroker, GoogleAuthorizationBrokerAdapter>();
             services.AddSingleton<IGoogleCalendarService, GoogleCalendarService>();
+            services.AddSingleton<ISyncManager, SyncManager>();
             services.AddSingleton<SettingsViewModel>();
             services.AddTransient<SettingsPage>();
         }

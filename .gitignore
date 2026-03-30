@@ -64,6 +64,19 @@ credentials/
 
 ## Data directory (local SQLite database)
 data/
+!Data/
+Data/*
+!Data/Entities/
+Data/Entities/*
+!Data/Entities/DataSourceRefresh.cs
+!Data/Configurations/
+Data/Configurations/*
+!Data/Configurations/DataSourceRefreshConfiguration.cs
+!Data/Migrations/
+Data/Migrations/*
+!Data/Migrations/20260330181722_AddDataSourceRefreshSyncToken.cs
+!Data/Migrations/20260330181722_AddDataSourceRefreshSyncToken.Designer.cs
+!Data/Migrations/CalendarDbContextModelSnapshot.cs
 *.db
 *.db-shm
 *.db-wal

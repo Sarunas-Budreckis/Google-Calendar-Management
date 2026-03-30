@@ -1,10 +1,13 @@
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using Google;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Calendar.v3;
+using Google.Apis.Calendar.v3.Data;
 using Google.Apis.Util;
 using Google.Apis.Util.Store;
 using GoogleCalendarManagement.Data;
@@ -21,6 +24,7 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
     private readonly IGoogleAuthorizationBroker _authorizationBroker;
     private readonly IDbContextFactory<CalendarDbContext> _contextFactory;
     private readonly GoogleCalendarOptions _options;
+    private readonly IGoogleCalendarApiClientFactory _apiClientFactory;
     private readonly ILogger<GoogleCalendarService> _logger;
 
     public GoogleCalendarService(
@@ -29,11 +33,29 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
         IDbContextFactory<CalendarDbContext> contextFactory,
         GoogleCalendarOptions options,
         ILogger<GoogleCalendarService> logger)
+        : this(
+            tokenStorage,
+            authorizationBroker,
+            contextFactory,
+            options,
+            new GoogleCalendarApiClientFactory(),
+            logger)
+    {
+    }
+
+    public GoogleCalendarService(
+        ITokenStorageService tokenStorage,
+        IGoogleAuthorizationBroker authorizationBroker,
+        IDbContextFactory<CalendarDbContext> contextFactory,
+        GoogleCalendarOptions options,
+        IGoogleCalendarApiClientFactory apiClientFactory,
+        ILogger<GoogleCalendarService> logger)
     {
         _tokenStorage = tokenStorage;
         _authorizationBroker = authorizationBroker;
         _contextFactory = contextFactory;
         _options = options;
+        _apiClientFactory = apiClientFactory;
         _logger = logger;
     }
 
@@ -127,16 +149,15 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
         DateTime end,
         IProgress<int>? progress = null,
         CancellationToken ct = default)
-    {
-        throw new NotImplementedException();
-    }
+        => FetchAllEventsInternalAsync(calendarId, start, end, progress, ct);
 
     public Task<OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>> FetchIncrementalEventsAsync(
         string calendarId,
         string syncToken,
         CancellationToken ct = default)
     {
-        throw new NotImplementedException();
+        return Task.FromResult(OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>.Failure(
+            "Incremental sync is not implemented yet."));
     }
 
     private UserCredential CreateUserCredential(TokenResponse tokenResponse)
@@ -165,6 +186,156 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
         });
 
         await context.SaveChangesAsync();
+    }
+
+    private async Task<OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>> FetchAllEventsInternalAsync(
+        string calendarId,
+        DateTime start,
+        DateTime end,
+        IProgress<int>? progress,
+        CancellationToken ct)
+    {
+        if (!File.Exists(_options.ClientSecretPath))
+        {
+            return OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>.Failure(
+                "client_secret.json not found. See README for setup instructions.");
+        }
+
+        var token = await _tokenStorage.LoadTokenAsync();
+        if (token is null)
+        {
+            return OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>.Failure(
+                "Google Calendar is not connected. Connect your account and try again.");
+        }
+
+        var mappedEvents = new FetchAllEventsResultList();
+        string? nextPageToken = null;
+        string? nextSyncToken = null;
+        var pagesFetched = 0;
+
+        try
+        {
+            var credential = CreateUserCredential(token);
+            var apiClient = await _apiClientFactory.CreateAsync(credential, ct);
+
+            do
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var page = await apiClient.ListEventsAsync(
+                    calendarId,
+                    DateTime.SpecifyKind(start, DateTimeKind.Utc),
+                    DateTime.SpecifyKind(end, DateTimeKind.Utc),
+                    nextPageToken,
+                    ct);
+
+                pagesFetched++;
+                progress?.Report(pagesFetched);
+                mappedEvents.AddRange(page.Items.Select(item => MapEvent(calendarId, item)));
+
+                nextPageToken = page.NextPageToken;
+                nextSyncToken = page.NextSyncToken ?? nextSyncToken;
+            }
+            while (!string.IsNullOrWhiteSpace(nextPageToken));
+
+            return OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>.Ok((mappedEvents, nextSyncToken));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            _logger.LogInformation("Google Calendar fetch cancelled by user after {PageCount} page(s).", pagesFetched);
+            var partialEvents = new FetchAllEventsResultList
+            {
+                WasCancelled = true
+            };
+            partialEvents.AddRange(mappedEvents);
+            return OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>.Ok((
+                partialEvents,
+                null));
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Google Calendar fetch failed due to network error.");
+            return OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>.Failure(
+                "Unable to reach Google. Check internet connection.");
+        }
+        catch (GoogleApiException ex)
+        {
+            _logger.LogError(ex, "Google Calendar API returned an error while fetching events.");
+            return OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>.Failure(GetFriendlyApiErrorMessage(ex));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Google Calendar fetch failed unexpectedly.");
+            return OperationResult<(IList<GcalEventDto> Events, string? SyncToken)>.Failure(
+                "Unable to fetch events from Google Calendar.");
+        }
+    }
+
+    private static GcalEventDto MapEvent(string calendarId, Event googleEvent)
+    {
+        var isAllDay = !string.IsNullOrWhiteSpace(googleEvent.Start?.Date);
+        var (startUtc, endUtc) = GetEventBoundsUtc(googleEvent, isAllDay);
+
+        return new GcalEventDto(
+            googleEvent.Id ?? string.Empty,
+            calendarId,
+            googleEvent.Summary,
+            googleEvent.Description,
+            startUtc,
+            endUtc,
+            isAllDay,
+            googleEvent.ColorId,
+            googleEvent.ETag,
+            googleEvent.UpdatedDateTimeOffset?.UtcDateTime,
+            string.Equals(googleEvent.Status, "cancelled", StringComparison.OrdinalIgnoreCase),
+            googleEvent.RecurringEventId,
+            !string.IsNullOrWhiteSpace(googleEvent.RecurringEventId));
+    }
+
+    private static (DateTime? StartUtc, DateTime? EndUtc) GetEventBoundsUtc(Event googleEvent, bool isAllDay)
+    {
+        if (isAllDay)
+        {
+            var startDate = ParseAllDayDate(googleEvent.Start?.Date);
+            var endDate = ParseAllDayDate(googleEvent.End?.Date);
+
+            if (startDate is null)
+            {
+                return (null, null);
+            }
+
+            return (startDate, endDate ?? startDate.Value.AddDays(1));
+        }
+
+        return (
+            googleEvent.Start?.DateTimeDateTimeOffset?.UtcDateTime,
+            googleEvent.End?.DateTimeDateTimeOffset?.UtcDateTime);
+    }
+
+    private static DateTime? ParseAllDayDate(string? rawDate)
+    {
+        if (!DateOnly.TryParse(rawDate, out var parsedDate))
+        {
+            return null;
+        }
+
+        return parsedDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+    }
+
+    private static string GetFriendlyApiErrorMessage(GoogleApiException ex)
+    {
+        if (ex.HttpStatusCode == HttpStatusCode.Unauthorized)
+        {
+            return "Session expired. Please reconnect Google Calendar.";
+        }
+
+        if (ex.HttpStatusCode == HttpStatusCode.Forbidden &&
+            ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Google Calendar quota exceeded. Try again later.";
+        }
+
+        return "Unable to fetch events from Google Calendar.";
     }
 
     private static string? ExtractEmailAddress(string? idToken)

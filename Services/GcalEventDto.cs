@@ -1,4 +1,16 @@
 namespace GoogleCalendarManagement.Services;
 
-// Story 2.1 needs the GoogleCalendarService interface to compile; mapping fields arrive in Story 2.2.
-public sealed record GcalEventDto;
+public sealed record GcalEventDto(
+    string GcalEventId,
+    string CalendarId,
+    string? Summary,
+    string? Description,
+    DateTime? StartDateTimeUtc,
+    DateTime? EndDateTimeUtc,
+    bool IsAllDay,
+    string? ColorId,
+    string? GcalEtag,
+    DateTime? GcalUpdatedAtUtc,
+    bool IsDeleted,
+    string? RecurringEventId,
+    bool IsRecurringInstance);

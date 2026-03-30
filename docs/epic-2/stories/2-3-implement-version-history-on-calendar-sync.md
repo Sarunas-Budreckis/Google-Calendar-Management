@@ -1,6 +1,6 @@
 # Story 2.3: Implement Version History on Calendar Sync
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -22,47 +22,47 @@ so that **the app stays aligned with Google Calendar without losing historical c
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Reuse the Story 2.2 sync path instead of adding a second implementation** (AC: 2.3.1, 2.3.2, 2.3.3, 2.3.4)
-  - [ ] Confirm Story 2.2's `SyncManager`, `SyncResult`, `SyncProgress`, and `GcalEventDto` work is present on the branch before starting Story 2.3
-  - [ ] Extend the existing update and delete branches in `SyncManager`; do not move version-history logic into `SettingsViewModel`, `SettingsPage`, or a second manual sync flow
-  - [ ] Keep `GoogleCalendarService` responsible for Google API calls only; history writes belong in the local persistence/orchestration layer
+- [x] **Task 1: Reuse the Story 2.2 sync path instead of adding a second implementation** (AC: 2.3.1, 2.3.2, 2.3.3, 2.3.4)
+  - [x] Confirm Story 2.2's `SyncManager`, `SyncResult`, `SyncProgress`, and `GcalEventDto` work is present on the branch before starting Story 2.3
+  - [x] Extend the existing update and delete branches in `SyncManager`; do not move version-history logic into `SettingsViewModel`, `SettingsPage`, or a second manual sync flow
+  - [x] Keep `GoogleCalendarService` responsible for Google API calls only; history writes belong in the local persistence/orchestration layer
 
-- [ ] **Task 2: Implement snapshot creation with the existing `GcalEventVersion` schema** (AC: 2.3.1, 2.3.3, 2.3.5)
-  - [ ] Add a private helper in `SyncManager` or a small dedicated service that maps a current `GcalEvent` row to a new `GcalEventVersion`
-  - [ ] Populate the snapshot from the existing schema only:
+- [x] **Task 2: Implement snapshot creation with the existing `GcalEventVersion` schema** (AC: 2.3.1, 2.3.3, 2.3.5)
+  - [x] Add a private helper in `SyncManager` or a small dedicated service that maps a current `GcalEvent` row to a new `GcalEventVersion`
+  - [x] Populate the snapshot from the existing schema only:
     - `GcalEventId`, `GcalEtag`, `Summary`, `Description`
     - `StartDatetime`, `EndDatetime`, `IsAllDay`, `ColorId`
     - `ChangedBy = "gcal_sync"`
     - `ChangeReason = "updated"` or `"deleted"`
     - `CreatedAt = DateTime.UtcNow`
-  - [ ] Preserve the current schema contract; do not add `EventDataJson`, `ChangeType`, or a second history table unless an actual schema gap is discovered and explicitly migrated
+  - [x] Preserve the current schema contract; do not add `EventDataJson`, `ChangeType`, or a second history table unless an actual schema gap is discovered and explicitly migrated
 
-- [ ] **Task 3: Integrate snapshot writes into sync update and delete handling** (AC: 2.3.1, 2.3.2, 2.3.3, 2.3.4)
-  - [ ] For an existing non-deleted event whose Google payload changed, create the snapshot first, then overwrite the local `GcalEvent` fields using the Tier 1 `GoogleWins` strategy
-  - [ ] Detect meaningful change primarily via `GcalEtag` when available; if Google omits or reuses it unexpectedly, fall back to comparing the mapped Google-facing fields before deciding to snapshot
-  - [ ] For a cancelled/deleted Google event, snapshot the current row first, then set `IsDeleted = true` and update `GcalUpdatedAt`, `LastSyncedAt`, and `UpdatedAt`
-  - [ ] For new Google events, insert the `GcalEvent` row with no history row
-  - [ ] For already-deleted or unchanged rows, avoid duplicate snapshot creation
+- [x] **Task 3: Integrate snapshot writes into sync update and delete handling** (AC: 2.3.1, 2.3.2, 2.3.3, 2.3.4)
+  - [x] For an existing non-deleted event whose Google payload changed, create the snapshot first, then overwrite the local `GcalEvent` fields using the Tier 1 `GoogleWins` strategy
+  - [x] Detect meaningful change primarily via `GcalEtag` when available; if Google omits or reuses it unexpectedly, fall back to comparing the mapped Google-facing fields before deciding to snapshot
+  - [x] For a cancelled/deleted Google event, snapshot the current row first, then set `IsDeleted = true` and update `GcalUpdatedAt`, `LastSyncedAt`, and `UpdatedAt`
+  - [x] For new Google events, insert the `GcalEvent` row with no history row
+  - [x] For already-deleted or unchanged rows, avoid duplicate snapshot creation
 
-- [ ] **Task 4: Preserve version history as insert-only data** (AC: 2.3.5)
-  - [ ] Use the existing `gcal_event_version` table and `idx_version_event` index; do not add cleanup logic, hard deletes, or in-place edits for historical rows
-  - [ ] Ensure tests and any helper query path order snapshots by newest first using `CreatedAt` and `VersionId` as the stable tie-breakers
-  - [ ] Keep Google deletions as soft deletes on `gcal_event`; do not physically delete the event row because the history FK and future rollback flows depend on it
+- [x] **Task 4: Preserve version history as insert-only data** (AC: 2.3.5)
+  - [x] Use the existing `gcal_event_version` table and `idx_version_event` index; do not add cleanup logic, hard deletes, or in-place edits for historical rows
+  - [x] Ensure tests and any helper query path order snapshots by newest first using `CreatedAt` and `VersionId` as the stable tie-breakers
+  - [x] Keep Google deletions as soft deletes on `gcal_event`; do not physically delete the event row because the history FK and future rollback flows depend on it
 
-- [ ] **Task 5: Add automated coverage for version-history behavior** (AC: all)
-  - [ ] Add integration tests around the sync pipeline:
+- [x] **Task 5: Add automated coverage for version-history behavior** (AC: all)
+  - [x] Add integration tests around the sync pipeline:
     - updated event creates exactly one `GcalEventVersion` row before overwrite
     - deleted event creates exactly one `GcalEventVersion` row before `IsDeleted = true`
     - new event creates no `GcalEventVersion` row
     - unchanged event creates no `GcalEventVersion` row
     - repeated syncs preserve prior history rows and append new ones without mutating old rows
-  - [ ] Assert `ChangedBy`, `ChangeReason`, and the copied snapshot field values match the pre-update local row, not the post-sync row
-  - [ ] Reuse the SQLite-backed integration style already established in the test project; do not rely only on mocks for persistence verification
+  - [x] Assert `ChangedBy`, `ChangeReason`, and the copied snapshot field values match the pre-update local row, not the post-sync row
+  - [x] Reuse the SQLite-backed integration style already established in the test project; do not rely only on mocks for persistence verification
 
-- [ ] **Task 6: Final validation** (AC: all)
-  - [ ] Run `dotnet build -p:Platform=x64`
-  - [ ] Run `dotnet test`
-  - [ ] Manual or debugger-assisted verification:
+- [x] **Task 6: Final validation** (AC: all)
+  - [x] Run `dotnet build -p:Platform=x64`
+  - [x] Run `dotnet test`
+  - [x] Manual or debugger-assisted verification:
     - sync an updated Google event and confirm a `gcal_event_version` row is inserted before overwrite
     - sync a deleted Google event and confirm a snapshot exists before `IsDeleted` becomes `true`
     - re-sync an unchanged event and confirm no extra history row is created
@@ -183,6 +183,25 @@ gpt-5
 
 ### Debug Log References
 
+- 2026-03-30: Confirmed Story 2.2 sync artifacts (`SyncManager`, `SyncResult`, `SyncProgress`, `GcalEventDto`) were present and extended the existing sync path instead of adding a second flow.
+- 2026-03-30: Added `SyncManager` snapshot creation for update and first-delete paths using `GcalEtag`-first detection with field-level fallback for version-history decisions.
+- 2026-03-30: Added SQLite-backed integration coverage for update, delete, new, unchanged, and repeated-sync history behavior.
+- 2026-03-30: Validation completed with `dotnet build -p:Platform=x64` and user-provided `dotnet test -p:Platform=x64` results showing 43 passing tests.
+
 ### Completion Notes List
 
+- Added insert-only sync snapshots in `SyncManager` so changed Google events write pre-overwrite history rows with `ChangedBy = "gcal_sync"` and `ChangeReason = "updated"` or `"deleted"`.
+- Kept soft-delete behavior on `gcal_event` and prevented history spam for new, unchanged, or already-deleted rows.
+- Extended SQLite integration coverage to verify snapshot contents, ordering, repeated update retention, and unchanged/new event behavior.
+- Validation completed successfully with `dotnet build -p:Platform=x64` and `dotnet test -p:Platform=x64` (43 passed, 0 failed).
+
 ### File List
+
+- Services/SyncManager.cs
+- GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs
+- docs/epic-2/stories/2-3-implement-version-history-on-calendar-sync.md
+- docs/sprint-status.yaml
+
+## Change Log
+
+- 2026-03-30: Implemented version-history snapshot creation in the existing sync pipeline and added SQLite integration tests covering update, delete, new, unchanged, and repeated-sync behavior.
