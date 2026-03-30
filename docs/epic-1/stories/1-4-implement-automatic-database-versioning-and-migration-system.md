@@ -1,6 +1,6 @@
 # Story 1.4: Implement Automatic Database Versioning and Migration System
 
-Status: review
+Status: done
 
 ## Story
 
@@ -243,9 +243,9 @@ GoogleCalendarManagement.Tests/
 ### References
 
 **Source Documents:**
-- [Epic 1: Story 1.4 Definition](../epics.md#story-14-implement-automatic-database-versioning-and-migration-system)
-- [Epic 1 Tech Spec: MigrationService](../tech-spec-epic-1.md#migrationservice)
-- [Epic 1 Tech Spec: Startup Sequence](../tech-spec-epic-1.md#database-migration-workflow-story-14)
+- [Epic 1: Story 1.4 Definition](../../epics.md#story-14-implement-automatic-database-versioning-and-migration-system)
+- [Epic 1 Tech Spec: MigrationService](../tech-spec.md#migrationservice)
+- [Epic 1 Tech Spec: Startup Sequence](../tech-spec.md#database-migration-workflow-story-14)
 - [Architecture: Data Integrity](../architecture.md)
 - [PRD NFR-D1](../PRD.md) — Data loss prevention (auto-backup before migrations)
 - [PRD NFR-D3](../PRD.md) — Database integrity check on startup
@@ -291,7 +291,7 @@ GoogleCalendarManagement.Tests/
 - 6 integration tests added to `MigrationServiceTests.cs`
 
 **Version 1.0 - Initial Draft (2026-03-27)**
-- Created from Epic 1, Story 1.4 definition in epics.md and tech-spec-epic-1.md
+- Created from Epic 1, Story 1.4 definition in epics.md and tech-spec.md
 - Dev Notes include full MigrationService implementation, DI wiring, and startup error handling
 - Clarified IHostedService vs explicit call for WinUI 3 (no Generic Host)
 - Aligned SystemState upsert with Story 1.3 entity (system_state table, state_name UNIQUE)

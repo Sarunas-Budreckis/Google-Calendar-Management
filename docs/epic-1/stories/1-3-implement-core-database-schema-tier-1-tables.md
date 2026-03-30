@@ -1,17 +1,17 @@
-# Story 1.3: Implement Core Database Schema (Phase 1 Tables)
+# Story 1.3: Implement Core Database Schema (Tier 1 Tables)
 
 Status: Done
 
 ## Story
 
 As a **developer**,
-I want **the Phase 1 database schema defined as EF Core entities with fluent API configurations**,
+I want **the Tier 1 database schema defined as EF Core entities with fluent API configurations**,
 So that **the application can persist and retrieve Google Calendar events, version history, save states, and app metadata locally**.
 
 ## Acceptance Criteria
 
 **Given** Entity Framework Core configured from Story 1.2
-**When** I create the Phase 1 entity model and apply the migration
+**When** I create the Tier 1 entity model and apply the migration
 **Then** the following 7 tables are created in SQLite with all columns and indexes from `_database-schemas.md`:
 - `gcal_event` — Google Calendar event cache
 - `gcal_event_version` — Full version history for rollback
@@ -43,7 +43,7 @@ So that **the application can persist and retrieve Google Calendar events, versi
 ## Tasks / Subtasks
 
 - [x] Create entity classes in `Data/Entities/` (AC: 1, 2)
-  - [x] Create `Data/Entities/GcalEvent.cs` — all columns from schema including Phase 1-3 nullable fields
+  - [x] Create `Data/Entities/GcalEvent.cs` — all columns from schema including Tier 1-3 nullable fields
   - [x] Create `Data/Entities/GcalEventVersion.cs` — version snapshot + `gcal_event_id` FK
   - [x] Create `Data/Entities/SaveState.cs` — save/restore snapshot with JSON field
   - [x] Create `Data/Entities/AuditLog.cs` — operation audit trail
@@ -61,7 +61,7 @@ So that **the application can persist and retrieve Google Calendar events, versi
   - [x] Create `SystemStateConfiguration.cs`: table name, PK (autoincrement), unique constraint on `state_name`
 
 - [x] Update `CalendarDbContext.cs` (AC: 2)
-  - [x] Add 7 `DbSet<T>` properties for all Phase 1 entities
+  - [x] Add 7 `DbSet<T>` properties for all Tier 1 entities
   - [x] Replace `OnModelCreating` placeholder comment with `modelBuilder.ApplyConfigurationsFromAssembly(typeof(CalendarDbContext).Assembly)`
 
 - [x] Create EF Core migration (AC: 3)
@@ -96,8 +96,8 @@ So that **the application can persist and retrieve Google Calendar events, versi
 **Critical Architecture Decisions:**
 - **Fluent API only:** No data annotations (`[Required]`, `[Column]`, etc.) on entity classes. All configuration via `IEntityTypeConfiguration<T>` implementations. Per architecture.md decision.
 - **snake_case table/column names:** SQLite tables use `gcal_event` not `GcalEvent`. Every configuration class must call `ToTable("snake_case_name")` and `HasColumnName("snake_case_col")` for every property.
-- **Phase gating:** ONLY 7 Phase 1 tables. Do NOT define `PendingEvent`, `TogglData`, `YouTubeData`, `CallLogData`, `GeneratedEventSource`, `DateState`, `TrackedGap`, or `WeeklyState` entities — those are Phase 2/3.
-- **`source_system` on GcalEvent:** This is a Phase 3 field but is defined now (nullable TEXT) to match the schema document and avoid a future breaking migration.
+- **Phase gating:** ONLY 7 Tier 1 tables. Do NOT define `PendingEvent`, `TogglData`, `YouTubeData`, `CallLogData`, `GeneratedEventSource`, `DateState`, `TrackedGap`, or `WeeklyState` entities — those are Tier 2/3.
+- **`source_system` on GcalEvent:** This is a Tier 3 field but is defined now (nullable TEXT) to match the schema document and avoid a future breaking migration.
 - **Integer PKs as AUTOINCREMENT:** `GcalEventVersion`, `SaveState`, `AuditLog`, `DataSourceRefresh`, `SystemState` use `INTEGER PRIMARY KEY AUTOINCREMENT`. In EF Core, configure with `.ValueGeneratedOnAdd()`.
 - **String PK:** `GcalEvent.GcalEventId` and `Config.ConfigKey` are string PKs. Mark as `.ValueGeneratedNever()` so EF Core does not attempt to generate values.
 - **Config seeding:** Use `HasData` in `ConfigConfiguration` for the 6 default values. These are seeded in the migration so the app has defaults without manual setup.
@@ -256,7 +256,7 @@ GoogleCalendarManagement.Tests/
 ### References
 
 **Source Documents:**
-- [Epic 1: Story 1.3 Definition](../epics.md#story-13-implement-core-database-schema-phase-1-tables)
+- [Epic 1: Story 1.3 Definition](../../epics.md#story-13-implement-core-database-schema-tier-1-tables)
 - [Database Schemas Reference](../_database-schemas.md) — Authoritative source for all column definitions, types, indexes
 - [Architecture: Data Layer](../architecture.md#project-structure) — Entity and Configuration folder locations
 - [Architecture: Decision Summary](../architecture.md#decision-summary) — Singular table names, Fluent API, EF Core version
@@ -295,7 +295,7 @@ GoogleCalendarManagement.Tests/
 
 **Version 1.0 - Initial Draft (2026-03-27)**
 - Created from Epic 1, Story 1.3 definition in epics.md
-- Expanded acceptance criteria into testable subtasks with Phase 1 table scope
+- Expanded acceptance criteria into testable subtasks with Tier 1 table scope
 - Dev Notes include entity skeletons, configuration patterns, updated DbContext, seed data
 - Aligned with `_database-schemas.md` column names, types, and index names
 
@@ -303,7 +303,7 @@ GoogleCalendarManagement.Tests/
 
 ### Context Reference
 
-- [Story Context XML](1-3-implement-core-database-schema-phase-1-tables.context.xml) - Generated 2026-03-27
+- [Story Context XML](1-3-implement-core-database-schema-tier-1-tables.context.xml) - Generated 2026-03-27
 
 ### Completion Notes (2026-03-27)
 

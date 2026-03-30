@@ -1,0 +1,448 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>1</storyId>
+    <title>Implement Google Calendar OAuth 2.0 Authentication</title>
+    <status>drafted</status>
+    <generatedAt>2026-03-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-2/stories/2-1-implement-google-calendar-oauth-2-0-authentication.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to connect my Google Calendar account via OAuth 2.0</iWant>
+    <soThat>the app can securely access my calendar data and maintain my credentials persistently across sessions</soThat>
+    <tasks>
+      - Task 1: Add NuGet packages (Google.Apis.Calendar.v3 1.73.0.3993, Google.Apis.Auth 1.73.0.x, Microsoft.Extensions.Http.Polly 9.0.x, CommunityToolkit.Mvvm 8.x)
+      - Task 2: Create OperationResult&lt;T&gt; shared record in Services/OperationResult.cs
+      - Task 3: Implement ITokenStorageService and DpapiTokenStorageService (DPAPI encrypt/decrypt, Config table storage)
+      - Task 4: Create IGoogleCalendarService interface and GoogleCalendarService (auth portion only; stub FetchAll/Incremental)
+      - Task 5: Create SettingsViewModel with ConnectGoogleCalendarCommand and DisconnectGoogleCalendarCommand
+      - Task 6: Update SettingsPage.xaml with Connect/Reconnect buttons and status text
+      - Task 7: Add credentials folder setup and .gitignore / README update
+      - Task 8: Write unit tests in GoogleCalendarManagement.Tests/Unit/AuthenticationTests.cs
+      - Task 9: Final validation (build, tests, manual OAuth flow)
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-2.1.1" title="Initial Auth Flow">
+      Given the app has no stored credentials, when the user clicks "Connect Google Calendar" in Settings,
+      the system browser opens to Google's OAuth consent screen.
+    </ac>
+    <ac id="AC-2.1.2" title="Encrypted Token Storage">
+      Given the user completes OAuth consent, the app receives access and refresh tokens, encrypts them
+      with Windows DPAPI (ProtectedData.Protect, DataProtectionScope.CurrentUser), and stores the
+      Base64-encoded ciphertext in the Config table (ConfigKey = "GcalTokenResponse") — no plaintext
+      credentials persist on disk.
+    </ac>
+    <ac id="AC-2.1.3" title="Silent Startup Auth">
+      Given a stored refresh token in the Config table, when the app starts, GoogleCalendarService.IsAuthenticatedAsync()
+      silently loads and validates the token without user interaction. Must complete in &lt; 200ms.
+    </ac>
+    <ac id="AC-2.1.4" title="Automatic Token Refresh">
+      Given a valid access token that expires mid-session, the Google SDK credential object automatically
+      refreshes it before the next API call with no user-visible interruption.
+    </ac>
+    <ac id="AC-2.1.5" title="Reconnect / Account Switch">
+      Given the user clicks "Reconnect Google Calendar" in Settings, RevokeAndClearTokensAsync() clears
+      the Config row (ConfigKey = "GcalTokenResponse") and a new OAuth flow begins, supporting account switching.
+    </ac>
+    <ac id="AC-2.1.6" title="Auth Error Handling">
+      Given authentication fails (network error, user cancels, invalid credentials), a user-friendly error
+      message is displayed (no stack trace), OperationResult.Success = false is returned, and no partial
+      token state is persisted.
+    </ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification: Google Calendar Integration &amp; Sync (Read-Only)</title>
+        <section>Story 2.1 — OAuth 2.0 Authentication (AC #1–6)</section>
+        <snippet>Authoritative acceptance criteria for Story 2.1. Defines the full OAuth flow: GoogleWebAuthorizationBroker.AuthorizeAsync → DpapiTokenStorageService.StoreTokenAsync → AppMetadata upsert → WeakReferenceMessenger.Send(AuthenticationSucceededMessage). Note: "AppMetadata" in the tech spec maps to the Config entity in the actual codebase.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Security — Token encryption requirements</section>
+        <snippet>TokenResponse JSON serialized and encrypted with ProtectedData.Protect(data, null, DataProtectionScope.CurrentUser) before storage. OAuth scope requested: https://www.googleapis.com/auth/calendar (read+write) — pre-provisioned for Epic 6. client_secret.json must not be committed to source control; loaded from %LOCALAPPDATA%\GoogleCalendarManagement\credentials\client_secret.json.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Workflows and Sequencing — Flow 1 (Initial Authentication)</section>
+        <snippet>User clicks "Connect Google Calendar" → SettingsViewModel.ConnectGoogleCalendarAsync() → GoogleCalendarService.AuthenticateAsync() → GoogleWebAuthorizationBroker.AuthorizeAsync() [opens browser] → SDK exchanges code for tokens → DpapiTokenStorageService.StoreTokenAsync → Config.Upsert("GcalTokenResponse", encryptedBase64) → WeakReferenceMessenger.Send(AuthenticationSucceededMessage) → UI shows "Connected".</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Observability — Required Serilog log events</section>
+        <snippet>Auth initiated: Information "Google Calendar auth initiated". Auth succeeded: Information "Google Calendar auth succeeded for {AccountEmail}". Auth failed: Error "Google Calendar auth failed: {Error}". audit_log entries: gcal_auth on connect, gcal_revoke on disconnect — no sensitive data logged.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Risks R2 and R4</section>
+        <snippet>R2: If client_secret.json missing, show setup dialog pointing to README — do not crash. R4: If DPAPI decryption fails (machine migration), log Error and prompt reconnect — no data loss, calendar data remains in Google. Both handled by returning OperationResult.Failure from relevant methods.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>NuGet Packages — New in Epic 2</section>
+        <snippet>Google.Apis.Calendar.v3 1.73.0.3993, Google.Apis.Auth 1.73.0.x (OAuth 2.0 flow, token management, PKCE), Microsoft.Extensions.Http.Polly 9.0.x (retry policies). CommunityToolkit.Mvvm 8.x is also required for WeakReferenceMessenger and relay commands but is NOT yet in the csproj — must be added.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture — Google Calendar Management</title>
+        <section>Decision Summary — Error Handling §17</section>
+        <snippet>Graceful error handling with Serilog structured logging and retry policies (Polly). All service methods return OperationResult&lt;T&gt; — exceptions are caught internally and converted to failure results. Stack traces are never shown to end users.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-1/stories/1-6-implement-application-logging-and-error-handling-infrastructure.md</path>
+        <title>Story 1.6: Implement Application Logging and Error Handling Infrastructure</title>
+        <section>Dev Agent Record — Completion Notes</section>
+        <snippet>services.AddSerilog() requires Serilog.Extensions.Hosting (not installed) — use services.AddLogging(builder => builder.AddSerilog()) instead. Serilog.Sinks.Console 6.1.0 used (6.0.1 unavailable). WriteTo.TextWriter removed from Serilog 4.x — use InMemorySink in tests. ErrorHandlingService.SetWindow(Window) called after window.Activate().</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>Data/CalendarDbContext.cs</path>
+        <kind>DbContext</kind>
+        <symbol>CalendarDbContext</symbol>
+        <lines>1-24</lines>
+        <reason>Primary data access class. DpapiTokenStorageService injects this to upsert/delete Config rows for token storage. Use CalendarDbContext.Configs DbSet with ConfigKey = "GcalTokenResponse".</reason>
+      </file>
+      <file>
+        <path>Data/Entities/Config.cs</path>
+        <kind>entity</kind>
+        <symbol>Config</symbol>
+        <lines>1-11</lines>
+        <reason>Key-value entity used as token storage. Tech spec references "AppMetadata" table but this project uses Config entity instead. Properties: ConfigKey (PK string), ConfigValue (string?), ConfigType (string?), Description (string?), UpdatedAt (DateTime). Store DPAPI-encrypted Base64 token in ConfigValue where ConfigKey = "GcalTokenResponse".</reason>
+      </file>
+      <file>
+        <path>Data/Entities/AuditLog.cs</path>
+        <kind>entity</kind>
+        <symbol>AuditLog</symbol>
+        <lines>1-14</lines>
+        <reason>Used to record gcal_auth and gcal_revoke operations. Properties: LogId, Timestamp, OperationType, OperationDetails, AffectedDates, AffectedEvents, UserAction, Success, ErrorMessage. Set OperationType = "gcal_auth" on connect; "gcal_revoke" on disconnect.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/DataSourceRefresh.cs</path>
+        <kind>entity</kind>
+        <symbol>DataSourceRefresh</symbol>
+        <lines>1-14</lines>
+        <reason>Context for Story 2.2 dependency awareness. IMPORTANT: Does not have a sync_token column yet — this is Risk R5 from the tech spec. Story 2.1 does not write to this table; noting for Story 2.2 awareness.</reason>
+      </file>
+      <file>
+        <path>App.xaml.cs</path>
+        <kind>application</kind>
+        <symbol>App.ConfigureServices</symbol>
+        <lines>122-145</lines>
+        <reason>DI registration pattern to follow. Uses services.AddLogging(builder => builder.AddSerilog()), AddSingleton, AddScoped. New services for Story 2.1 must be registered here: ITokenStorageService (Singleton), IGoogleCalendarService (Singleton). ContentDialog XamlRoot pattern: dialog.XamlRoot = window.Content.XamlRoot.</reason>
+      </file>
+      <file>
+        <path>Services/ILoggingService.cs</path>
+        <kind>interface</kind>
+        <symbol>ILoggingService</symbol>
+        <lines>1-6</lines>
+        <reason>Existing Singleton service. Do not recreate. Pattern for interface definition in this project (namespace GoogleCalendarManagement.Services).</reason>
+      </file>
+      <file>
+        <path>Services/IErrorHandlingService.cs</path>
+        <kind>interface</kind>
+        <symbol>IErrorHandlingService</symbol>
+        <lines>1-6</lines>
+        <reason>Existing Singleton service. Do not recreate. Available for escalating critical errors from GoogleCalendarService if needed.</reason>
+      </file>
+      <file>
+        <path>Services/MigrationService.cs</path>
+        <kind>service</kind>
+        <symbol>MigrationService</symbol>
+        <lines>1-50</lines>
+        <reason>Reference implementation for a service that injects CalendarDbContext (Scoped) and ILogger&lt;T&gt;. Follow same constructor injection pattern for GoogleCalendarService and DpapiTokenStorageService.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Unit/LoggingTests.cs</path>
+        <kind>test</kind>
+        <symbol>LoggingTests</symbol>
+        <lines>1-100</lines>
+        <reason>Reference for unit test patterns. Shows InMemorySink usage for capturing Serilog output (WriteTo.TextWriter is removed in Serilog 4.x). IDisposable pattern for test cleanup. Follow same structure for AuthenticationTests.cs.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Integration/DatabaseInfrastructureTests.cs</path>
+        <kind>test</kind>
+        <symbol>DatabaseInfrastructureTests</symbol>
+        <lines>1-50</lines>
+        <reason>Reference for integration test patterns using in-memory SQLite or real DB. Shows how to construct CalendarDbContext for testing without the full DI stack.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/ConfigConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>ConfigConfiguration</symbol>
+        <lines>1-20</lines>
+        <reason>EF Core fluent configuration for the Config entity. Review to understand primary key and any existing constraints before upsert logic in DpapiTokenStorageService.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+          <package name="Microsoft.EntityFrameworkCore.Design" version="9.0.12" />
+          <package name="Microsoft.Extensions.DependencyInjection" version="10.0.2" />
+          <package name="Microsoft.Extensions.Logging" version="10.0.2" />
+          <package name="Serilog" version="4.1.0" />
+          <package name="Serilog.Extensions.Logging" version="8.0.0" />
+          <package name="Serilog.Sinks.File" version="6.0.0" />
+          <package name="Serilog.Sinks.Console" version="6.1.0" />
+          <package name="SerilogTimings" version="3.0.1" />
+          <package name="Microsoft.WindowsAppSDK" version="1.*" />
+        </existing>
+        <toAdd>
+          <package name="Google.Apis.Calendar.v3" version="1.73.0.3993" note="Google Calendar API client" />
+          <package name="Google.Apis.Auth" version="1.73.0.x" note="OAuth 2.0 flow, token management, PKCE enforced by SDK" />
+          <package name="Microsoft.Extensions.Http.Polly" version="9.0.x" note="Retry policies on HttpClient" />
+          <package name="CommunityToolkit.Mvvm" version="8.x" note="WeakReferenceMessenger, ObservableObject, RelayCommand — NOT yet in csproj, must be added" />
+        </toAdd>
+        <builtin>
+          <package name="System.Security.Cryptography.ProtectedData" note="DPAPI — built-in .NET, no NuGet needed" />
+          <package name="System.Text.Json" note="Token serialization — built-in .NET" />
+        </builtin>
+      </dotnet>
+      <testProject>
+        <project>GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj</project>
+        <existing>
+          <package name="xunit" version="2.9.2" />
+          <package name="Moq" version="4.20.72" />
+          <package name="FluentAssertions" version="8.8.0" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+          <package name="Serilog" version="4.1.0" />
+          <package name="coverlet.collector" version="6.0.2" />
+        </existing>
+        <toAdd>
+          <package name="Google.Apis.Auth" version="1.73.0.x" note="Required to mock GoogleWebAuthorizationBroker in unit tests" />
+        </toAdd>
+      </testProject>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="token-storage">
+      There is NO AppMetadata entity or DbSet in this project. The Config entity (CalendarDbContext.Configs)
+      is the key-value store. Store the DPAPI-encrypted token as ConfigValue where ConfigKey = "GcalTokenResponse".
+      Do NOT create a new AppMetadata entity — use Config as the tech spec's "AppMetadata" equivalent.
+    </constraint>
+    <constraint id="C2" category="oauth-scope">
+      Request scope https://www.googleapis.com/auth/calendar (read + write) — even though Epic 2 only reads.
+      Pre-provisioning the write scope avoids a second consent prompt for Epic 6 (event publishing).
+    </constraint>
+    <constraint id="C3" category="logging">
+      Use ILogger&lt;T&gt; via constructor DI injection — NOT Log.Logger directly. Log.Logger is reserved for
+      App.xaml.cs startup code where DI is not yet available. All services use ILogger&lt;GoogleCalendarService&gt; etc.
+    </constraint>
+    <constraint id="C4" category="di-registration">
+      Register new services as Singleton in App.xaml.cs ConfigureServices: ITokenStorageService → DpapiTokenStorageService,
+      IGoogleCalendarService → GoogleCalendarService. Follow existing pattern:
+      services.AddLogging(builder => builder.AddSerilog()) — do NOT use services.AddSerilog().
+    </constraint>
+    <constraint id="C5" category="error-handling">
+      All IGoogleCalendarService methods return OperationResult&lt;T&gt; — never propagate exceptions to callers.
+      Stack traces must never appear in UI. User-facing messages are hardcoded friendly strings, not ex.Message.
+    </constraint>
+    <constraint id="C6" category="startup-performance">
+      IsAuthenticatedAsync() is called on app startup. Must complete in &lt; 200ms (NFR-P1). Load token from
+      Config table (fast SQLite read), check expiry in-memory. No network call on startup.
+    </constraint>
+    <constraint id="C7" category="secret-handling">
+      client_secret.json must NOT be committed to source control. Runtime path:
+      %LOCALAPPDATA%\GoogleCalendarManagement\credentials\client_secret.json. If missing: return
+      OperationResult.Failure with setup message, do not crash. Verify .gitignore covers this path.
+    </constraint>
+    <constraint id="C8" category="dpapi-failure">
+      If ProtectedData.Unprotect throws CryptographicException (machine migration scenario), catch it,
+      log Error, return null from LoadTokenAsync. IsAuthenticatedAsync returns false → UI shows "Not connected"
+      → user manually reconnects. No app crash. No data loss (calendar data is in Google).
+    </constraint>
+    <constraint id="C9" category="architecture-layer">
+      Services placed in root Services/ folder (not a separate Core class library). Epic 1 established
+      this convention. Do NOT create a new GoogleCalendarManagement.Core project — follow existing flat structure.
+      Namespace: GoogleCalendarManagement.Services.
+    </constraint>
+    <constraint id="C10" category="communitytoolkit">
+      CommunityToolkit.Mvvm 8.x is NOT currently in GoogleCalendarManagement.csproj. Must be added to use
+      WeakReferenceMessenger and ObservableObject/RelayCommand in SettingsViewModel. Add to csproj in Task 1.
+    </constraint>
+    <constraint id="C11" category="dialogs">
+      ContentDialog XamlRoot must be set before ShowAsync(). Pattern from App.xaml.cs:
+      dialog.XamlRoot = window.Content.XamlRoot. In SettingsViewModel, obtain XamlRoot from the active
+      window's content, not from a static reference.
+    </constraint>
+    <constraint id="C12" category="datasource-refresh">
+      DataSourceRefresh entity does NOT have a sync_token column yet. This is Risk R5 from tech spec.
+      Story 2.1 does NOT write to DataSourceRefresh — this is Story 2.2's concern. Do not add the column
+      in this story; leave a note for Story 2.2.
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>IGoogleCalendarService</name>
+      <kind>C# interface — to be created in this story</kind>
+      <signature>
+public interface IGoogleCalendarService
+{
+    Task&lt;OperationResult&lt;OAuthStatus&gt;&gt; AuthenticateAsync(CancellationToken ct = default);
+    Task&lt;OperationResult&lt;bool&gt;&gt; IsAuthenticatedAsync();
+    Task RevokeAndClearTokensAsync();
+    // Stubs (NotImplementedException) — implemented in Story 2.2:
+    Task&lt;OperationResult&lt;(IList&lt;GcalEventDto&gt; Events, string? SyncToken)&gt;&gt;
+        FetchAllEventsAsync(string calendarId, DateTime start, DateTime end,
+                           IProgress&lt;int&gt;? progress = null, CancellationToken ct = default);
+    Task&lt;OperationResult&lt;(IList&lt;GcalEventDto&gt; Events, string? SyncToken)&gt;&gt;
+        FetchIncrementalEventsAsync(string calendarId, string syncToken,
+                                   CancellationToken ct = default);
+}
+      </signature>
+      <path>Services/IGoogleCalendarService.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>ITokenStorageService</name>
+      <kind>C# interface — to be created in this story</kind>
+      <signature>
+public interface ITokenStorageService
+{
+    Task StoreTokenAsync(TokenResponse tokenResponse);
+    Task&lt;TokenResponse?&gt; LoadTokenAsync();
+    Task ClearTokenAsync();
+}
+      </signature>
+      <path>Services/ITokenStorageService.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>OperationResult&lt;T&gt;</name>
+      <kind>C# record — to be created in this story</kind>
+      <signature>
+public record OperationResult&lt;T&gt;(bool Success, T? Data, string? ErrorMessage)
+{
+    public static OperationResult&lt;T&gt; Ok(T data) =&gt; new(true, data, null);
+    public static OperationResult&lt;T&gt; Failure(string message) =&gt; new(false, default, message);
+}
+      </signature>
+      <path>Services/OperationResult.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>OAuthStatus</name>
+      <kind>C# enum — to be created in this story</kind>
+      <signature>
+public enum OAuthStatus { Authenticated, NotAuthenticated }
+      </signature>
+      <path>Services/OAuthStatus.cs (to be created)</path>
+    </interface>
+    <interface>
+      <name>Config (existing entity)</name>
+      <kind>EF Core entity — token storage via CalendarDbContext.Configs</kind>
+      <signature>
+// Upsert pattern for token storage:
+var existing = await _context.Configs.FindAsync("GcalTokenResponse");
+if (existing is null)
+    _context.Configs.Add(new Config { ConfigKey = "GcalTokenResponse", ConfigValue = base64, ConfigType = "secret", UpdatedAt = DateTime.UtcNow });
+else
+{
+    existing.ConfigValue = base64;
+    existing.UpdatedAt = DateTime.UtcNow;
+}
+await _context.SaveChangesAsync();
+      </signature>
+      <path>Data/Entities/Config.cs (existing)</path>
+    </interface>
+    <interface>
+      <name>AuditLog (existing entity)</name>
+      <kind>EF Core entity — audit trail via CalendarDbContext.AuditLogs</kind>
+      <signature>
+// Audit log pattern for auth events:
+_context.AuditLogs.Add(new AuditLog
+{
+    Timestamp = DateTime.UtcNow,
+    OperationType = "gcal_auth",   // or "gcal_revoke"
+    UserAction = true,
+    Success = true,
+    OperationDetails = null        // Never log token or email here
+});
+await _context.SaveChangesAsync();
+      </signature>
+      <path>Data/Entities/AuditLog.cs (existing)</path>
+    </interface>
+    <interface>
+      <name>GoogleWebAuthorizationBroker (Google SDK)</name>
+      <kind>Google.Apis.Auth static class — OAuth 2.0 flow</kind>
+      <signature>
+// Usage in GoogleCalendarService.AuthenticateAsync:
+var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
+    GoogleClientSecrets.FromFile(credentialsPath).Secrets,
+    new[] { CalendarService.Scope.Calendar },  // read+write scope
+    "user",
+    cancellationToken,
+    new NullDataStore()   // Use NullDataStore — tokens managed by DpapiTokenStorageService, not Google's file store
+);
+      </signature>
+      <path>NuGet: Google.Apis.Auth 1.73.0.x</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Test framework: xUnit 2.9.2 with Moq 4.20.72 and FluentAssertions 8.8.0. Unit tests use mock
+      dependencies via Moq. Integration tests use real in-memory SQLite (not mocked). Tests in
+      GoogleCalendarManagement.Tests/Unit/ for unit; Integration/ for integration. All tests must be
+      platform-aware: project built with Platform=x64 and RuntimeIdentifier=win-x64 per test project
+      csproj. DPAPI (ProtectedData) only works on Windows — unit tests for DpapiTokenStorageService
+      will run correctly in CI if the agent is Windows. For cross-platform safety, inject an
+      ITokenStorageService abstraction so non-DPAPI implementations can substitute in tests.
+      Note: WriteTo.TextWriter removed from Serilog 4.x — use custom InMemorySink if log capture needed.
+      Current test count baseline: 24 tests passing.
+    </standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Unit/AuthenticationTests.cs (new)
+      GoogleCalendarManagement.Tests/Unit/LoggingTests.cs (existing — reference pattern)
+      GoogleCalendarManagement.Tests/Integration/DatabaseInfrastructureTests.cs (existing — reference pattern)
+    </locations>
+    <ideas>
+      <test ac="AC-2.1.2" name="DpapiTokenStorage_StoredValue_IsEncryptedNotPlaintext">
+        Mock CalendarDbContext (or use in-memory SQLite). Call StoreTokenAsync with a sample TokenResponse.
+        Assert the ConfigValue stored in Configs table is NOT the raw JSON string — it must be Base64
+        ciphertext that cannot be directly deserialized as TokenResponse JSON.
+      </test>
+      <test ac="AC-2.1.2 AC-2.1.3" name="DpapiTokenStorage_LoadAfterStore_RoundTrips">
+        Store a TokenResponse with known AccessToken value. Call LoadTokenAsync. Assert returned
+        TokenResponse.AccessToken equals the original. Validates full DPAPI encrypt/decrypt round-trip.
+      </test>
+      <test ac="AC-2.1.5" name="DpapiTokenStorage_Clear_RemovesConfigRow">
+        After StoreTokenAsync, call ClearTokenAsync. Assert subsequent LoadTokenAsync returns null.
+        Assert Configs table has no row with ConfigKey = "GcalTokenResponse".
+      </test>
+      <test ac="AC-2.1.6" name="GoogleCalendarService_CancelledAuth_ReturnsFailure">
+        Mock/stub GoogleWebAuthorizationBroker to throw OperationCanceledException. Call AuthenticateAsync.
+        Assert OperationResult.Success == false and ErrorMessage contains "cancelled".
+        Assert no Config row was written (no partial token state persisted).
+      </test>
+      <test ac="AC-2.1.6" name="GoogleCalendarService_MissingCredentialsFile_ReturnsFailure">
+        Point credentials path to a non-existent file path. Call AuthenticateAsync.
+        Assert OperationResult.Success == false and ErrorMessage contains "client_secret.json".
+      </test>
+      <test ac="AC-2.1.3" name="GoogleCalendarService_IsAuthenticated_ReturnsFalse_WhenNoToken">
+        Mock ITokenStorageService.LoadTokenAsync() to return null. Call IsAuthenticatedAsync.
+        Assert OperationResult.Success == true (no error), Data == false (not authenticated).
+      </test>
+      <test ac="AC-2.1.3" name="GoogleCalendarService_IsAuthenticated_ReturnsFalse_OnDecryptionFailure">
+        Mock DpapiTokenStorageService to throw CryptographicException during LoadTokenAsync.
+        Verify IsAuthenticatedAsync returns false without propagating exception.
+        Verify error was logged at Error level (via InMemorySink if log capture needed).
+      </test>
+    </ideas>
+  </tests>
+</story-context>

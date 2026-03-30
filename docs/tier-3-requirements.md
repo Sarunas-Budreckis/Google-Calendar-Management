@@ -1,4 +1,4 @@
-# Phase 3 Requirements - Data Sources for Easier Editing (Automation)
+# Tier 3 Requirements - Data Sources for Easier Editing (Automation)
 
 **Project:** Google Calendar Management
 **Date:** 2026-01-30
@@ -12,13 +12,13 @@
 
 **Core Question:** "Does this data source assistance make backfilling enjoyable?"
 
-**Phase 3 builds on Phase 1 & 2** - All previous capabilities maintained, with added automation to dramatically reduce backfilling time.
+**Tier 3 builds on Tier 1 & 2** - All previous capabilities maintained, with added automation to dramatically reduce backfilling time.
 
 ---
 
 ## Scope
 
-### What's in Phase 3
+### What's in Tier 3
 
 **Data Source Integrations:**
 1. **Toggl Track API** - Time entries with phone activity coalescing
@@ -72,7 +72,7 @@
 
 ## Success Criteria
 
-✅ All Phase 1 and 2 capabilities maintained
+✅ All Tier 1 and 2 capabilities maintained
 ✅ All 4 data sources successfully import and process
 ✅ Coalescing algorithms produce accurate events
 ✅ Hover system appears instantly (0-100ms)
@@ -207,7 +207,7 @@ The approval process becomes memory reinforcement. Reviewing events triggers rec
 
 ## Use While Building
 
-**Phase 3 Value:**
+**Tier 3 Value:**
 - Dramatically reduced backfilling time (<1 hour/week)
 - Single-pane view with all context visible
 - Confident approval decisions (not exhausting guesswork)
@@ -224,4 +224,4 @@ The approval process becomes memory reinforcement. Reviewing events triggers rec
 
 **Document Version:** 1.0
 **Last Updated:** 2026-01-30
-**Next Review:** Before Phase 3 implementation begins
+**Next Review:** Before Tier 3 implementation begins

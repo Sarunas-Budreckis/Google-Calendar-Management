@@ -27,7 +27,7 @@ This breakdown focuses on the foundational infrastructure, core Google Calendar 
 - Fetches existing events from Google Calendar and caches locally
 - Automatic version history (new pulls overwrite current, old data preserved)
 - Sync status indicators (green/grey per date)
-- **Value:** View existing calendar in local app - Phase 1 delivery
+- **Value:** View existing calendar in local app - Tier 1 delivery
 - **Sequencing:** Second - provides immediate value (read-only calendar viewer)
 
 **Epic 3: Local Calendar UI & Event Management**
@@ -122,7 +122,7 @@ So that **I have a robust ORM for local data persistence**.
 
 ---
 
-### Story 1.3: Implement Core Database Schema (Phase 1 Tables)
+### Story 1.3: Implement Core Database Schema (Tier 1 Tables)
 
 As a **developer**,
 I want **the initial database schema for Google Calendar events and app metadata**,
@@ -172,7 +172,7 @@ So that **I can store fetched calendar data locally**.
 - Reference: FR-8.1 (database schema), NFR-D1 (version history), NFR-D4 (audit trail)
 - Use EF Core fluent API for configuration, not data annotations
 - EventDataJson stores full event state for rollback capability
-- This is Phase 1 schema - additional tables added in later epics (Toggl, Calls, YouTube, DateStates, SavePoints)
+- This is Tier 1 schema - additional tables added in later epics (Toggl, Calls, YouTube, DateStates, SavePoints)
 - Consider using DateTimeOffset for timezone handling
 
 ---
@@ -293,7 +293,7 @@ So that **I can diagnose issues and track application behavior**.
 - Reference: NFR-I3 (error handling), NFR-D1 (auto-save on critical errors)
 - Log rotation prevents disk space issues
 - Consider separate log files for different concerns (app, database, api)
-- Include log viewer in future (Phase 3+) or use external tools
+- Include log viewer in future (Tier 3+) or use external tools
 
 ---
 
@@ -456,11 +456,11 @@ So that **I know my local data is up-to-date**.
 **Prerequisites:** Story 2.2 (fetch events), Epic 3 Story 3.1 (calendar views)
 
 **Technical Notes:**
-- Reference: FR-3.1 (unified calendar view), FR-5.1 (date state flags - simplified for Phase 1)
+- Reference: FR-3.1 (unified calendar view), FR-5.1 (date state flags - simplified for Tier 1)
 - Green = date has at least one event with GoogleEventId != null
 - Grey = date has no synced events (may have local-only events)
-- In Phase 1, this is simpler than FR-5.1's full flag system
-- Full date state flags (call_log_published, youtube_published, etc.) come in Phase 3
+- In Tier 1, this is simpler than FR-5.1's full flag system
+- Full date state flags (call_log_published, youtube_published, etc.) come in Tier 3
 
 ---
 
@@ -589,8 +589,8 @@ So that **I can visually understand my life patterns at a glance**.
 
 **Technical Notes:**
 - Reference: FR-3.1 (visual distinction), FR-10 (color system)
-- Phase 1: All events are published (100% opacity)
-- Phase 2 adds translucent unpushed events (60% opacity)
+- Tier 1: All events are published (100% opacity)
+- Tier 2 adds translucent unpushed events (60% opacity)
 - Custom color system defined in Epic 10, but use for display now
 - Consider WCAG contrast ratios for text on colored backgrounds
 - Store color hex values in database for now, full color management in Epic 10
@@ -611,7 +611,7 @@ So that **I can see event details and prepare for editing**.
 
 **And** selection is clearly visible:
 - Selected event highlighted with red 2px solid outline
-- Only one event selected at a time (Phase 1 - single select)
+- Only one event selected at a time (Tier 1 - single select)
 - Selection persists when switching views (same date)
 - Clear selection with Esc key or clicking empty space
 
@@ -628,14 +628,14 @@ So that **I can see event details and prepare for editing**.
 
 **Technical Notes:**
 - Reference: FR-3.2 (event editing), FR-3.3 (event selection)
-- Phase 1: Single-select only
-- Phase 2 adds multi-select (shift-click, drag-select)
+- Tier 1: Single-select only
+- Tier 2 adds multi-select (shift-click, drag-select)
 - Red outline distinguishes from color-coded event background
 - Consider hover state (subtle outline/shadow) separate from selected state
 
 ---
 
-### Story 3.4: Create Event Details Panel (Read-Only for Phase 1)
+### Story 3.4: Create Event Details Panel (Read-Only for Tier 1)
 
 As a **user**,
 I want **to view full event details when I select an event**,
@@ -661,24 +661,24 @@ So that **I can see all information about the event**.
 - Closes with Esc key or close button
 - Persists selection when switching views
 
-**And** the panel is read-only in Phase 1:
+**And** the panel is read-only in Tier 1:
 - No edit controls visible yet
-- "Edit" button disabled with tooltip: "Coming in Phase 2"
+- "Edit" button disabled with tooltip: "Coming in Tier 2"
 - Prepares layout for future editing (Story 3.5)
 
 **Prerequisites:** Story 3.3 (event selection)
 
 **Technical Notes:**
 - Reference: FR-3.2 (event editing - panel infrastructure)
-- Phase 1: Read-only display
-- Phase 2: Add editing controls (Story 3.5)
+- Tier 1: Read-only display
+- Tier 2: Add editing controls (Story 3.5)
 - Panel width: ~350-400px, full height
 - Consider split view pattern (calendar | details panel)
 - Use XAML data binding for reactive updates
 
 ---
 
-### Story 3.5: Implement Event Editing Panel (Phase 2)
+### Story 3.5: Implement Event Editing Panel (Tier 2)
 
 As a **user**,
 I want **to edit event details directly in the application**,
@@ -701,7 +701,7 @@ So that **I can modify events before publishing to Google Calendar**.
 - Changes saved to local database immediately (0-lag - NFR-P1)
 - No explicit "Save" button needed
 - UpdatedAt timestamp updated automatically
-- IsPublished remains false for new edits (Phase 2)
+- IsPublished remains false for new edits (Tier 2)
 
 **And** editing provides feedback:
 - Validation errors shown inline (e.g., "End time must be after start time")
@@ -795,7 +795,7 @@ So that **I can categorize events by mental state**.
 
 **Technical Notes:**
 - Reference: FR-3.2 (color picker), FR-10 (color system)
-- Hardcode 9 colors for Phase 1-3
+- Hardcode 9 colors for Tier 1-3
 - Epic 10 adds full color management (edit colors, descriptions)
 - ColorId stored as string in database (hex value or color name)
 - Consider grid layout: 3 rows x 3 columns for color picker
@@ -871,7 +871,7 @@ This ensures every story delivers tested, production-ready code.
 - **Microsoft.EntityFrameworkCore.InMemory** - For database integration tests
 - **WireMock.Net** - Mock Google Calendar API responses
 
-**UI Testing (Optional for MVP, recommended for Phase 2+):**
+**UI Testing (Optional for MVP, recommended for Tier 2+):**
 - **Appium for WinUI** - UI automation testing
 - Manual testing protocol for critical workflows
 
@@ -1143,7 +1143,7 @@ public class VersionHistoryTests
 - Year/month/week/day calendar views
 - Color-coded event display
 - Event selection with red outline feedback
-- Event details panel (read-only Phase 1, editable Phase 2)
+- Event details panel (read-only Tier 1, editable Tier 2)
 - Event creation (drag-to-create + button)
 - Color picker for 9 custom colors
 - Date navigation and jump-to-date
@@ -1171,8 +1171,8 @@ public class VersionHistoryTests
 - ✅ Each story has clear prerequisites
 
 **PRD Alignment:**
-- ✅ Phase 1 requirements covered (read-only calendar viewer)
-- ✅ Phase 2 requirements included (event editing, creation)
+- ✅ Tier 1 requirements covered (read-only calendar viewer)
+- ✅ Tier 2 requirements included (event editing, creation)
 - ✅ NFRs integrated (performance, security, data integrity, testability)
 - ✅ All 21 functional requirements mapped to stories
 

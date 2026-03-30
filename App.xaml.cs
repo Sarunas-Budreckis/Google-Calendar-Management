@@ -1,8 +1,11 @@
+using System.Diagnostics;
+using System.Reflection;
 using GoogleCalendarManagement.Data;
 using GoogleCalendarManagement.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace GoogleCalendarManagement
 {
@@ -20,6 +23,8 @@ namespace GoogleCalendarManagement
         /// </summary>
         public App()
         {
+            // Configure Serilog before anything else so DI/startup failures are captured.
+            new LoggingService().Configure();
             this.InitializeComponent();
         }
 
@@ -30,6 +35,8 @@ namespace GoogleCalendarManagement
         /// <param name="e">Details about the launch request and process.</param>
         protected override async void OnLaunched(LaunchActivatedEventArgs e)
         {
+            var startupTimer = Stopwatch.StartNew();
+
             // Configure dependency injection
             var services = new ServiceCollection();
             ConfigureServices(services);
@@ -65,6 +72,17 @@ namespace GoogleCalendarManagement
 
             window.Activate();
 
+            startupTimer.Stop();
+            var appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
+            Log.Information("Google Calendar Management v{Version} started. Launch to window: {ElapsedMs}ms",
+                appVersion, startupTimer.ElapsedMilliseconds);
+
+            // Wire global exception handlers (after window is active so XamlRoot is available for dialogs)
+            var errorHandlingService = serviceProvider.GetRequiredService<IErrorHandlingService>();
+            if (errorHandlingService is ErrorHandlingService svc)
+                svc.SetWindow(window);
+            errorHandlingService.Register();
+
             // Run migration service on startup
             using (var scope = serviceProvider.CreateScope())
             {
@@ -75,16 +93,18 @@ namespace GoogleCalendarManagement
                 }
                 catch (Exception ex)
                 {
+                    Log.Error(ex, "Database error on startup");
                     var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                     var backupDir = Path.Combine(localAppData, "GoogleCalendarManagement");
                     var dialog = new ContentDialog
                     {
                         Title = "Startup Error",
-                        Content = $"Database error on startup: {ex.Message}\n\nPlease restore from a backup in:\n{backupDir}",
+                        Content = $"A database error occurred on startup. Please restore from a backup in:\n{backupDir}",
                         CloseButtonText = "Exit"
                     };
                     dialog.XamlRoot = window.Content.XamlRoot;
                     await dialog.ShowAsync();
+                    Log.CloseAndFlush();
                     Application.Current.Exit();
                     return;
                 }
@@ -101,11 +121,11 @@ namespace GoogleCalendarManagement
         /// <param name="services">The service collection to configure.</param>
         private static void ConfigureServices(ServiceCollection services)
         {
-            services.AddLogging(builder =>
-            {
-                builder.AddDebug();
-                builder.SetMinimumLevel(LogLevel.Information);
-            });
+            // Bridge Serilog to Microsoft.Extensions.Logging ILogger<T>
+            services.AddLogging(builder => builder.AddSerilog());
+
+            services.AddSingleton<ILoggingService, LoggingService>();
+            services.AddSingleton<IErrorHandlingService, ErrorHandlingService>();
 
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var dbFolder = Path.Combine(localAppData, "GoogleCalendarManagement");

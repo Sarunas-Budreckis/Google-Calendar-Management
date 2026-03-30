@@ -53,7 +53,11 @@
         <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.12" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
         <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.2" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.2" />
+        <PackageReference Include="Serilog" Version="4.1.0" />
+        <PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" />
+        <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+        <PackageReference Include="Serilog.Sinks.Console" Version="6.1.0" />
+        <PackageReference Include="SerilogTimings" Version="3.0.1" />
         <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.*" />
         <PackageReference Include="Microsoft.Web.WebView2" Version="1.*" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.*" />
@@ -76,5 +80,31 @@
     -->
     <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
         <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+    </PropertyGroup>
+
+    <!-- Version -->
+    <PropertyGroup>
+        <Version>1.0.0</Version>
+        <AssemblyVersion>1.0.0.0</AssemblyVersion>
+        <FileVersion>1.0.0.0</FileVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- EF Core and WinUI 3 are not fully trim-compatible; IL2026 warnings are expected.
+             PublishTrimmed=false is set in all publish profiles.
+             WarningsNotAsErrors keeps these visible without blocking the build. -->
+        <WarningsNotAsErrors>IL2026</WarningsNotAsErrors>
+    </PropertyGroup>
+
+    <!-- Debug configuration -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+        <Optimize>false</Optimize>
+        <DebugType>full</DebugType>
+        <DebugSymbols>true</DebugSymbols>
+    </PropertyGroup>
+
+    <!-- Release configuration -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <Optimize>true</Optimize>
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
     </PropertyGroup>
 </Project>

@@ -60,7 +60,7 @@ This document contains research findings for all technologies, APIs, and librari
 - **Syncfusion WinUI Calendar** - Advanced features, commercial license
 - **ComponentOne WinUI Edition** - Enterprise-grade controls, commercial
 
-**Recommendation:** Start with built-in CalendarView, evaluate third-party if needed for Phase 2 or 3
+**Recommendation:** Start with built-in CalendarView, evaluate third-party if needed for Tier 2 or 3
 
 **Resources:**
 - Official docs: https://learn.microsoft.com/en-us/windows/apps/winui/
@@ -427,7 +427,7 @@ foreach (var item in history)
 }
 ```
 
-**Phase 2 Enhancement:**
+**Tier 2 Enhancement:**
 Chrome extension for real-time tracking (see Future Work section)
 
 **Resources:**
@@ -767,7 +767,7 @@ function exportHistory() {
 }
 ```
 
-**Phase:** Phase 2 investigation story
+**Phase:** Tier 2 investigation story
 
 ---
 
@@ -832,4 +832,4 @@ dotnet user-secrets set "Google:Calendar:ClientId" "your-client-id"
 
 **Document Version:** 1.0
 **Last Updated:** 2025-11-05
-**Status:** Phase 1 Research Complete
+**Status:** Tier 1 Research Complete

@@ -3,7 +3,7 @@
 **Date:** 2026-01-30
 **Project:** Google Calendar Management
 **Assessed By:** Sarunas Budreckis
-**Assessment Type:** Phase 3 to Phase 4 Transition Validation
+**Assessment Type:** Tier 3 to Phase 4 Transition Validation
 
 ---
 
@@ -26,7 +26,7 @@
 **🔴 BLOCKING ISSUES:**
 1. **Epic and story breakdown incomplete** - Only epic titles exist (no detailed stories)
 2. **Stories directory empty** - 0 story files created (expected 40+)
-3. **Cannot validate phase-to-epic alignment** - Cannot verify Epics 1-3 = Phase 1 read-only scope
+3. **Cannot validate phase-to-epic alignment** - Cannot verify Epics 1-3 = Tier 1 read-only scope
 
 **🟠 HIGH PRIORITY GAPS:**
 - Greenfield initialization story missing (no explicit "Story 0" for project setup)
@@ -63,13 +63,13 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 
 **Workflow Path:** method-greenfield.yaml
 
-**Current Phase:** Phase 2 → Phase 3 Transition (Solutioning to Implementation)
+**Current Phase:** Tier 2 → Tier 3 Transition (Solutioning to Implementation)
 
 **Status Assessment:**
 - ✅ Phase 0 (Discovery): Product Brief completed
-- ✅ Phase 1 (Planning): PRD completed
-- ✅ Phase 1 (Planning): UX Design completed (ux-design-specification.md)
-- ✅ Phase 2 (Solutioning): Architecture completed
+- ✅ Tier 1 (Planning): PRD completed
+- ✅ Tier 1 (Planning): UX Design completed (ux-design-specification.md)
+- ✅ Tier 2 (Solutioning): Architecture completed
 - 🎯 **Current Checkpoint:** Solutioning Gate Check (this workflow)
 - ⏳ Next: Sprint Planning
 
@@ -105,9 +105,9 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 
 | Document | Path | Purpose | Status |
 |----------|------|---------|--------|
-| **Phase 1 Requirements** | [phase-1-requirements.md](./phase-1-requirements.md) | Basic UI & Pull from GCal (read-only) | ✅ Complete |
-| **Phase 2 Requirements** | [phase-2-requirements.md](./phase-2-requirements.md) | Editing & Push to GCal | ✅ Expected to exist |
-| **Phase 3 Requirements** | [phase-3-requirements.md](./phase-3-requirements.md) | Data sources for easier editing | ✅ Expected to exist |
+| **Tier 1 Requirements** | [tier-1-requirements.md](./tier-1-requirements.md) | Basic UI & Pull from GCal (read-only) | ✅ Complete |
+| **Tier 2 Requirements** | [tier-2-requirements.md](./tier-2-requirements.md) | Editing & Push to GCal | ✅ Expected to exist |
+| **Tier 3 Requirements** | [tier-3-requirements.md](./tier-3-requirements.md) | Data sources for easier editing | ✅ Expected to exist |
 
 **Supporting Technical Documents:**
 
@@ -153,7 +153,7 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 - 🔴 **Missing story-to-requirement traceability** - Cannot validate coverage
 
 **Validation Needed:**
-- Phase 2 and Phase 3 requirements documents (referenced but not yet validated)
+- Tier 2 and Tier 3 requirements documents (referenced but not yet validated)
 - Story generation from epic breakdown
 
 ---
@@ -166,9 +166,9 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 **Completeness:** ✅ Excellent
 
 **Core Requirements Extracted:**
-- **Phase 1 (Basic UI & Pull):** Read-only calendar viewer, GCal sync, year/month/week/day views, save/export, sync status
-- **Phase 2 (Editing & Push):** Event creation/editing, visual state language (translucent pending, red outline selection), push to GCal with confirmation
-- **Phase 3 (Data Sources):** Toggl/Calls/YouTube/Outlook integration, coalescing algorithms (8/15 rounding, phone, YouTube), hover system, approval workflow, day naming, weekly status
+- **Tier 1 (Basic UI & Pull):** Read-only calendar viewer, GCal sync, year/month/week/day views, save/export, sync status
+- **Tier 2 (Editing & Push):** Event creation/editing, visual state language (translucent pending, red outline selection), push to GCal with confirmation
+- **Tier 3 (Data Sources):** Toggl/Calls/YouTube/Outlook integration, coalescing algorithms (8/15 rounding, phone, YouTube), hover system, approval workflow, day naming, weekly status
 
 **Success Metrics Defined:**
 - Qualitative: Backfilling becomes fun ritual, "spaced repetition for life"
@@ -237,7 +237,7 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 - Calendar views (Year/Month/Week/Day)
 - Date selection system
 - Top strip controls (view switcher, Pull/Push buttons, status display)
-- Event detail panel (right slide-in, Phase 2)
+- Event detail panel (right slide-in, Tier 2)
 - Color picker (9 custom colors)
 - Progress indicators and toast notifications
 
@@ -248,20 +248,20 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 
 ### Phase Requirements Documents Analysis
 
-**Phase 1 Requirements:**
+**Tier 1 Requirements:**
 - ✅ Complete, clear scope boundaries (read-only, no editing)
 - ✅ Success criteria defined (can view and backup reliably)
 - ✅ Implementation checklist provided
 - Should align with Epics 1, 2, 3 (Foundation, GCal Integration, Calendar UI)
 
-**Phase 2 Requirements:**
-- ✅ Complete, builds on Phase 1
+**Tier 2 Requirements:**
+- ✅ Complete, builds on Tier 1
 - ✅ Editing capabilities fully specified
 - ✅ Visual state language detailed
 - ✅ Performance targets clear
 - Should align with Epic 6 (Approval Workflow & Publishing)
 
-**Phase 3 Requirements:**
+**Tier 3 Requirements:**
 - ✅ Complete, comprehensive data source strategy
 - ✅ All 4 data sources detailed (Toggl, Calls, YouTube, Outlook)
 - ✅ Coalescing algorithms specified
@@ -302,20 +302,20 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 
 | PRD Requirement | Architecture Support | Status |
 |-----------------|---------------------|--------|
-| **Phase 1: Read-only calendar viewing** | WinUI 3 CalendarView foundation, MVVM ViewModels for display | ✅ Covered |
-| **Phase 1: Pull from GCal** | GoogleCalendarService with batch operations, OAuth 2.0 | ✅ Covered |
-| **Phase 1: Save/Export** | SaveRestoreService, SQLite local storage, file system access | ✅ Covered |
-| **Phase 1: Sync status tracking** | DateState entity, green/grey indicator logic | ✅ Covered |
-| **Phase 2: Event editing** | EventViewModel, inline editing with auto-save, EF Core | ✅ Covered |
-| **Phase 2: Visual state language** | UI state models (translucent 60%, red outline, full opacity) | ✅ Covered |
-| **Phase 2: Push to GCal** | PublishManager, batch publishing, confirmation dialogs | ✅ Covered |
-| **Phase 3: Toggl integration** | TogglService, 8/15 rounding algorithm, phone coalescing | ✅ Covered |
-| **Phase 3: Call logs** | CallLogCsvParser, iMazing format support | ✅ Covered |
-| **Phase 3: YouTube history** | YouTubeTakeoutParser, YouTube Data API, session coalescing | ✅ Covered |
-| **Phase 3: Outlook calendar** | MicrosoftGraphService, OAuth 2.0, .ics fallback | ✅ Covered |
-| **Phase 3: Coalescing algorithms** | CoalescingService, EightFifteenRounding, PhoneCoalescing, YouTubeCoalescing | ✅ Covered |
-| **Phase 3: Hover system** | Progressive disclosure UI, data source timeline visualization | ✅ Covered |
-| **Phase 3: Weekly status** | WeeklyStatusService, ISO 8601 week calculation, Excel sync | ✅ Covered |
+| **Tier 1: Read-only calendar viewing** | WinUI 3 CalendarView foundation, MVVM ViewModels for display | ✅ Covered |
+| **Tier 1: Pull from GCal** | GoogleCalendarService with batch operations, OAuth 2.0 | ✅ Covered |
+| **Tier 1: Save/Export** | SaveRestoreService, SQLite local storage, file system access | ✅ Covered |
+| **Tier 1: Sync status tracking** | DateState entity, green/grey indicator logic | ✅ Covered |
+| **Tier 2: Event editing** | EventViewModel, inline editing with auto-save, EF Core | ✅ Covered |
+| **Tier 2: Visual state language** | UI state models (translucent 60%, red outline, full opacity) | ✅ Covered |
+| **Tier 2: Push to GCal** | PublishManager, batch publishing, confirmation dialogs | ✅ Covered |
+| **Tier 3: Toggl integration** | TogglService, 8/15 rounding algorithm, phone coalescing | ✅ Covered |
+| **Tier 3: Call logs** | CallLogCsvParser, iMazing format support | ✅ Covered |
+| **Tier 3: YouTube history** | YouTubeTakeoutParser, YouTube Data API, session coalescing | ✅ Covered |
+| **Tier 3: Outlook calendar** | MicrosoftGraphService, OAuth 2.0, .ics fallback | ✅ Covered |
+| **Tier 3: Coalescing algorithms** | CoalescingService, EightFifteenRounding, PhoneCoalescing, YouTubeCoalescing | ✅ Covered |
+| **Tier 3: Hover system** | Progressive disclosure UI, data source timeline visualization | ✅ Covered |
+| **Tier 3: Weekly status** | WeeklyStatusService, ISO 8601 week calculation, Excel sync | ✅ Covered |
 | **NFR: Performance (0-100ms)** | Local-first SQLite, pre-rendered content, async operations | ✅ Covered |
 | **NFR: Offline capability** | Complete local SQLite database, queued publishing | ✅ Covered |
 | **NFR: Data ownership** | Local-first architecture, user data directory | ✅ Covered |
@@ -345,9 +345,9 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 | **"Aesthetic beauty"** | 9-color taxonomy, Fluent Design, smooth animations | ✅ Covered |
 
 **User Journey Coverage:**
-- ✅ Phase 1 journey (View & Backup) fully designed
-- ✅ Phase 2 journey (Edit & Sync) fully designed
-- ✅ Phase 3 journey (Data Source Assisted) fully designed
+- ✅ Tier 1 journey (View & Backup) fully designed
+- ✅ Tier 2 journey (Edit & Sync) fully designed
+- ✅ Tier 3 journey (Data Source Assisted) fully designed
 
 #### Architecture ↔ UX Design Alignment
 
@@ -385,19 +385,19 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 - Epic 10: Polish & Production Readiness
 
 **Expected Alignment (per your guidance):**
-- **Phase 1** should map to **Epics 1, 2, 3**
-- **Phase 2** should include editing and publishing capabilities
-- **Phase 3** should map to **Epics 4, 5, 7** (data sources, coalescing, tracking)
+- **Tier 1** should map to **Epics 1, 2, 3**
+- **Tier 2** should include editing and publishing capabilities
+- **Tier 3** should map to **Epics 4, 5, 7** (data sources, coalescing, tracking)
 
 **🔴 BLOCKING ISSUE: Cannot validate epic-to-phase mapping**
 - Epic breakdown file contains only high-level epic titles
 - No detailed user stories exist in any epic
 - Stories directory is empty
 - **Impact:** Cannot verify:
-  - ✗ Do Epics 1, 2, 3 fully cover Phase 1 requirements?
-  - ✗ Are Phase 1 boundaries properly enforced (no editing in Epic 1-3)?
-  - ✗ Is Epic 6 scoped to Phase 2 capabilities only?
-  - ✗ Do Epics 4, 5, 7 cover all Phase 3 data sources and algorithms?
+  - ✗ Do Epics 1, 2, 3 fully cover Tier 1 requirements?
+  - ✗ Are Tier 1 boundaries properly enforced (no editing in Epic 1-3)?
+  - ✗ Is Epic 6 scoped to Tier 2 capabilities only?
+  - ✗ Do Epics 4, 5, 7 cover all Tier 3 data sources and algorithms?
   - ✗ Are stories sequenced logically within epics?
   - ✗ Do stories have proper acceptance criteria?
 
@@ -411,7 +411,7 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 
 **❌ CANNOT VALIDATE - No stories exist to map against PRD requirements**
 
-**Phase 1 Requirements Needing Story Coverage:**
+**Tier 1 Requirements Needing Story Coverage:**
 - Year view with date selection ❓
 - Pull from GCal for selected ranges ❓
 - Month/week/day views (read-only) ❓
@@ -421,7 +421,7 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 - SQLite database setup ❓
 - Google Calendar OAuth ❓
 
-**Phase 2 Requirements Needing Story Coverage:**
+**Tier 2 Requirements Needing Story Coverage:**
 - Event detail panel (right side) ❓
 - Inline editing with auto-save ❓
 - Event creation (drag + button) ❓
@@ -431,7 +431,7 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 - Push to GCal with confirmation ❓
 - Batch publish ❓
 
-**Phase 3 Requirements Needing Story Coverage:**
+**Tier 3 Requirements Needing Story Coverage:**
 - Toggl Track integration ❓
 - Call logs parsing ❓
 - YouTube integration ❓
@@ -480,19 +480,19 @@ The BMM workflow stopped after architecture completion. The `create-epics-and-st
 
 #### 🔴 CRITICAL #2: Phase-to-Epic Alignment Not Validated
 
-**Gap:** Cannot verify that Epics 1, 2, 3 align with Phase 1 requirements (as per user guidance).
+**Gap:** Cannot verify that Epics 1, 2, 3 align with Tier 1 requirements (as per user guidance).
 
 **Impact:**
-- **Phase boundary violations possible** - Epic 1-3 might include Phase 2/3 features (editing, data sources)
-- **Scope creep risk** - Stories might not respect "read-only" Phase 1 constraint
-- **Integration conflicts** - Phase 1 might pull in dependencies needed only for Phase 2/3
+- **Phase boundary violations possible** - Epic 1-3 might include Tier 2/3 features (editing, data sources)
+- **Scope creep risk** - Stories might not respect "read-only" Tier 1 constraint
+- **Integration conflicts** - Tier 1 might pull in dependencies needed only for Tier 2/3
 
 **Risk Level:** 🔴 **HIGH** - Could lead to over-engineering or scope confusion
 
 **Expected Alignment:**
-- **Phase 1** = Epics 1, 2, 3 (Foundation, GCal Integration, Calendar UI - read-only)
-- **Phase 2** = Epic 6 + parts of Epic 8 (Editing, Publishing, Save/Restore)
-- **Phase 3** = Epics 4, 5, 7, 9 (Data Sources, Coalescing, Date State, Import)
+- **Tier 1** = Epics 1, 2, 3 (Foundation, GCal Integration, Calendar UI - read-only)
+- **Tier 2** = Epic 6 + parts of Epic 8 (Editing, Publishing, Save/Restore)
+- **Tier 3** = Epics 4, 5, 7, 9 (Data Sources, Coalescing, Date State, Import)
 
 **Cannot Validate Until:** Stories are created with clear phase tags and scope boundaries
 
@@ -610,7 +610,7 @@ The BMM workflow stopped after architecture completion. The `create-epics-and-st
 
 #### UX Requirements Coverage
 
-**Phase 1 (Tier 1) UX Requirements:**
+**Tier 1 (Tier 1) UX Requirements:**
 - ✅ Year view launch screen with date selection
 - ✅ Month/week/day calendar views (read-only)
 - ✅ Pull from GCal button with progress indicator
@@ -619,7 +619,7 @@ The BMM workflow stopped after architecture completion. The `create-epics-and-st
 - ✅ Last pulled timestamp display
 - ✅ Basic hover tooltips (0-100ms)
 
-**Phase 2 (Tier 2) UX Requirements:**
+**Tier 2 (Tier 2) UX Requirements:**
 - ✅ Event detail panel (right slide-in)
 - ✅ Inline editing with auto-save
 - ✅ Event creation (drag + button)
@@ -629,12 +629,12 @@ The BMM workflow stopped after architecture completion. The `create-epics-and-st
 - ✅ Push to GCal confirmation dialog
 - ✅ Batch publish with progress
 
-**Phase 3 (Tier 3) UX Requirements:**
+**Tier 3 (Tier 3) UX Requirements:**
 - ✅ Data source panel design (planned for Tier 3 revisit)
 - ✅ Hover system with data source timeline (0-100ms)
 - ✅ Approval workflow UI
 - ✅ Day naming interface
-- Note: UX spec correctly defers detailed Tier 3 design until Phase 3 implementation begins
+- Note: UX spec correctly defers detailed Tier 3 design until Tier 3 implementation begins
 
 #### Architecture Supports UX Requirements
 
@@ -684,7 +684,7 @@ The BMM workflow stopped after architecture completion. The `create-epics-and-st
 
 **Future Considerations:**
 - Multi-monitor support mentioned in vision
-- Web/mobile deferred to post-Phase 3
+- Web/mobile deferred to post-Tier 3
 
 **Finding:** Responsive strategy is clear and appropriate for desktop-first approach.
 
@@ -700,7 +700,7 @@ The BMM workflow stopped after architecture completion. The `create-epics-and-st
 3. Default view configuration
 4. Tutorial or skip option
 
-**Impact:** 🟡 **MEDIUM** - First-run UX should be included in Phase 1 stories
+**Impact:** 🟡 **MEDIUM** - First-run UX should be included in Tier 1 stories
 
 **Recommendation:** Add "First-Run Experience" story to Epic 1 or Epic 2
 
@@ -713,7 +713,7 @@ The BMM workflow stopped after architecture completion. The `create-epics-and-st
 
 **Impact:** 🟡 **MEDIUM** - Empty states improve UX clarity
 
-**Recommendation:** Include empty state designs in Phase 1 calendar UI stories
+**Recommendation:** Include empty state designs in Tier 1 calendar UI stories
 
 ### UI-Specific Validation
 
@@ -729,11 +729,11 @@ The BMM workflow stopped after architecture completion. The `create-epics-and-st
 
 #### Component Library Completeness
 
-**Tier 1 Components (Phase 1):** ✅ Fully specified
-**Tier 2 Components (Phase 2):** ✅ Fully specified
-**Tier 3 Components (Phase 3):** ⚠️ Correctly deferred for later design revisit
+**Tier 1 Components (Tier 1):** ✅ Fully specified
+**Tier 2 Components (Tier 2):** ✅ Fully specified
+**Tier 3 Components (Tier 3):** ⚠️ Correctly deferred for later design revisit
 
-**Finding:** Component library is complete for Phases 1-2, with clear note to revisit before Phase 3.
+**Finding:** Component library is complete for Phases 1-2, with clear note to revisit before Tier 3.
 
 ### UX-to-Architecture Consistency Check
 
@@ -768,9 +768,9 @@ _Must be resolved before proceeding to implementation_
 - **Resolution Required:** Run `create-epics-and-stories` workflow to decompose PRD into implementable stories
 
 **CRITICAL-2: Phase-to-Epic Alignment Cannot Be Validated**
-- **Issue:** Cannot verify that Epics 1, 2, 3 align with Phase 1 (read-only) requirements
+- **Issue:** Cannot verify that Epics 1, 2, 3 align with Tier 1 (read-only) requirements
 - **Impact:** Risk of scope creep, phase boundary violations, over-engineering
-- **Blocking:** Yes - must ensure Phase 1 stories don't include Phase 2/3 features
+- **Blocking:** Yes - must ensure Tier 1 stories don't include Tier 2/3 features
 - **Resolution Required:** Create stories with explicit phase tags and validate alignment
 
 ---
@@ -862,9 +862,9 @@ _Minor items for consideration_
 - **Finding:** Planning phase achieved complete internal consistency
 
 **STRENGTH-3: Clear Phase-Based Incremental Delivery Strategy**
-- Phase 1 (Read-only) → Phase 2 (Editing) → Phase 3 (Automation) provides clear milestones
+- Tier 1 (Read-only) → Tier 2 (Editing) → Tier 3 (Automation) provides clear milestones
 - Each phase delivers standalone value ("use while building")
-- Scope boundaries are well-defined (Phase 1 explicitly excludes editing/data sources)
+- Scope boundaries are well-defined (Tier 1 explicitly excludes editing/data sources)
 - **Finding:** Incremental strategy enables early validation and reduces risk
 
 **STRENGTH-4: Comprehensive UX Design with Visual Deliverables**
@@ -930,15 +930,15 @@ _Minor items for consideration_
 - Detailed epic breakdown with ~40+ user stories across 10 epics
 - Individual story markdown files in `docs/stories/` directory
 - Clear acceptance criteria for each story
-- Phase tags (Phase 1, Phase 2, Phase 3) on each story
+- Phase tags (Tier 1, Tier 2, Tier 3) on each story
 - Sequencing and dependencies defined
 - Traceability from PRD requirements to implementation stories
 
 **Critical Validation After Running:**
-- ✓ Verify Epics 1, 2, 3 contain ONLY Phase 1 (read-only) features
+- ✓ Verify Epics 1, 2, 3 contain ONLY Tier 1 (read-only) features
 - ✓ Ensure Epic 1, Story 1 is project initialization with starter command
 - ✓ Confirm Phase boundaries are enforced (no editing in Epics 1-3)
-- ✓ Validate all Phase 1 requirements have story coverage
+- ✓ Validate all Tier 1 requirements have story coverage
 
 **Estimated Time:** 1-2 hours (workflow is interactive and collaborative)
 
@@ -948,16 +948,16 @@ _Minor items for consideration_
 
 **After stories are created, verify:**
 
-**Phase 1 = Epics 1, 2, 3:**
+**Tier 1 = Epics 1, 2, 3:**
 - Epic 1: Foundation (project setup, SQLite, OAuth, app shell)
 - Epic 2: GCal Integration (pull from GCal, sync status, batch fetch, date selection)
 - Epic 3: Calendar UI (year/month/week/day views, read-only display, basic hover)
 
-**Phase 2 Additions:**
+**Tier 2 Additions:**
 - Epic 6: Approval Workflow & Publishing (editing, push to GCal, visual states)
 - Parts of Epic 8: Save/Restore (version management for user safety)
 
-**Phase 3 Additions:**
+**Tier 3 Additions:**
 - Epic 4: Data Source Integrations (Toggl, Calls, YouTube, Outlook)
 - Epic 5: Coalescing Algorithms (8/15, phone, YouTube sessions)
 - Epic 7: Date State & Progress Tracking (contiguity, weekly status, Excel sync)
@@ -1068,9 +1068,9 @@ Create `docs/traceability-matrix.md` mapping:
 **No sequencing adjustments needed at planning level.**
 
 The 3-phase strategy is sound:
-1. **Phase 1** (Epics 1-3): Foundation → Read-only viewing → Validates technical sync
-2. **Phase 2** (Epic 6, 8): Editing → Publishing → Full manual control
-3. **Phase 3** (Epics 4-5-7-9): Data sources → Automation → Enjoyable ritual
+1. **Tier 1** (Epics 1-3): Foundation → Read-only viewing → Validates technical sync
+2. **Tier 2** (Epic 6, 8): Editing → Publishing → Full manual control
+3. **Tier 3** (Epics 4-5-7-9): Data sources → Automation → Enjoyable ritual
 
 **Recommendation:** Maintain this sequence. Validate story-level sequencing after `create-epics-and-stories` workflow completes.
 
@@ -1097,7 +1097,7 @@ The 3-phase strategy is sound:
 **🔴 BLOCKING ISSUES:**
 1. **Epic and story breakdown incomplete** - Only epic titles exist, no detailed stories
 2. **Stories directory empty** - 0 story files (expected 40+)
-3. **Cannot validate phase-to-epic alignment** - Cannot verify Epics 1-3 = Phase 1
+3. **Cannot validate phase-to-epic alignment** - Cannot verify Epics 1-3 = Tier 1
 
 **🟠 HIGH PRIORITY GAPS:**
 1. **Greenfield initialization story missing** - No explicit "Story 0" for project setup
@@ -1139,13 +1139,13 @@ Once stories are created and validated, this project will be **fully ready** for
 - [ ] Validate ~40+ user stories created across 10 epics
 - [ ] Confirm stories saved to `docs/stories/` directory
 - [ ] Verify each story has acceptance criteria
-- [ ] Check that stories have phase tags (Phase 1, 2, or 3)
+- [ ] Check that stories have phase tags (Tier 1, 2, or 3)
 
 **CONDITION 2: Phase-to-Epic Alignment Validated (BLOCKING)**
-- [ ] Verify Epics 1, 2, 3 contain ONLY Phase 1 (read-only) features
+- [ ] Verify Epics 1, 2, 3 contain ONLY Tier 1 (read-only) features
 - [ ] Ensure Epic 1, Story 1 is project initialization with starter command
-- [ ] Confirm Epic 6 stories include editing and publishing (Phase 2)
-- [ ] Validate Epics 4, 5, 7 cover Phase 3 data sources and algorithms
+- [ ] Confirm Epic 6 stories include editing and publishing (Tier 2)
+- [ ] Validate Epics 4, 5, 7 cover Tier 3 data sources and algorithms
 - [ ] Check that Phase boundaries are enforced (no scope leakage)
 
 **CONDITION 3: High-Priority Stories Added (RECOMMENDED)**
@@ -1187,18 +1187,18 @@ Once stories are created and validated, this project will be **fully ready** for
 
 After stories are created, manually review:
 
-**Phase 1 Validation (Epics 1-3):**
+**Tier 1 Validation (Epics 1-3):**
 - [ ] All Epic 1-3 stories are read-only (no editing, no push to GCal)
 - [ ] No data source integration stories in Epics 1-3
 - [ ] Epic 1, Story 1 is project initialization with starter command
 - [ ] Foundation stories come before UI stories
 
-**Phase 2 Validation (Epic 6, 8):**
+**Tier 2 Validation (Epic 6, 8):**
 - [ ] Epic 6 includes editing and publishing capabilities
 - [ ] Visual state language stories present (translucent pending, red outline)
 - [ ] Push to GCal with confirmation dialog story exists
 
-**Phase 3 Validation (Epics 4-5-7-9):**
+**Tier 3 Validation (Epics 4-5-7-9):**
 - [ ] All 4 data sources covered (Toggl, Calls, YouTube, Outlook)
 - [ ] Coalescing algorithms present (8/15, phone, YouTube)
 - [ ] Hover system and approval workflow stories exist
@@ -1229,7 +1229,7 @@ Manually add these stories to relevant epics:
 
 ---
 
-**STEP 5: Begin Phase 1 Implementation**
+**STEP 5: Begin Tier 1 Implementation**
 
 After sprint planning is complete:
 
@@ -1291,17 +1291,17 @@ dotnet new winui3 -n GoogleCalendarManagement -f net9.0
 # Phase 0: Discovery
 product-brief: ✅ docs/product-brief-google-calendar-management-2025-11-05.md
 
-# Phase 1: Planning
+# Tier 1: Planning
 prd: ✅ docs/PRD.md
 validate-prd: optional
 create-design: ✅ docs/ux-design-specification.md
 
-# Phase 2: Solutioning
+# Tier 2: Solutioning
 create-architecture: ✅ docs/architecture.md
 validate-architecture: optional
 solutioning-gate-check: ✅ docs/implementation-readiness-report-2026-01-30.md
 
-# Phase 3: Story Creation (NEXT REQUIRED)
+# Tier 3: Story Creation (NEXT REQUIRED)
 create-epics-and-stories: required ← YOU ARE HERE
 
 # Phase 4: Implementation
@@ -1376,7 +1376,7 @@ sprint-planning: required (after stories)
 - ✅ UX requirements in PRD
 - ❓ UX implementation stories exist (**cannot validate without stories**)
 - ❓ Accessibility requirements covered (**cannot validate without stories**)
-- ✅ Responsive design addressed (desktop-first, Phase 1-2)
+- ✅ Responsive design addressed (desktop-first, Tier 1-2)
 - ✅ User flow continuity maintained (user journeys defined)
 
 **Severity Assessment:**
@@ -1405,22 +1405,22 @@ sprint-planning: required (after stories)
 
 | PRD Requirement | Architecture Component | Story Coverage |
 |-----------------|----------------------|----------------|
-| **Phase 1: Year view launch** | WinUI 3 CalendarView, MVVM | ❓ Epic 3 (expected) |
-| **Phase 1: Pull from GCal** | GoogleCalendarService, OAuth 2.0 | ❓ Epic 2 (expected) |
-| **Phase 1: Sync status (green/grey)** | DateState entity, UI indicators | ❓ Epic 2 (expected) |
-| **Phase 1: Save/Export** | SaveRestoreService, SQLite | ❓ Epic 8 (expected) |
-| **Phase 1: Month/Week/Day views** | CalendarView, ViewModels | ❓ Epic 3 (expected) |
-| **Phase 2: Event editing** | EventViewModel, auto-save | ❓ Epic 6 (expected) |
-| **Phase 2: Event creation** | EventViewModel, drag-to-create | ❓ Epic 6 (expected) |
-| **Phase 2: Visual states** | UI state management | ❓ Epic 6 (expected) |
-| **Phase 2: Push to GCal** | PublishManager, batch ops | ❓ Epic 6 (expected) |
-| **Phase 3: Toggl integration** | TogglService, 8/15 rounding | ❓ Epic 4, 5 (expected) |
-| **Phase 3: Call logs** | CallLogCsvParser | ❓ Epic 4 (expected) |
-| **Phase 3: YouTube** | YouTubeTakeoutParser, API | ❓ Epic 4 (expected) |
-| **Phase 3: Outlook** | MicrosoftGraphService | ❓ Epic 4 (expected) |
-| **Phase 3: Coalescing** | CoalescingService, algorithms | ❓ Epic 5 (expected) |
-| **Phase 3: Hover system** | Progressive disclosure UI | ❓ Epic 6 or 9 (expected) |
-| **Phase 3: Weekly status** | WeeklyStatusService, Excel sync | ❓ Epic 7 (expected) |
+| **Tier 1: Year view launch** | WinUI 3 CalendarView, MVVM | ❓ Epic 3 (expected) |
+| **Tier 1: Pull from GCal** | GoogleCalendarService, OAuth 2.0 | ❓ Epic 2 (expected) |
+| **Tier 1: Sync status (green/grey)** | DateState entity, UI indicators | ❓ Epic 2 (expected) |
+| **Tier 1: Save/Export** | SaveRestoreService, SQLite | ❓ Epic 8 (expected) |
+| **Tier 1: Month/Week/Day views** | CalendarView, ViewModels | ❓ Epic 3 (expected) |
+| **Tier 2: Event editing** | EventViewModel, auto-save | ❓ Epic 6 (expected) |
+| **Tier 2: Event creation** | EventViewModel, drag-to-create | ❓ Epic 6 (expected) |
+| **Tier 2: Visual states** | UI state management | ❓ Epic 6 (expected) |
+| **Tier 2: Push to GCal** | PublishManager, batch ops | ❓ Epic 6 (expected) |
+| **Tier 3: Toggl integration** | TogglService, 8/15 rounding | ❓ Epic 4, 5 (expected) |
+| **Tier 3: Call logs** | CallLogCsvParser | ❓ Epic 4 (expected) |
+| **Tier 3: YouTube** | YouTubeTakeoutParser, API | ❓ Epic 4 (expected) |
+| **Tier 3: Outlook** | MicrosoftGraphService | ❓ Epic 4 (expected) |
+| **Tier 3: Coalescing** | CoalescingService, algorithms | ❓ Epic 5 (expected) |
+| **Tier 3: Hover system** | Progressive disclosure UI | ❓ Epic 6 or 9 (expected) |
+| **Tier 3: Weekly status** | WeeklyStatusService, Excel sync | ❓ Epic 7 (expected) |
 
 **UX Components → Architecture → Stories Coverage**
 
@@ -1469,7 +1469,7 @@ sprint-planning: required (after stories)
 
 **Mitigation Strategy:**
 1. **Phase Tagging:** Ensure all stories have explicit `phase: 1|2|3` tags
-2. **Epic Review:** Validate Epics 1-3 contain ONLY Phase 1 features (no editing, no data sources)
+2. **Epic Review:** Validate Epics 1-3 contain ONLY Tier 1 features (no editing, no data sources)
 3. **Scope Enforcement:** Add acceptance criteria that explicitly exclude out-of-phase features
 4. **Story Template:** Include phase boundary checklist in story template
 
@@ -1507,7 +1507,7 @@ sprint-planning: required (after stories)
 1. **Performance Stories:** Add performance benchmarking stories to Epic 3 (calendar rendering) and Epic 6 (editing)
 2. **Measurable Criteria:** Define acceptance criteria: "0-100ms hover", "0-lag editing", "60 FPS animations"
 3. **Profiling Tools:** Include performance profiling in development workflow
-4. **Early Validation:** Validate performance in Phase 1 before adding Phase 2 complexity
+4. **Early Validation:** Validate performance in Tier 1 before adding Tier 2 complexity
 
 **Risk Reduced:** MEDIUM → LOW (with explicit performance stories and acceptance criteria)
 
@@ -1542,7 +1542,7 @@ sprint-planning: required (after stories)
 **Mitigation Strategy:**
 1. **ETags Support:** Use Google Calendar ETags for conflict detection (architecture mentions)
 2. **Version History:** Leverage GcalEventVersion entity for rollback capability
-3. **Conflict Resolution UI:** Design conflict resolution dialog for Phase 2 (if needed)
+3. **Conflict Resolution UI:** Design conflict resolution dialog for Tier 2 (if needed)
 4. **Local Wins:** Default to local changes winning for personal use case
 
 **Risk Already Mitigated:** Architecture includes version history and ETag support

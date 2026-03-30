@@ -14,9 +14,9 @@ Google Calendar Management transforms retroactive life tracking from tedious cho
 **Platform:** Windows desktop application (WinUI 3, .NET 9) with local-first SQLite architecture built for decades of use.
 
 **Three-Phase Implementation:**
-- **Phase 1:** Basic UI + Pull from GCal (read-only viewing and backup)
-- **Phase 2:** Editing + Push to GCal (full manual calendar management)
-- **Phase 3:** Data sources (automation to ease backfilling)
+- **Tier 1:** Basic UI + Pull from GCal (read-only viewing and backup)
+- **Tier 2:** Editing + Push to GCal (full manual calendar management)
+- **Tier 3:** Data sources (automation to ease backfilling)
 
 ---
 
@@ -83,15 +83,15 @@ Google Calendar Management transforms retroactive life tracking from tedious cho
 - **Date sync status:** Green = synced with GCal, Grey = not synced
 
 **6. Incremental Value Delivery**
-- **Phase 1:** Immediately usable for viewing existing calendar and creating backups
-- **Phase 2:** Replaces manual Google Calendar editing entirely
-- **Phase 3:** Adds automation to dramatically ease backfilling
+- **Tier 1:** Immediately usable for viewing existing calendar and creating backups
+- **Tier 2:** Replaces manual Google Calendar editing entirely
+- **Tier 3:** Adds automation to dramatically ease backfilling
 - **Use the app while building it:** Each phase provides real utility
 
 **7. Three-Phase Implementation Model**
-- **Phase 1:** Basic UI & Pull from GCal (read-only, year view launch, green/grey sync status)
-- **Phase 2:** Editing & Push to GCal (event editing/creation, push, translucent pending, red outline)
-- **Phase 3:** Data Sources for Easier Editing (Toggl, Calls, YouTube, Outlook, coalescing, hover, day naming)
+- **Tier 1:** Basic UI & Pull from GCal (read-only, year view launch, green/grey sync status)
+- **Tier 2:** Editing & Push to GCal (event editing/creation, push, translucent pending, red outline)
+- **Tier 3:** Data Sources for Easier Editing (Toggl, Calls, YouTube, Outlook, coalescing, hover, day naming)
 
 ### 2.2 Defining Experience - The Core Interaction
 
@@ -106,11 +106,11 @@ Review and manage calendar events with instant responsiveness and complete conte
 - Pushing changes to Google Calendar (one-click with confirmation)
 
 **Most critical interaction to get right:**
-**Phase 1:** View calendar → select date ranges → pull from GCal → see sync status
-**Phase 2:** Click event → instant detail panel → edit fields → auto-save → push to GCal
-**Phase 3:** Hover event → data source timeline appears → click to edit → approve candidates
+**Tier 1:** View calendar → select date ranges → pull from GCal → see sync status
+**Tier 2:** Click event → instant detail panel → edit fields → auto-save → push to GCal
+**Tier 3:** Hover event → data source timeline appears → click to edit → approve candidates
 
-**The Special Moment (Phase 3):**
+**The Special Moment (Tier 3):**
 When hovering over an event, the data source timeline appears showing exactly what you were doing during that time - Toggl entries, YouTube videos, call logs, all time-aligned. This transforms "What was I doing?" into instant, confident recall: "Oh right, I was watching those Rust videos while on that phone call."
 
 ---
@@ -543,7 +543,7 @@ The calendar uses a custom color taxonomy representing mental states, not just a
 - **Technology Stack:** [_technology-stack.md](./_technology-stack.md)
 - **Database Schemas:** [_database-schemas.md](./_database-schemas.md)
 - **Key Decisions:** [_key-decisions.md](./_key-decisions.md)
-- **Phase 1 Requirements:** [_phase-1-requirements.md](./_phase-1-requirements.md)
+- **Tier 1 Requirements:** [tier-1-requirements.md](./tier-1-requirements.md)
 
 ### Design Reference
 
@@ -573,7 +573,7 @@ The calendar uses a custom color taxonomy representing mental states, not just a
 
 **Use while building:** Tier 1 provides immediate utility (backup existing calendar). Tier 2 replaces manual GCal editing. Tier 3 adds automation.
 
-**Risk mitigation:** Prove technical sync (Phase 1) before adding experiential backfill complexity (Phase 2).
+**Risk mitigation:** Prove technical sync (Tier 1) before adding experiential backfill complexity (Tier 2).
 
 **Incremental value:** Each tier delivers usability, not just partial features.
 

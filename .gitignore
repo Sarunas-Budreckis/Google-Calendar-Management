@@ -55,6 +55,11 @@ Package.StoreAssociation.xml
 *.msixbundle
 *.msixupload
 
+## Secrets and credentials (NEVER commit these)
+client_secret.json
+**/credentials/client_secret.json
+*.client_secret.json
+
 ## Data directory (local SQLite database)
 data/
 *.db

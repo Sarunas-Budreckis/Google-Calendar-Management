@@ -2,7 +2,7 @@
 # project: Google Calendar Management
 # project_key: Google Calendar Management
 # tracking_system: file-system
-# story_location: {project-root}/docs/stories
+# story_location: {project-root}/docs/epic-{N}/stories  (update N per active epic)
 
 # STATUS DEFINITIONS:
 # ==================
@@ -33,20 +33,20 @@ generated: 2026-01-30
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
-story_location: "{project-root}/docs/stories"
+story_location: "{project-root}/docs/epic-2/stories"
 
 development_status:
   epic-1: contexted
   1-1-create-net-9-winui-3-project-structure: done
-  1-2-configure-sqlite-database-with-entity-framework-core: ready-for-dev
-  1-3-implement-core-database-schema-phase-1-tables: ready-for-dev
-  1-4-implement-automatic-database-versioning-and-migration-system: review
-  1-5-set-up-development-environment-and-deployment-pipeline: ready-for-dev
-  1-6-implement-application-logging-and-error-handling-infrastructure: backlog
-  epic-1-retrospective: optional
+  1-2-configure-sqlite-database-with-entity-framework-core: done
+  1-3-implement-core-database-schema-tier-1-tables: done
+  1-4-implement-automatic-database-versioning-and-migration-system: done
+  1-5-set-up-development-environment-and-deployment-pipeline: done
+  1-6-implement-application-logging-and-error-handling-infrastructure: done
+  epic-1-retrospective: completed
 
-  epic-2: backlog
-  2-1-implement-google-calendar-oauth-2-0-authentication: backlog
+  epic-2: contexted
+  2-1-implement-google-calendar-oauth-2-0-authentication: ready-for-dev
   2-2-fetch-google-calendar-events-and-store-locally: backlog
   2-3-implement-version-history-on-calendar-sync: backlog
   2-4-display-sync-status-indicators-green-grey-per-date: backlog

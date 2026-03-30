@@ -1,4 +1,4 @@
-# Phase 1 Requirements - Basic UI & Pull from GCal (Read-Only)
+# Tier 1 Requirements - Basic UI & Pull from GCal (Read-Only)
 
 **Project:** Google Calendar Management
 **Date:** 2026-01-30
@@ -12,13 +12,13 @@
 
 **Core Question:** "Is my local system in sync with Google Calendar?"
 
-**Phase 1 is strictly read-only** - no editing, no event creation, no push to GCal, no data sources.
+**Tier 1 is strictly read-only** - no editing, no event creation, no push to GCal, no data sources.
 
 ---
 
 ## Scope
 
-### What's in Phase 1
+### What's in Tier 1
 
 **Calendar Views:**
 - **Year View** (Launch View) - App opens to year view showing months/days for date selection
@@ -45,7 +45,7 @@
 - Grey dates - Not yet synced
 - Last synced timestamp per date range
 
-### What's NOT in Phase 1
+### What's NOT in Tier 1
 
 ❌ No event editing
 ❌ No event creation
@@ -110,16 +110,16 @@
 
 ## Use While Building
 
-**Phase 1 Value:**
+**Tier 1 Value:**
 - View existing calendar offline
 - Create reliable backups
 - Select specific date ranges for sync
 - Have confidence in data safety net
 
-**Next Phase:** After Phase 1 is stable, begin Phase 2 (Editing & Push to GCal) to enable full manual calendar management.
+**Next Phase:** After Tier 1 is stable, begin Tier 2 (Editing & Push to GCal) to enable full manual calendar management.
 
 ---
 
 **Document Version:** 1.0
 **Last Updated:** 2026-01-30
-**Next Review:** After Phase 1 MVP completion, before starting Phase 2
+**Next Review:** After Tier 1 MVP completion, before starting Tier 2

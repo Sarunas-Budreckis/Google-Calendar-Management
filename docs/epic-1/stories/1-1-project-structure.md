@@ -157,7 +157,7 @@ GoogleCalendarManagement/
 ### References
 
 **Source Documents:**
-- [Epic 1: Foundation & Project Setup](../epics.md#epic-1-foundation--project-setup) - Story 1.1 definition
+- [Epic 1: Foundation & Project Setup](../../epics.md#epic-1-foundation--project-setup) - Story 1.1 definition
 - [Architecture Document](../architecture.md#project-initialization) - Project initialization guidance
 - [PRD](../PRD.md#project-classification) - Desktop application classification
 - [Architecture: Technology Stack](../architecture.md#technology-stack-details) - .NET 9 and WinUI 3 version requirements
@@ -166,7 +166,7 @@ GoogleCalendarManagement/
 
 **Specific Technical Mandates:**
 - **NFR-M1 (Code Quality):** Dependency injection for testability - [PRD §8 Non-Functional Requirements](../PRD.md#8-non-functional-requirements)
-- **NFR-M2 (Testability):** Test project created in Story 1.1 - [Epics: Testing Framework](../epics.md#testing-framework--strategy)
+- **NFR-M2 (Testability):** Test project created in Story 1.1 - [Epics: Testing Framework](../../epics.md#testing-framework--strategy)
 - **FR-8.1 (Local Storage):** Windows desktop app with local data - [PRD §4.8 Data & Configuration](../PRD.md#48-data--configuration)
 
 **Prerequisites:**

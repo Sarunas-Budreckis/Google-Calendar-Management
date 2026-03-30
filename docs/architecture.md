@@ -1122,8 +1122,8 @@ var token = await _configService.GetDecryptedAsync("Toggl:ApiToken");
 
 **Database Encryption (Optional):**
 ```csharp
-// SQLite supports encryption via SQLCipher (Phase 2+ enhancement)
-// Phase 1: File system permissions only (Windows user account protection)
+// SQLite supports encryption via SQLCipher (Tier 2+ enhancement)
+// Tier 1: File system permissions only (Windows user account protection)
 ```
 
 ### Authentication Flows
@@ -1267,7 +1267,7 @@ public async Task LoadEventsAsync()
 ```csharp
 // Load visible month only
 // Fetch adjacent months on demand when user navigates
-// Virtualize long lists (if event list view added in Phase 2+)
+// Virtualize long lists (if event list view added in Tier 2+)
 ```
 
 **5. Background Processing:**
@@ -1322,7 +1322,7 @@ C:\Program Files\GoogleCalendarManagement\
 ```
 
 **Updates:**
-- Phase 1: Manual installation of new versions
+- Tier 1: Manual installation of new versions
 - Database migrations run automatically on app launch
 - Backwards-compatible database schema
 - Automatic backup before migrations
@@ -1460,7 +1460,7 @@ dotnet publish -c Release -r win-x64 --self-contained -o ./publish
 - Perfect CalendarView control for our use case
 - Extensible architecture (data layer can support future web/mobile UIs)
 
-**Trade-offs:** Windows-only for Phase 1 (acceptable for single-user personal app)
+**Trade-offs:** Windows-only for Tier 1 (acceptable for single-user personal app)
 
 ---
 
@@ -1494,7 +1494,7 @@ dotnet publish -c Release -r win-x64 --self-contained -o ./publish
 - Fast performance (no network latency)
 - Independent from platform changes
 
-**Trade-offs:** No automatic multi-device sync (Phase 2+ enhancement)
+**Trade-offs:** No automatic multi-device sync (Tier 2+ enhancement)
 
 ---
 
@@ -1594,11 +1594,11 @@ dotnet publish -c Release -r win-x64 --self-contained -o ./publish
 - **YouTube Data API does NOT provide watch history access** (deprecated 2016)
 - Google Takeout provides historical data (years back)
 - YouTube Data API provides video metadata (duration, channel, title)
-- Chrome extension deferred to Phase 2+ (not blocking MVP)
+- Chrome extension deferred to Tier 2+ (not blocking MVP)
 
 **Workflow:** User downloads Takeout JSON → App parses video IDs → Batch fetch metadata → Coalesce sessions
 
-**Trade-offs:** Manual download process (acceptable for Phase 1), not real-time (future enhancement)
+**Trade-offs:** Manual download process (acceptable for Tier 1), not real-time (future enhancement)
 
 ---
 
@@ -1659,17 +1659,17 @@ dotnet publish -c Release -r win-x64 --self-contained -o ./publish
 **Alternatives:** Single conflict resolution strategy for all phases, always GoogleWins, always LocalWins
 
 **Rationale:**
-- **Phase 1 (Read-Only Viewer):** User cannot edit, GoogleWins is simplest and correct
-- **Phase 2 (Editing Enabled):** User can edit both locally and in Google Calendar, MergeTimestamp uses recency
-- **Phase 3 (Verification Priority):** User has completed walkthrough approval, verified events are canonical truth
+- **Tier 1 (Read-Only Viewer):** User cannot edit, GoogleWins is simplest and correct
+- **Tier 2 (Editing Enabled):** User can edit both locally and in Google Calendar, MergeTimestamp uses recency
+- **Tier 3 (Verification Priority):** User has completed walkthrough approval, verified events are canonical truth
 
 **Phase Progression:**
 
 | Phase | Strategy | When Applied |
 |-------|----------|--------------|
-| Phase 1 | GoogleWins | Always (user can't edit, Google is source of truth) |
-| Phase 2 | MergeTimestamp | Compare `gcal_updated_at` vs `app_last_modified_at`, newer wins |
-| Phase 3 | LocalWins | Verified events (`app_created=TRUE` + `complete_walkthrough_approval=TRUE`) take precedence |
+| Tier 1 | GoogleWins | Always (user can't edit, Google is source of truth) |
+| Tier 2 | MergeTimestamp | Compare `gcal_updated_at` vs `app_last_modified_at`, newer wins |
+| Tier 3 | LocalWins | Verified events (`app_created=TRUE` + `complete_walkthrough_approval=TRUE`) take precedence |
 
 **Implementation:**
 - All phases use ETags for conflict detection (optimistic concurrency control)
@@ -1677,12 +1677,12 @@ dotnet publish -c Release -r win-x64 --self-contained -o ./publish
 - Version history preserved in `gcal_event_version` regardless of resolution
 
 **Benefits:**
-- Simple logic in Phase 1 (no edge cases)
-- Fair resolution in Phase 2 (respects most recent change)
-- Protects verified data in Phase 3 (user's canonical truth)
+- Simple logic in Tier 1 (no edge cases)
+- Fair resolution in Tier 2 (respects most recent change)
+- Protects verified data in Tier 3 (user's canonical truth)
 - Gradual complexity increase matches feature rollout
 
-**Trade-offs:** Phase 3 requires understanding verification semantics (acceptable for power users)
+**Trade-offs:** Tier 3 requires understanding verification semantics (acceptable for power users)
 
 ---
 
@@ -1723,7 +1723,7 @@ Failure → store error in pending_event, keep for retry
 - Simpler version history tracking
 
 **Trade-offs:**
-- Additional table (acceptable, only 1 extra table in Phase 2)
+- Additional table (acceptable, only 1 extra table in Tier 2)
 - Move operation on publish (fast, single transaction)
 
 ---
@@ -1784,7 +1784,7 @@ Fast lookups even with date range overlaps.
 
 This section documents architectural patterns that evolve across the three development phases.
 
-### Phase 1: Read-Only Viewer (Foundation)
+### Tier 1: Read-Only Viewer (Foundation)
 
 **Goal:** Local mirror of Google Calendar with save/restore capability
 
@@ -1801,7 +1801,7 @@ This section documents architectural patterns that evolve across the three devel
 
 **1. Sync from Google Calendar:**
 ```csharp
-// Phase 1: Simple one-way sync
+// Tier 1: Simple one-way sync
 async Task SyncFromGoogleCalendar(DateTime startDate, DateTime endDate) {
     var request = _calendarService.Events.List("primary");
     request.TimeMin = startDate;
@@ -1817,7 +1817,7 @@ async Task SyncFromGoogleCalendar(DateTime startDate, DateTime endDate) {
             // New event - insert
             await _db.GcalEvents.AddAsync(MapToEntity(googleEvent));
         } else if (localEvent.GcalEtag != googleEvent.ETag) {
-            // Changed event - Phase 1: GoogleWins
+            // Changed event - Tier 1: GoogleWins
             UpdateFromGoogle(localEvent, googleEvent);
         }
         // else: No change, skip
@@ -1888,20 +1888,20 @@ async Task RestoreFromSaveState(int saveId) {
 
 **3. UI Event Rendering:**
 ```csharp
-// Phase 1: All events opaque (100% opacity)
+// Tier 1: All events opaque (100% opacity)
 // No translucent events (user can't create local edits)
 foreach (var calendarEvent in gcalEvents) {
     var uiEvent = new CalendarEventViewModel {
         Id = calendarEvent.GcalEventId,
         Summary = calendarEvent.Summary,
-        Opacity = 1.0,  // Always 100% in Phase 1
+        Opacity = 1.0,  // Always 100% in Tier 1
         IsSelected = false
     };
     EventList.Add(uiEvent);
 }
 ```
 
-**Phase 1 Constraints:**
+**Tier 1 Constraints:**
 - ❌ No local editing (read-only)
 - ❌ No pending events
 - ❌ No conflict resolution (GoogleWins always)
@@ -1911,7 +1911,7 @@ foreach (var calendarEvent in gcalEvents) {
 
 ---
 
-### Phase 2: Editing & Publishing (Interaction)
+### Tier 2: Editing & Publishing (Interaction)
 
 **Goal:** Full manual calendar management with local edits and push to Google Calendar
 
@@ -2016,7 +2016,7 @@ async Task PublishPendingEvents() {
 
 **3. UI Event Rendering with Opacity:**
 ```csharp
-// Phase 2: Render both gcal_event and pending_event
+// Tier 2: Render both gcal_event and pending_event
 async Task<List<CalendarEventViewModel>> LoadEventsForDate(DateTime date) {
     var events = new List<CalendarEventViewModel>();
 
@@ -2052,7 +2052,7 @@ async Task<List<CalendarEventViewModel>> LoadEventsForDate(DateTime date) {
 
 **4. Conflict Resolution - MergeTimestamp:**
 ```csharp
-// Phase 2: Compare timestamps on sync
+// Tier 2: Compare timestamps on sync
 async Task SyncFromGoogleCalendar(DateTime startDate, DateTime endDate) {
     var events = await _calendarService.Events.List("primary").ExecuteAsync();
 
@@ -2060,7 +2060,7 @@ async Task SyncFromGoogleCalendar(DateTime startDate, DateTime endDate) {
         var localEvent = await _db.GcalEvents.FindAsync(googleEvent.Id);
 
         if (localEvent != null && localEvent.GcalEtag != googleEvent.ETag) {
-            // Conflict detected - Phase 2: MergeTimestamp
+            // Conflict detected - Tier 2: MergeTimestamp
             if (googleEvent.Updated > localEvent.AppLastModifiedAt) {
                 // Google's version is newer - update local
                 UpdateFromGoogle(localEvent, googleEvent);
@@ -2075,7 +2075,7 @@ async Task SyncFromGoogleCalendar(DateTime startDate, DateTime endDate) {
 }
 ```
 
-**Phase 2 New Capabilities:**
+**Tier 2 New Capabilities:**
 - ✅ Create/edit events locally
 - ✅ Translucent display for unpushed events
 - ✅ Push to Google Calendar
@@ -2085,7 +2085,7 @@ async Task SyncFromGoogleCalendar(DateTime startDate, DateTime endDate) {
 
 ---
 
-### Phase 3: Data Sources & Automation (Intelligence)
+### Tier 3: Data Sources & Automation (Intelligence)
 
 **Goal:** Transform backfilling into satisfying ritual with automated data integration
 
@@ -2152,7 +2152,7 @@ async Task ImportTogglData(DateTime startDate, DateTime endDate) {
 
 **2. Conflict Resolution - LocalWins for Verified Events:**
 ```csharp
-// Phase 3: Protect verified events
+// Tier 3: Protect verified events
 async Task SyncFromGoogleCalendar(DateTime startDate, DateTime endDate) {
     var events = await _calendarService.Events.List("primary").ExecuteAsync();
 
@@ -2167,7 +2167,7 @@ async Task SyncFromGoogleCalendar(DateTime startDate, DateTime endDate) {
 
             if (localEvent.AppCreated &&
                 dateState?.CompleteWalkthroughApproval == true) {
-                // Phase 3: LocalWins - verified event
+                // Tier 3: LocalWins - verified event
                 await PushToGoogle(localEvent);
                 LogConflictResolution(localEvent.GcalEventId, "LocalWins");
             } else if (googleEvent.Updated > localEvent.AppLastModifiedAt) {
@@ -2257,8 +2257,8 @@ async Task<bool> IsContiguousSinceStart() {
 }
 ```
 
-**Phase 3 Full Capabilities:**
-- ✅ All Phase 1 & 2 features
+**Tier 3 Full Capabilities:**
+- ✅ All Tier 1 & 2 features
 - ✅ Toggl, YouTube, Call Log imports
 - ✅ Coalescing algorithms
 - ✅ Per-date state tracking
@@ -2289,7 +2289,7 @@ var gcalEvent = new GcalEvent {
 **Benefits:**
 - Simple boolean flag (not complex source classification)
 - Easy to query: "Show me all events I created in the app"
-- Used in Phase 3 conflict resolution (LocalWins for `app_created=TRUE` + verified)
+- Used in Tier 3 conflict resolution (LocalWins for `app_created=TRUE` + verified)
 - Protects user's canonical data from external modifications
 
 **Usage in Conflict Resolution:**

@@ -177,7 +177,7 @@ GoogleCalendarManagement.Tests/
 ### References
 
 **Source Documents:**
-- [Epic 1: Story 1.2 Definition](../epics.md#story-12-configure-sqlite-database-with-entity-framework-core)
+- [Epic 1: Story 1.2 Definition](../../epics.md#story-12-configure-sqlite-database-with-entity-framework-core)
 - [Architecture: Data Layer](../architecture.md#project-structure) — `CalendarDbContext` location
 - [Architecture: Technology Stack](../architecture.md#technology-stack-details) — EF Core 9.0.12 versions
 - [Architecture: Service Registration](../architecture.md#service-registration) — `AddDbContext` pattern

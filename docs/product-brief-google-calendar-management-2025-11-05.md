@@ -270,7 +270,7 @@ Looking at a week or month, the color distribution tells a story:
 - Currently: Often 2+ weeks behind
 
 **Data Source Coverage:**
-- All 4 Phase 1 sources (Toggl, calls, YouTube, Outlook) regularly imported
+- All 4 Tier 1 sources (Toggl, calls, YouTube, Outlook) regularly imported
 - Gaps explicitly tracked and managed
 - No "lost weeks" where data is missing
 
@@ -282,7 +282,7 @@ Looking at a week or month, the color distribution tells a story:
 ### Time Investment Payoff
 
 **Upfront Investment:**
-- Phase 1 development: Acceptable (building for decades)
+- Tier 1 development: Acceptable (building for decades)
 - Learning curve: Worth it for long-term gains
 
 **Ongoing Time Saved:**
@@ -321,7 +321,7 @@ Measured by:
 
 ## MVP Scope
 
-### Core Features (Phase 1)
+### Core Features (Tier 1)
 
 **Data Source Integration:**
 1. **Toggl Track API** - Fetch time entries, filter by duration, coalesce phone activities
@@ -387,29 +387,29 @@ Append to event description: "Published by Google Calendar Management on {dateti
 
 ### Out of Scope for MVP
 
-**Phase 2+ data sources:**
-- Chrome extension for YouTube real-time tracking (Phase 2)
-- Google search history (Phase 3)
-- Spotify listen history (Phase 3)
-- Apple Screen Time (Phase 3)
-- Google Maps timeline (Phase 3)
-- Physical NFC tags (Phase 3)
-- Google Takeout automation (Phase 2)
+**Tier 2+ data sources:**
+- Chrome extension for YouTube real-time tracking (Tier 2)
+- Google search history (Tier 3)
+- Spotify listen history (Tier 3)
+- Apple Screen Time (Tier 3)
+- Google Maps timeline (Tier 3)
+- Physical NFC tags (Tier 3)
+- Google Takeout automation (Tier 2)
 
-**Phase 2+ features:**
-- 24/7 server backend with email reminders (Phase 3)
-- Google AppScripts integration (auto-recolor) (Phase 2)
-- Data analysis dashboard (time budgets, activity breakdowns) (Phase 3)
-- Fuzzy search across all events (Phase 2)
-- Privacy layers (secret events, fake events, encryption) (Phase 3)
-- Custom local UI (alternative to Google Calendar) (Phase 3)
-- Chrome extension / GCal Add-on (Phase 2)
+**Tier 2+ features:**
+- 24/7 server backend with email reminders (Tier 3)
+- Google AppScripts integration (auto-recolor) (Tier 2)
+- Data analysis dashboard (time budgets, activity breakdowns) (Tier 3)
+- Fuzzy search across all events (Tier 2)
+- Privacy layers (secret events, fake events, encryption) (Tier 3)
+- Custom local UI (alternative to Google Calendar) (Tier 3)
+- Chrome extension / GCal Add-on (Tier 2)
 
-**Phase 2+ color system enhancements:**
-- Sub-colors or gradients (Phase 2)
-- Split mental state from activity type (dual tracking) (Phase 3)
-- Automated color suggestions via AI (Phase 3)
-- Color mood tracking independent of activity (Phase 3)
+**Tier 2+ color system enhancements:**
+- Sub-colors or gradients (Tier 2)
+- Split mental state from activity type (dual tracking) (Tier 3)
+- Automated color suggestions via AI (Tier 3)
+- Color mood tracking independent of activity (Tier 3)
 
 ### MVP Success Criteria
 
@@ -435,7 +435,7 @@ Append to event description: "Published by Google Calendar Management on {dateti
 
 ## Future Vision & Extensibility
 
-### Phase 2+ Data Sources
+### Tier 2+ Data Sources
 
 Designed for easy addition of new sources:
 - Chrome extension for YouTube (real-time tracking)
@@ -553,7 +553,7 @@ Pure individual autonomy and long-term personal value creation.
 
 ## Timeline
 
-**Phase 1 Development:** Estimated 3-6 months of focused development
+**Tier 1 Development:** Estimated 3-6 months of focused development
 
 **Aggressive timeline** (if full-time):
 - Month 1: Database, EF Core, basic UI, Google Calendar integration
@@ -571,7 +571,7 @@ Pure individual autonomy and long-term personal value creation.
 - Month 3: MVP usable for real backfilling
 
 **Long-term milestones:**
-- Month 6: Phase 1 complete, daily use
+- Month 6: Tier 1 complete, daily use
 - Year 1: Habits formed, data accumulating
 - Year 2+: Pattern insights emerge
 - Decade: Irreplaceable personal artifact
@@ -581,7 +581,7 @@ Pure individual autonomy and long-term personal value creation.
 ## Supporting Materials
 
 **Requirements Documentation:**
-- `docs/_phase-1-requirements.md` - Detailed Phase 1 scope and workflows
+- `docs/tier-1-requirements.md` - Detailed Tier 1 scope and workflows
 - `docs/_database-schemas.md` - Complete SQLite schema (14 tables)
 - `docs/_technology-stack.md` - Research on .NET 9, WinUI 3, all APIs
 - `docs/_key-decisions.md` - 18 architectural decisions with rationale

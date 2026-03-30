@@ -2,7 +2,7 @@
 
 **Project:** Google Calendar Management
 **Date:** 2025-11-05
-**Status:** Phase 1 Design Complete
+**Status:** Tier 1 Design Complete
 
 ## Overview
 
@@ -30,8 +30,8 @@ This document captures critical decisions made during the planning and design ph
 - **Cross-platform later** - Can add .NET MAUI or web frontend in future phases
 
 **Trade-offs Accepted:**
-- ✅ Windows-only for Phase 1 (acceptable for primary user)
-- ✅ Slightly steeper learning curve than WPF (worth it for Phase 2+)
+- ✅ Windows-only for Tier 1 (acceptable for primary user)
+- ✅ Slightly steeper learning curve than WPF (worth it for Tier 2+)
 
 ---
 
@@ -186,7 +186,7 @@ published_to_gcal = TRUE
 
 ## 7. YouTube Watch History
 
-### Decision: Google Takeout + YouTube API for Phase 1, Chrome extension investigation for Phase 2+
+### Decision: Google Takeout + YouTube API for Tier 1, Chrome extension investigation for Tier 2+
 
 **Alternatives Considered:**
 - Build Chrome extension immediately
@@ -203,25 +203,25 @@ published_to_gcal = TRUE
 - ⚠️ Takeout doesn't include video duration
 - ✅ YouTube Data API provides metadata by video ID
 
-**Phase 1 Solution:**
+**Tier 1 Solution:**
 1. User downloads Takeout manually
 2. App parses JSON for video IDs and watch times
 3. Batch query YouTube API for durations
 4. Cache everything locally
 5. Apply coalescing
 
-**Phase 2 Enhancement:**
+**Tier 2 Enhancement:**
 - Chrome extension for real-time tracking (user already has historical data from Takeout)
 - Investigate existing extensions: "Local YouTube Video History Tracker", "Watchmarker"
 - Or build custom extension with export feature
 
 **Benefits:**
 - ✅ Access to historical data (years back)
-- ✅ No dependency on extension development for Phase 1
+- ✅ No dependency on extension development for Tier 1
 - ✅ Complete metadata (duration, channel, title)
 
 **Trade-offs Accepted:**
-- ✅ Manual download process (acceptable for Phase 1)
+- ✅ Manual download process (acceptable for Tier 1)
 - ✅ Not real-time (future enhancement)
 
 ---
@@ -667,13 +667,13 @@ Every time app modifies event, update the timestamp.
 
 **Benefits:**
 - ✅ Future-proof
-- ✅ Easy to add Phase 2+ features
+- ✅ Easy to add Tier 2+ features
 - ✅ Testable (mock data sources)
 - ✅ Maintainable
 
 **Trade-offs Accepted:**
 - ✅ More initial architecture (worth it for long-term)
-- ✅ May over-engineer for Phase 1 (acceptable, we know Phase 2 and 3 are coming)
+- ✅ May over-engineer for Tier 1 (acceptable, we know Tier 2 and 3 are coming)
 
 ---
 
@@ -698,7 +698,7 @@ Every time app modifies event, update the timestamp.
 | API Caching | Aggressive, user-refresh | Fast, offline-capable, user control |
 | Filtering | Store all + flag | Never lose data, flexible |
 | Error Handling | Graceful + retry | Resilient, user-friendly |
-| Extensibility | Design for future | Phase 2+ features anticipated |
+| Extensibility | Design for future | Tier 2+ features anticipated |
 
 ---
 

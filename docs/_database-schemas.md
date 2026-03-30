@@ -18,13 +18,13 @@ This document contains the complete database schema design for the Google Calend
 4. **ISO 8601 compliance** - Week calculations using standard
 5. **ETags for sync** - Google Calendar's version identifiers
 6. **Local caching** - All API data cached locally for performance
-7. **Phase-gated migrations** - Tables introduced only when needed (Phase 1: 7 tables, Phase 2: +1, Phase 3: +7)
+7. **Phase-gated migrations** - Tables introduced only when needed (Tier 1: 7 tables, Tier 2: +1, Tier 3: +7)
 
 ---
 
 ## Phase-Gated Schema Overview
 
-### Phase 1: Read-Only Viewer (7 Tables)
+### Tier 1: Read-Only Viewer (7 Tables)
 **Goal:** Local mirror of Google Calendar with save/restore
 
 - `gcal_event` - Synced Google Calendar events
@@ -35,12 +35,12 @@ This document contains the complete database schema design for the Google Calend
 - `data_source_refresh` - Sync tracking (also provides green/grey indicators)
 - `system_state` - App-level state
 
-### Phase 2: Editing & Publishing (+1 Table = 8 Total)
+### Tier 2: Editing & Publishing (+1 Table = 8 Total)
 **Goal:** Full manual calendar management
 
 - **NEW:** `pending_event` - Unpushed local edits
 
-### Phase 3: Data Sources & Automation (+7 Tables = 15 Total)
+### Tier 3: Data Sources & Automation (+7 Tables = 15 Total)
 **Goal:** Transform backfilling into satisfying ritual
 
 - **NEW:** `toggl_data`, `youtube_data`, `call_log_data` - Source data
@@ -53,7 +53,7 @@ This document contains the complete database schema design for the Google Calend
 
 ## Core Tables
 
-### 1. date_state (Phase 3)
+### 1. date_state (Tier 3)
 
 Tracks the publication and approval state for each date.
 
@@ -129,7 +129,7 @@ CREATE TABLE tracked_gap (
 
 ---
 
-### 3. gcal_event (Phase 1)
+### 3. gcal_event (Tier 1)
 
 Google Calendar events cache with metadata.
 
@@ -149,10 +149,10 @@ CREATE TABLE gcal_event (
     gcal_updated_at DATETIME,
     is_deleted BOOLEAN DEFAULT FALSE,
 
-    -- Ownership tracking (Phase 1+)
+    -- Ownership tracking (Tier 1+)
     app_created BOOLEAN DEFAULT FALSE,  -- TRUE = created by this app, FALSE = external/Google
 
-    -- Source tracking (Phase 3+)
+    -- Source tracking (Tier 3+)
     source_system TEXT,  -- 'toggl', 'youtube', 'call_log', 'manual', 'generated', NULL
     app_published BOOLEAN DEFAULT FALSE,  -- TRUE if app published to GCal
     app_published_at DATETIME,
@@ -179,7 +179,7 @@ CREATE INDEX idx_gcal_app_created ON gcal_event(app_created);
 **Key Fields:**
 - `app_created` - TRUE if event was created by this app, FALSE if external (from Google or other apps)
 - `gcal_etag` - Google's version identifier (used for conflict detection, not rollback)
-- `source_system` - (Phase 3) Tracks which data source generated the event
+- `source_system` - (Tier 3) Tracks which data source generated the event
 - `app_published` - TRUE if this app published the event to Google Calendar
 - `recurring_event_id` - Links instances of recurring events to parent
 
@@ -191,15 +191,15 @@ Published by Google Calendar Management on {datetime}
 Updated every time the app modifies the event.
 
 **Conflict Resolution:**
-- **Phase 1:** GoogleWins - Remote changes always override local on conflict
-- **Phase 2:** MergeTimestamp - Use `gcal_updated_at` to determine winner
-- **Phase 3:** LocalWins - App-created events with verification flag take precedence
+- **Tier 1:** GoogleWins - Remote changes always override local on conflict
+- **Tier 2:** MergeTimestamp - Use `gcal_updated_at` to determine winner
+- **Tier 3:** LocalWins - App-created events with verification flag take precedence
 
 **Important:** Google Calendar API does NOT provide version history or rollback. We maintain our own history in `gcal_event_version`.
 
 ---
 
-### 3B. pending_event (Phase 2)
+### 3B. pending_event (Tier 2)
 
 Unpushed local edits awaiting publication to Google Calendar.
 
@@ -217,7 +217,7 @@ CREATE TABLE pending_event (
     -- Ownership tracking
     app_created BOOLEAN DEFAULT TRUE,  -- Always TRUE for pending events
 
-    -- Source tracking (Phase 3+)
+    -- Source tracking (Tier 3+)
     source_system TEXT,  -- 'manual', 'generated', NULL
 
     -- Publishing workflow
@@ -666,7 +666,7 @@ Auto-update Microsoft cloud Excel sheet via Microsoft Graph API when week state 
 
 ---
 
-### 14. data_source_refresh (Phase 1)
+### 14. data_source_refresh (Tier 1)
 
 Tracks API cache refresh operations and provides sync status indicators.
 
@@ -693,7 +693,7 @@ CREATE INDEX idx_refresh_date ON data_source_refresh(source_name, start_date, en
 - System tracks last refresh to avoid unnecessary API calls
 - Error tracking for failed refreshes
 
-**Sync Status Indicators (Phase 1):**
+**Sync Status Indicators (Tier 1):**
 - **Green indicator:** Record exists with `success = TRUE` and `last_refreshed_at` within acceptable timeframe
 - **Grey indicator:** No record exists OR last refresh failed OR last refresh too old
 
@@ -728,11 +728,11 @@ When syncing from Google Calendar to local SQLite, conflicts can occur if the sa
 
 | Phase | Strategy | Description |
 |-------|----------|-------------|
-| **Phase 1** | **GoogleWins** | Remote changes always override local. Simple read-only viewer with save/restore. |
-| **Phase 2** | **MergeTimestamp** | Use `gcal_updated_at` to determine winner. Most recent modification wins. |
-| **Phase 3** | **LocalWins** | App-created events with verification flag take precedence over external changes. |
+| **Tier 1** | **GoogleWins** | Remote changes always override local. Simple read-only viewer with save/restore. |
+| **Tier 2** | **MergeTimestamp** | Use `gcal_updated_at` to determine winner. Most recent modification wins. |
+| **Tier 3** | **LocalWins** | App-created events with verification flag take precedence over external changes. |
 
-### Phase 1: GoogleWins (Read-Only)
+### Tier 1: GoogleWins (Read-Only)
 
 **Conflict Detection:**
 ```csharp
@@ -740,18 +740,18 @@ When syncing from Google Calendar to local SQLite, conflicts can occur if the sa
 var localEvent = await db.GcalEvents.FindAsync(googleEvent.Id);
 if (localEvent != null && localEvent.GcalEtag != googleEvent.Etag) {
     // Conflict detected: ETags don't match
-    // Phase 1 Resolution: Always use Google's version
+    // Tier 1 Resolution: Always use Google's version
     UpdateLocalFromGoogle(localEvent, googleEvent);
 }
 ```
 
 **Rationale:**
-- User cannot edit events in Phase 1
+- User cannot edit events in Tier 1
 - All local changes come from save/restore operations
 - Google Calendar is source of truth
 - Simplest possible sync logic
 
-### Phase 2: MergeTimestamp (Editing Enabled)
+### Tier 2: MergeTimestamp (Editing Enabled)
 
 **Conflict Detection:**
 ```csharp
@@ -760,7 +760,7 @@ var localEvent = await db.GcalEvents.FindAsync(googleEvent.Id);
 if (localEvent != null && localEvent.GcalEtag != googleEvent.Etag) {
     // Conflict detected: ETags don't match
 
-    // Phase 2 Resolution: Compare timestamps
+    // Tier 2 Resolution: Compare timestamps
     if (googleEvent.UpdatedAt > localEvent.AppLastModifiedAt) {
         // Google's version is newer
         UpdateLocalFromGoogle(localEvent, googleEvent);
@@ -777,7 +777,7 @@ if (localEvent != null && localEvent.GcalEtag != googleEvent.Etag) {
 - Use timestamps to determine most recent change
 - Still respects external modifications from other apps
 
-### Phase 3: LocalWins (Verification Priority)
+### Tier 3: LocalWins (Verification Priority)
 
 **Conflict Detection:**
 ```csharp
@@ -786,7 +786,7 @@ var localEvent = await db.GcalEvents.FindAsync(googleEvent.Id);
 if (localEvent != null && localEvent.GcalEtag != googleEvent.Etag) {
     // Conflict detected: ETags don't match
 
-    // Phase 3 Resolution: Check verification status
+    // Tier 3 Resolution: Check verification status
     var dateState = await db.DateStates.FindAsync(localEvent.StartDateTime.Date);
 
     if (localEvent.AppCreated && dateState?.CompleteWalkthroughApproval == true) {
@@ -843,7 +843,7 @@ try {
 
 ### Migration Strategy Across Phases
 
-**Phase 1 → Phase 2 Migration:**
+**Tier 1 → Tier 2 Migration:**
 ```sql
 -- Add pending_event table
 CREATE TABLE pending_event (
@@ -854,7 +854,7 @@ CREATE TABLE pending_event (
 -- app_created already exists (defaults to FALSE for synced events)
 ```
 
-**Phase 2 → Phase 3 Migration:**
+**Tier 2 → Tier 3 Migration:**
 ```sql
 -- Add data source tables
 CREATE TABLE toggl_data (...);
@@ -931,7 +931,7 @@ Result: 14:30-15:15 (rounded event)
 **Entity Framework Core Migrations:**
 
 1. Initial migration creates all tables
-2. Phase 2/3 schema changes via EF Core migrations
+2. Tier 2/3 schema changes via EF Core migrations
 3. Seed data for `config` table with default values
 4. ISO 8601 week calculation helpers in code, not database
 
@@ -985,4 +985,4 @@ Future phase will add:
 
 **Document Version:** 1.0
 **Last Updated:** 2025-11-05
-**Status:** Phase 1 Complete - Design Ready for Implementation
+**Status:** Tier 1 Complete - Design Ready for Implementation

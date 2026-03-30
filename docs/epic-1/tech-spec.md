@@ -11,7 +11,7 @@ Status: Draft
 
 Epic 1 establishes the technical foundation for Google Calendar Management, a Windows desktop application transforming retroactive life tracking from a tedious chore into a fun, nostalgic ritual. This epic delivers the complete infrastructure enabling all subsequent development: .NET 9 + WinUI 3 project structure, SQLite database with Entity Framework Core, automatic schema versioning, and robust logging/error handling.
 
-**Epic Value:** Without this foundation, no features can be implemented. Epic 1 creates the technical bedrock that all 3 phases depend upon—from Phase 1's read-only viewer through Phase 3's intelligent automation.
+**Epic Value:** Without this foundation, no features can be implemented. Epic 1 creates the technical bedrock that all 3 phases depend upon—from Tier 1's read-only viewer through Tier 3's intelligent automation.
 
 **Context from PRD:** The PRD defines a local-first Windows desktop application designed for decades of personal use, requiring bulletproof data integrity, seamless migrations, and extensible architecture. Epic 1 translates these requirements into working infrastructure that enables the product vision.
 
@@ -31,8 +31,8 @@ Epic 1 establishes the technical foundation for Google Calendar Management, a Wi
 - Database file in user AppData folder with WAL mode for crash recovery
 - Migrations system enabled
 
-**Story 1.3: Core Database Schema (Phase 1 Tables)**
-- **7 Phase 1 tables:** gcal_event, gcal_event_version, save_state, audit_log, config, data_source_refresh, system_state
+**Story 1.3: Core Database Schema (Tier 1 Tables)**
+- **7 Tier 1 tables:** gcal_event, gcal_event_version, save_state, audit_log, config, data_source_refresh, system_state
 - Complete indexes and foreign key constraints
 - Version history tracking for rollback capability
 - Repository pattern for data access
@@ -59,7 +59,7 @@ Epic 1 establishes the technical foundation for Google Calendar Management, a Wi
 
 - **UI implementation** (Epic 3)
 - **Google Calendar API integration** (Epic 2)
-- **Phase 2/3 database tables** (toggl_data, youtube_data, call_log_data, etc.) - added in later epics
+- **Tier 2/3 database tables** (toggl_data, youtube_data, call_log_data, etc.) - added in later epics
 - **Data source integrations** (Epic 4)
 - **User documentation** - developer-focused only in Epic 1
 
@@ -86,7 +86,7 @@ Epic 1 implements the complete architectural foundation defined in [architecture
 - Testing: xUnit 2.x, Moq 4.x, FluentAssertions 6.x
 
 **Database Architecture Alignment:**
-- Implements Phase 1 schema: 7 core tables as defined in [_database-schemas.md](../_database-schemas.md)
+- Implements Tier 1 schema: 7 core tables as defined in [_database-schemas.md](../_database-schemas.md)
 - Singular table naming (gcal_event not gcal_events) per [_key-decisions.md](../_key-decisions.md) §3
 - Repository pattern with EF Core as specified in architecture
 - SQLite with WAL mode for crash recovery (NFR-D1)
@@ -157,7 +157,7 @@ services.AddHostedService<MigrationService>(); // Runs on startup
 
 ### Data Models and Contracts
 
-**Phase 1 Database Schema (Story 1.3):**
+**Tier 1 Database Schema (Story 1.3):**
 
 Epic 1 implements 7 core tables as defined in [_database-schemas.md](../_database-schemas.md):
 
@@ -207,7 +207,7 @@ public class GcalEvent
     [Column("app_created")]
     public bool AppCreated { get; set; } = false;
 
-    // Source tracking (Phase 3)
+    // Source tracking (Tier 3)
     [Column("source_system")]
     public string SourceSystem { get; set; }
 
@@ -570,7 +570,7 @@ public class CalendarDbContext : DbContext
     {
     }
 
-    // Phase 1 DbSets
+    // Tier 1 DbSets
     public DbSet<GcalEvent> GcalEvents { get; set; }
     public DbSet<GcalEventVersion> GcalEventVersions { get; set; }
     public DbSet<SaveState> SaveStates { get; set; }
@@ -932,8 +932,8 @@ Check if Critical Error
 - Backup files stored locally with same permissions (Story 1.4)
 
 **NFR-S4: Local Database** (from PRD)
-- SQLite database file encrypted: OPTIONAL in Phase 1 (user preference for future)
-- No plain-text passwords stored (Phase 1 has no auth - Epic 2 handles OAuth)
+- SQLite database file encrypted: OPTIONAL in Tier 1 (user preference for future)
+- No plain-text passwords stored (Tier 1 has no auth - Epic 2 handles OAuth)
 - Audit log captures all data modifications (Story 1.3, 1.6)
 - Automatic backups before destructive operations (Story 1.4)
 
@@ -953,7 +953,7 @@ var dirInfo = Directory.CreateDirectory(Path.GetDirectoryName(dbPath));
 **Security Considerations for Future Epics:**
 - Epic 2 will add Windows DPAPI for OAuth token encryption (NFR-S1)
 - Epic 4 will add API key storage with DPAPI encryption
-- Database encryption can be added in Phase 2+ if user requests
+- Database encryption can be added in Tier 2+ if user requests
 
 ### Reliability/Availability
 
@@ -965,7 +965,7 @@ var dirInfo = Directory.CreateDirectory(Path.GetDirectoryName(dbPath));
   ```
 - Auto-save before all destructive operations (Story 1.4 - migration backups)
 - Complete version history for Google Calendar events (Story 1.3 - gcal_event_version table)
-- Never delete source data - mark inactive instead (implemented in Phase 3 tables)
+- Never delete source data - mark inactive instead (implemented in Tier 3 tables)
 
 **NFR-D3: Database Integrity** (from PRD, Story 1.3, 1.4)
 - Foreign key constraints enforced in all entity configurations
@@ -1216,7 +1216,7 @@ Epic 1 establishes foundation only - no external API calls:
 
 ### Database Schema Dependencies
 
-**Phase 1 Tables (Story 1.3):**
+**Tier 1 Tables (Story 1.3):**
 All 7 tables created in initial migration with proper foreign key constraints:
 
 ```sql
@@ -1225,13 +1225,13 @@ ALTER TABLE gcal_event_version
   ADD CONSTRAINT FK_gcal_event_version_gcal_event
   FOREIGN KEY (gcal_event_id) REFERENCES gcal_event(gcal_event_id);
 
--- Future: date_state references gcal_event for named events (Phase 3)
+-- Future: date_state references gcal_event for named events (Tier 3)
 ```
 
 **No Breaking Changes Expected:**
-- Phase 1 schema is foundational and stable
-- Phase 2 adds `pending_event` table (new, no impact on Phase 1)
-- Phase 3 adds 7 new tables (new, no impact on Phase 1/2)
+- Tier 1 schema is foundational and stable
+- Tier 2 adds `pending_event` table (new, no impact on Tier 1)
+- Tier 3 adds 7 new tables (new, no impact on Tier 1/2)
 - Migrations handle all schema evolution
 
 ### Version Compatibility Matrix
@@ -1299,7 +1299,7 @@ ALTER TABLE gcal_event_version
 
 ### AC-1.3: Core Database Schema (Story 1.3)
 
-**AC-1.3.1:** All 7 Phase 1 tables created
+**AC-1.3.1:** All 7 Tier 1 tables created
 - gcal_event
 - gcal_event_version
 - save_state
@@ -1510,7 +1510,7 @@ ALTER TABLE gcal_event_version
 
 | PRD Requirement | Epic 1 Component | Notes |
 |-----------------|------------------|-------|
-| FR-8.1: SQLite Storage | Story 1.2, 1.3 | 7 of 14 tables implemented (Phase 1) |
+| FR-8.1: SQLite Storage | Story 1.2, 1.3 | 7 of 14 tables implemented (Tier 1) |
 | FR-8.2: Data Export | Future (Epic 7) | Foundation in database schema |
 | NFR-P2: Data Operations <10s | Story 1.3 (queries <100ms) | Database indexing, async operations |
 | NFR-P3: App Launch <2s | Story 1.1, 1.4 | Async startup, background migrations |
@@ -1566,7 +1566,7 @@ ALTER TABLE gcal_event_version
   - SQLite performance tested up to terabytes
   - Monitoring of slow operations (Story 1.6)
 - **Owner:** Story 1.3
-- **Note:** Monitor during Phase 3 when data sources fill database
+- **Note:** Monitor during Tier 3 when data sources fill database
 
 **RISK-1.4: Breaking changes in .NET 10 or Windows App SDK updates**
 - **Impact:** Medium - Application may fail to build or run
@@ -1618,7 +1618,7 @@ ALTER TABLE gcal_event_version
 - **Decision Date:** Architecture design phase
 
 **QUESTION-1.2: In-app database browser for advanced users?**
-- **Status:** DEFERRED to Phase 2+
+- **Status:** DEFERRED to Tier 2+
 - **Rationale:** Not critical for MVP, adds complexity
 - **Future:** Could add read-only SQL query interface in settings
 
@@ -1627,7 +1627,7 @@ ALTER TABLE gcal_event_version
 - **Context:** Logs may contain event titles/descriptions
 - **Consideration:** Encrypted logs harder to debug, but more private
 - **Decision needed by:** Story 1.6 implementation
-- **Recommendation:** Plain text for Phase 1, optional encryption in Phase 2
+- **Recommendation:** Plain text for Tier 1, optional encryption in Tier 2
 
 **QUESTION-1.4: Automatic crash reporting?**
 - **Status:** OPEN
@@ -1637,7 +1637,7 @@ ALTER TABLE gcal_event_version
 - **Recommendation:** Local-only crash logs, manual sharing if user requests support
 
 **QUESTION-1.5: Database encryption for sensitive events?**
-- **Status:** DEFERRED to Phase 2+
+- **Status:** DEFERRED to Tier 2+
 - **Context:** Some events may be sensitive (therapy, medical, etc.)
 - **Consideration:** Adds complexity, key management, performance impact
 - **Future:** SQLite supports encryption via SQLCipher extension

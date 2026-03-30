@@ -3,6 +3,7 @@ using GoogleCalendarManagement.Data.Entities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SerilogTimings;
 
 namespace GoogleCalendarManagement.Services;
 
@@ -24,7 +25,10 @@ public class MigrationService : IMigrationService
 
     public async Task RunStartupAsync()
     {
-        await ApplyMigrationsAsync();
+        using (Operation.Time("Database migration"))
+        {
+            await ApplyMigrationsAsync();
+        }
         var isHealthy = await CheckDatabaseIntegrityAsync();
         if (!isHealthy)
             throw new InvalidOperationException("Database integrity check failed on startup.");

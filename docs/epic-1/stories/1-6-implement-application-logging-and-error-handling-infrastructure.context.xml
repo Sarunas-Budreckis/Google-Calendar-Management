@@ -1,0 +1,286 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>6</storyId>
+    <title>Implement Application Logging and Error Handling Infrastructure</title>
+    <status>draft</status>
+    <generatedAt>2026-03-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/stories/1-6-implement-application-logging-and-error-handling-infrastructure.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>centralized logging and error handling infrastructure</iWant>
+    <soThat>I can diagnose issues and track application behavior</soThat>
+    <tasks>
+      - Add Serilog NuGet packages (Serilog 4.1.0, Serilog.Extensions.Logging 8.0.0, Serilog.Sinks.File 6.0.0, Serilog.Sinks.Console 6.0.1, SerilogTimings 3.0.1) to GoogleCalendarManagement.csproj
+      - Create ILoggingService / LoggingService: configure Log.Logger with daily rolling files at %LOCALAPPDATA%\GoogleCalendarManagement\logs\app-.txt, 30-day retention, Application+Version enrichment, Debug/Information level by build config
+      - Create IErrorHandlingService / ErrorHandlingService: wire AppDomain.UnhandledException, TaskScheduler.UnobservedTaskException, and WinUI 3 Application.UnhandledException; flush logs and dispose DB on critical exit; show user-friendly error dialog
+      - Update App.xaml.cs: call LoggingService.Configure() first in App() constructor (before DI), replace AddLogging(AddDebug) with AddSerilog(), register new services, call errorHandlingService.Register() after window.Activate()
+      - Integrate BeginTimedOperation in MigrationService.RunStartupAsync() and record startup time in App.OnLaunched
+      - Write unit tests (LoggingTests.cs): Logger_ShouldWrite_ToFile, Logger_ShouldTrack_SlowOperations
+      - Write integration tests (ErrorHandlingTests.cs): UnhandledTaskException_ShouldBe_SetObserved_WithoutCrash
+      - Final validation: launch app, verify log file created, inspect for Application+Version properties, run full test suite
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1.6.1">
+      Serilog configured correctly:
+      - Log file created at %LOCALAPPDATA%\GoogleCalendarManagement\logs\app-{date}.txt
+      - Log levels: Debug (Debug builds), Information (Release builds), Warning, Error, Critical
+      - Daily rotation active (RollingInterval.Day)
+      - 30-day retention enforced (retainedFileCountLimit: 30)
+      - Output template: {Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}
+    </criterion>
+    <criterion id="AC-1.6.2">
+      Structured logging works:
+      - Logs include timestamp, level, message, exception (if present)
+      - Log context enriched with Application=GoogleCalendarManagement and Version={assembly version}
+      - Performance timing available via SerilogTimings BeginTimedOperation / Operation.Time
+      - Slow operations (&gt;1s) logged at Warning level with duration
+    </criterion>
+    <criterion id="AC-1.6.3">
+      Global exception handler active:
+      - AppDomain.CurrentDomain.UnhandledException subscribed (CLR/background thread exceptions)
+      - TaskScheduler.UnobservedTaskException subscribed (unobserved async Task failures)
+      - Application.UnhandledException subscribed (WinUI 3 UI thread exceptions)
+      - Unhandled exceptions logged at Fatal level with full stack trace
+      - User-friendly ContentDialog shown (no raw exception message or stack trace)
+      - Log.CloseAndFlush() called before process exit on critical errors
+    </criterion>
+    <criterion id="AC-1.6.4">
+      Error handling consistent:
+      - Database errors caught and logged at Error level
+      - File system errors (missing directories, permission denied) handled gracefully
+      - Missing dependency errors reported clearly at startup via log
+      - Non-critical errors do not crash the app — logged and user notified appropriately
+    </criterion>
+    <criterion id="AC-1.6.5">
+      Performance monitoring works:
+      - MigrationService.RunStartupAsync() wrapped with Operation.Time for migration duration
+      - Startup time from App.OnLaunched entry to window.Activate() logged at Information level
+      - Any operation exceeding 1000ms triggers a Warning-level log entry with duration
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>AC-1.6: Logging and Error Handling (Story 1.6)</section>
+        <snippet>AC-1.6.1: Serilog configured — log file at %LOCALAPPDATA%/GoogleCalendarManagement/logs/app-{date}.txt, RollingInterval.Day, retainedFileCountLimit=30. AC-1.6.2: Structured logs with timestamp, level, Application/Version enrichment, BeginTimedOperation, slow-op warning at 1s. AC-1.6.3: Global exception handler catches unhandled exceptions, user-friendly dialog, state saved before exit. AC-1.6.4: DB/file errors handled gracefully. AC-1.6.5: DB query times and startup time tracked.</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>NFR — Observability: Structured Logging with Serilog</section>
+        <snippet>Log.Logger = new LoggerConfiguration().MinimumLevel.Information().MinimumLevel.Override("Microsoft", LogEventLevel.Warning).Enrich.FromLogContext().Enrich.WithProperty("Application", ...).Enrich.WithProperty("Version", ...).WriteTo.Console().WriteTo.File(path, RollingInterval.Day, retainedFileCountLimit: 30, outputTemplate).CreateLogger();</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Detailed Design — Error Handling Flow (Story 1.6)</section>
+        <snippet>Application Error → Global Exception Handler → Log to Serilog (Error details + stack trace to app-{date}.txt) → Check if Critical → YES: save state (flush logs, close DB, show error dialog) → NO: log error, show toast, continue execution.</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Story 1.6 NuGet Package Dependencies</section>
+        <snippet>Serilog 4.1.0, Serilog.Extensions.Logging 8.0.0, Serilog.Sinks.File 6.0.0, Serilog.Sinks.Console 6.0.1. SerilogTimings 3.0.1 for BeginTimedOperation / Operation.Time.</snippet>
+      </doc>
+      <doc>
+        <path>docs/tech-spec-epic-1.md</path>
+        <title>Epic 1 Technical Specification</title>
+        <section>Story 1.6 Tests</section>
+        <snippet>Unit: Logger_ShouldWrite_ToFile (temp dir, verify file created and contains entry), Logger_ShouldTrack_SlowOperations (sleep 1100ms inside BeginTimedOperation, verify [WRN] in output). Integration: GlobalExceptionHandler_ShouldCatch_UnhandledException (subscribe AppDomain handler, throw from Task.Run, verify [FTL] logged).</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 1.6 Definition</section>
+        <snippet>NFR-I3 (error handling), NFR-D1 (auto-save on critical errors). Serilog or Microsoft.Extensions.Logging. Log rotation prevents disk space issues. No stack traces shown to user — technical details in log file only. Separate log files for app, database, api (optional, Phase 1 uses single app log).</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>App.xaml.cs</path>
+        <kind>app-entry</kind>
+        <symbol>App.App() / App.OnLaunched / App.ConfigureServices</symbol>
+        <lines>1-127</lines>
+        <reason>Primary file to update. LoggingService.Configure() must be called at the top of App() constructor before anything else. Replace services.AddLogging(builder.AddDebug()) with services.AddSerilog(). Wire global exception handlers. Register ILoggingService and IErrorHandlingService in ConfigureServices. Call errorHandlingService.Register() after window.Activate() in OnLaunched.</reason>
+      </artifact>
+      <artifact>
+        <path>GoogleCalendarManagement.csproj</path>
+        <kind>project-file</kind>
+        <symbol>Project/ItemGroup/PackageReference</symbol>
+        <lines>50-62</lines>
+        <reason>Add Serilog NuGet packages: Serilog 4.1.0, Serilog.Extensions.Logging 8.0.0, Serilog.Sinks.File 6.0.0, Serilog.Sinks.Console 6.0.1, SerilogTimings 3.0.1. Existing packages (Microsoft.Extensions.Logging, Microsoft.Extensions.Logging.Debug) remain — Microsoft.Extensions.Logging provides ILogger&lt;T&gt; abstraction; Serilog.Extensions.Logging bridges them. Microsoft.Extensions.Logging.Debug can be removed after Serilog is wired.</reason>
+      </artifact>
+      <artifact>
+        <path>Services/MigrationService.cs</path>
+        <kind>service</kind>
+        <symbol>MigrationService.RunStartupAsync</symbol>
+        <lines>1-50</lines>
+        <reason>Update MigrationService to wrap migration steps with Operation.Time("Database migration") from SerilogTimings. The existing ILogger&lt;MigrationService&gt; injection continues to work — SerilogTimings extension methods work on ILogger&lt;T&gt; after AddSerilog() is configured. No structural changes needed beyond adding using SerilogTimings and wrapping the migrate call.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <ecosystem name="dotnet-main-project">
+        <current>
+          <package name="Microsoft.WindowsAppSDK" version="1.*" note="WinUI 3 framework" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" note="EF Core SQLite provider" />
+          <package name="Microsoft.Extensions.DependencyInjection" version="10.0.2" note="DI container" />
+          <package name="Microsoft.Extensions.Logging" version="10.0.2" note="ILogger&lt;T&gt; abstraction — keep" />
+          <package name="Microsoft.Extensions.Logging.Debug" version="10.0.2" note="Debug sink — can be removed after AddSerilog() is wired" />
+        </current>
+        <toAdd>
+          <package name="Serilog" version="4.1.0" note="Core logging framework" />
+          <package name="Serilog.Extensions.Logging" version="8.0.0" note="AddSerilog() bridge to Microsoft.Extensions.Logging DI" />
+          <package name="Serilog.Sinks.File" version="6.0.0" note="File sink with rolling interval support" />
+          <package name="Serilog.Sinks.Console" version="6.0.1" note="Console sink for development output" />
+          <package name="SerilogTimings" version="3.0.1" note="Operation.Time() / BeginTimedOperation() for performance tracking" />
+        </toAdd>
+      </ecosystem>
+      <ecosystem name="dotnet-test-project">
+        <current>
+          <package name="xunit" version="2.9.2" />
+          <package name="FluentAssertions" version="8.8.0" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+        </current>
+        <toAdd>
+          <package name="Serilog" version="4.1.0" note="Required for LoggingTests to configure Log.Logger in test scope" />
+          <package name="Serilog.Sinks.File" version="6.0.0" note="Required for Logger_ShouldWrite_ToFile test" />
+          <package name="SerilogTimings" version="3.0.1" note="Required for Logger_ShouldTrack_SlowOperations test" />
+        </toAdd>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C-1">CONFIGURE LOG.LOGGER BEFORE DI. Call LoggingService.Configure() as the very first statement in App() constructor — before InitializeComponent() if possible, or immediately after. DI setup failures must be captured in the log. Do NOT configure Serilog inside ConfigureServices() or OnLaunched() — by then, failures may already be unlogged.</constraint>
+    <constraint id="C-2">NO STACK TRACES SHOWN TO USER. The ContentDialog for unhandled errors must display a generic user-friendly message (e.g., "An unexpected error occurred. The application will close. Details have been saved to the log file."). Never pass ex.Message or ex.ToString() to the dialog content. Full details go to the log only.</constraint>
+    <constraint id="C-3">LOG.CLOSEANDFLUSH() ON ALL EXIT PATHS. Every exit path — normal shutdown, unhandled CLR exception, unhandled WinUI exception, and critical error dialog — must call Log.CloseAndFlush() before the process terminates. Serilog's file sink buffers writes asynchronously; without this call, the last log entries are lost.</constraint>
+    <constraint id="C-4">USE OPERATION.TIME NOT THREAD.SLEEP FOR THRESHOLDS. The slow-operation threshold (1000ms) is enforced by SerilogTimings automatically — operations exceeding 1s are logged at Warning, others at Information. Do not implement manual threshold checks with if (elapsed > 1000). Use Operation.Time() or the BeginTimedOperation extension.</constraint>
+    <constraint id="C-5">LOG FOLDER MUST USE LOCALAPPDATA. The logs folder path must be constructed via Environment.GetFolderPath(SpecialFolder.LocalApplicationData) — never a hard-coded path. This is consistent with how MigrationService constructs the database path and backup paths.</constraint>
+    <constraint id="C-6">DO NOT LOG SENSITIVE DATA. Log file may contain event titles and descriptions in future epics. For Story 1.6, avoid logging Google OAuth tokens, user credentials, or any PII. Log sanitized paths and operation outcomes only. This is a local-only log (no external telemetry).</constraint>
+    <constraint id="C-7">TASKSCHEDULER.UNOBSERVEDTASKEXCEPTION: CALL SETOBSERVED(). The TaskScheduler.UnobservedTaskException handler must call args.SetObserved() after logging. Without it, the default behavior in .NET 4.5+ is to swallow the exception silently, but explicitly marking as observed prevents any future runtime behavior changes and makes intent clear.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>LoggingService.Configure — Serilog static logger setup</name>
+      <kind>service-method</kind>
+      <signature>
+public class LoggingService : ILoggingService
+{
+    public void Configure()
+    {
+        var logFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "GoogleCalendarManagement", "logs");
+        Directory.CreateDirectory(logFolder);
+
+        Log.Logger = new LoggerConfiguration()
+#if DEBUG
+            .MinimumLevel.Debug()
+#else
+            .MinimumLevel.Information()
+#endif
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+            .Enrich.FromLogContext()
+            .Enrich.WithProperty("Application", "GoogleCalendarManagement")
+            .Enrich.WithProperty("Version",
+                Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown")
+            .WriteTo.Console()
+            .WriteTo.File(
+                path: Path.Combine(logFolder, "app-.txt"),
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 30,
+                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .CreateLogger();
+    }
+}
+      </signature>
+      <path>Services/LoggingService.cs (new file)</path>
+    </interface>
+    <interface>
+      <name>App.xaml.cs — updated ConfigureServices with AddSerilog</name>
+      <kind>app-entry-update</kind>
+      <signature>
+private static void ConfigureServices(ServiceCollection services)
+{
+    // Serilog bridges to Microsoft.Extensions.Logging ILogger&lt;T&gt;
+    services.AddSerilog();
+
+    // Remove: services.AddLogging(builder => { builder.AddDebug(); ... })
+
+    services.AddSingleton&lt;ILoggingService, LoggingService&gt;();
+    services.AddSingleton&lt;IErrorHandlingService, ErrorHandlingService&gt;();
+
+    var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    var dbFolder = Path.Combine(localAppData, "GoogleCalendarManagement");
+    Directory.CreateDirectory(dbFolder);
+    var dbPath = Path.Combine(dbFolder, "calendar.db");
+
+    var dbOptions = new DatabaseOptions { ConnectionString = $"Data Source={dbPath}" };
+    services.AddSingleton(dbOptions);
+    services.AddDbContext&lt;CalendarDbContext&gt;(options =>
+        options.UseSqlite(dbOptions.ConnectionString)
+               .AddInterceptors(new SqliteConnectionInterceptor()));
+
+    services.AddScoped&lt;IMigrationService, MigrationService&gt;();
+}
+      </signature>
+      <path>App.xaml.cs (ConfigureServices method)</path>
+    </interface>
+    <interface>
+      <name>NuGet packages — additions to GoogleCalendarManagement.csproj</name>
+      <kind>project-file-edit</kind>
+      <signature>
+&lt;PackageReference Include="Serilog" Version="4.1.0" /&gt;
+&lt;PackageReference Include="Serilog.Extensions.Logging" Version="8.0.0" /&gt;
+&lt;PackageReference Include="Serilog.Sinks.File" Version="6.0.0" /&gt;
+&lt;PackageReference Include="Serilog.Sinks.Console" Version="6.0.1" /&gt;
+&lt;PackageReference Include="SerilogTimings" Version="3.0.1" /&gt;
+      </signature>
+      <path>GoogleCalendarManagement.csproj (ItemGroup with PackageReference entries)</path>
+    </interface>
+    <interface>
+      <name>MigrationService — BeginTimedOperation integration</name>
+      <kind>service-method-update</kind>
+      <signature>
+// In MigrationService.RunStartupAsync():
+using (Operation.Time("Database migration"))
+{
+    await _context.Database.MigrateAsync();
+}
+// Logs at Information if &lt;1s: "Database migration completed in 523ms"
+// Logs at Warning if &gt;1s:    "Database migration completed in 1523ms (slow)"
+      </signature>
+      <path>Services/MigrationService.cs (RunStartupAsync method)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Story 1.6 has both automated unit tests and integration tests. Unit tests use a temporary directory (Path.GetTempPath() + unique Guid) for log file output — never write to the real %LOCALAPPDATA% path in tests. Always call Log.CloseAndFlush() in test teardown (IDisposable.Dispose) to release file handles before the temp directory is deleted. Integration tests for the global exception handler are limited to the TaskScheduler handler (testable without WinUI runtime); AppDomain and WinUI handlers are validated manually.</standards>
+    <locations>
+      <location>GoogleCalendarManagement.Tests/Unit/LoggingTests.cs — new file for Serilog unit tests</location>
+      <location>GoogleCalendarManagement.Tests/Integration/ErrorHandlingTests.cs — new file for exception handler integration tests</location>
+      <location>GoogleCalendarManagement.Tests/Integration/MigrationServiceTests.cs — existing; verify MigrationService tests still pass after BeginTimedOperation is added</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC-1.6.1">Logger_ShouldWrite_ToFile — configure Serilog to temp dir, log one entry, flush, assert file exists and contains the message</idea>
+      <idea acRef="AC-1.6.1">Logger_ShouldRotate_DailyFiles — configure with RollingInterval.Day, verify file name contains today's date in yyyyMMdd format</idea>
+      <idea acRef="AC-1.6.2">Logger_ShouldEnrich_WithApplicationProperty — capture log output to StringWriter sink, assert output contains "Application=GoogleCalendarManagement"</idea>
+      <idea acRef="AC-1.6.2">Logger_ShouldTrack_SlowOperations — wrap Thread.Sleep(1100) in Operation.Time, assert [WRN] appears in captured output</idea>
+      <idea acRef="AC-1.6.3">UnhandledTaskException_ShouldBe_SetObserved_WithoutCrash — subscribe to TaskScheduler.UnobservedTaskException, trigger GC to expose unobserved task, verify SetObserved called without process crash</idea>
+      <idea acRef="AC-1.6.5">MigrationService_ShouldLog_StartupDuration — verify MigrationService logs contain "Database migration completed in" after RunStartupAsync completes</idea>
+    </ideas>
+  </tests>
+</story-context>

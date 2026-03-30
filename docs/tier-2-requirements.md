@@ -1,4 +1,4 @@
-# Phase 2 Requirements - Editing & Push to GCal (Manual Control)
+# Tier 2 Requirements - Editing & Push to GCal (Manual Control)
 
 **Project:** Google Calendar Management
 **Date:** 2026-01-30
@@ -12,13 +12,13 @@
 
 **Core Question:** "Can I edit and publish events with confidence?"
 
-**Phase 2 builds on Phase 1** - All Phase 1 capabilities are maintained and enhanced with editing and publishing.
+**Tier 2 builds on Tier 1** - All Tier 1 capabilities are maintained and enhanced with editing and publishing.
 
 ---
 
 ## Scope
 
-### What's in Phase 2
+### What's in Tier 2
 
 **Event Editing:**
 - Click event → Detail panel opens (right side)
@@ -62,7 +62,7 @@
 - Apply to single event or selection
 - Instant visual update
 
-### What's NOT in Phase 2
+### What's NOT in Tier 2
 
 ❌ No data source integration (Toggl, Calls, YouTube, Outlook)
 ❌ No coalescing algorithms
@@ -76,7 +76,7 @@
 
 ## Success Criteria
 
-✅ All Phase 1 capabilities maintained
+✅ All Tier 1 capabilities maintained
 ✅ Click event → instant detail panel (0ms lag)
 ✅ Edit fields update instantly with auto-save
 ✅ Drag-to-create and button-create both work
@@ -152,17 +152,17 @@
 
 ## Use While Building
 
-**Phase 2 Value:**
+**Tier 2 Value:**
 - Full calendar management in single app
 - Replace manual Google Calendar editing entirely
 - Instant editing with no lag
 - Confident publishing with visual feedback
 - Offline event creation (queued for publish)
 
-**Next Phase:** After Phase 2 is stable, begin Phase 3 (Data Sources) to add intelligent automation and dramatically reduce backfilling time.
+**Next Phase:** After Tier 2 is stable, begin Tier 3 (Data Sources) to add intelligent automation and dramatically reduce backfilling time.
 
 ---
 
 **Document Version:** 1.0
 **Last Updated:** 2026-01-30
-**Next Review:** After Phase 2 completion, before starting Phase 3
+**Next Review:** After Tier 2 completion, before starting Tier 3

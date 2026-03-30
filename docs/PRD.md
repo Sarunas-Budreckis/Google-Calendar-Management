@@ -60,7 +60,7 @@ This is a **Windows native desktop application** using WinUI 3 with:
 ### Data Quality Goals
 
 **Calendar Coverage:**
-- All 4 Phase 1 data sources (Toggl, calls, YouTube, Outlook) regularly imported
+- All 4 Tier 1 data sources (Toggl, calls, YouTube, Outlook) regularly imported
 - Events correctly categorized by mental state color
 - Honest tracking (no aspirational coloring)
 - Pattern recognition enabled by accurate data
@@ -91,18 +91,18 @@ Measured by:
 
 ## Product Scope
 
-### MVP - Minimum Viable Product (Phase 1 + 2)
+### MVP - Minimum Viable Product (Tier 1 + 2)
 
 **Core Value:** Local-first calendar viewer with full manual editing capabilities
 
-**Phase 1 - Basic UI & Pull from GCal (Read-Only):**
+**Tier 1 - Basic UI & Pull from GCal (Read-Only):**
 - Year/Month/Week/Day views displaying existing Google Calendar events
 - Pull from GCal to sync events locally
 - Save/Export functionality for backups
 - Green/grey sync status indicators per date
 - App launches to year view with date selection
 
-**Phase 2 - Editing & Push to GCal:**
+**Tier 2 - Editing & Push to GCal:**
 - Event creation (drag-to-create OR "+ Add Event" button)
 - Full event editing (title, time, color, description)
 - Event selection with red outline visual feedback
@@ -110,7 +110,7 @@ Measured by:
 - Push to GCal with confirmation dialog
 - Auto-save to local DB (instant, 0-lag)
 
-**Phase 3 - Data Sources (Post-MVP):**
+**Tier 3 - Data Sources (Post-MVP):**
 1. **Toggl Track API** - Time entries with phone activity coalescing (sliding window, 8/15 rounding)
 2. **iOS Call Logs** - iMazing CSV parsing with duration filtering
 3. **YouTube Watch History** - Google Takeout JSON with session coalescing and video metadata
@@ -127,30 +127,30 @@ Measured by:
 
 **Data Management:**
 - **Local SQLite Database:** 14 tables storing all data with complete version history
-- **App-Published Notation:** Append "Published by Google Calendar Management on {datetime}" to event descriptions (Phase 2)
-- **Weekly Status Tracking:** Calculate completion per data source, sync to Excel cloud via Microsoft Graph (Phase 3)
+- **App-Published Notation:** Append "Published by Google Calendar Management on {datetime}" to event descriptions (Tier 2)
+- **Weekly Status Tracking:** Calculate completion per data source, sync to Excel cloud via Microsoft Graph (Tier 3)
 
-**Must Work For Phase 1 Launch:**
+**Must Work For Tier 1 Launch:**
 - View existing Google Calendar in year/month/week/day views
 - Pull from GCal to sync events locally
 - Save and export local backups
 - Green/grey sync status indicators
 - Read-only event viewing (no editing)
 
-**Must Work For Phase 2 Launch:**
+**Must Work For Tier 2 Launch:**
 - Create and edit events locally (instant, 0-lag)
 - Push edited events to Google Calendar
 - Visual distinction: translucent unpushed events, red outline for selected
 - Confirmation dialog before publishing
 
-**Must Work For Phase 3 Launch:**
+**Must Work For Tier 3 Launch:**
 - All 4 data sources successfully import and publish
 - Coalescing algorithms process data correctly
 - Hover system shows data source timeline (0-100ms)
 - Day naming and weekly status tracking
 - Backfilling 1 week takes <2 hours (down from current 2-4)
 
-### Growth Features (Phase 2+)
+### Growth Features (Tier 2+)
 
 **Additional Data Sources:**
 - Chrome extension for real-time YouTube tracking (eliminate delay)
@@ -213,7 +213,7 @@ In 10 years, this system contains a decade of rich personal history, supports ev
 - Native Windows integration (notifications, file system)
 
 **No Cross-Platform Support in MVP:**
-- Windows-only for Phase 1 (single user, known environment)
+- Windows-only for Tier 1 (single user, known environment)
 - Architecture separates UI from data layer for future portability
 - Local-first design enables platform expansion later (web, mobile)
 
@@ -302,12 +302,12 @@ In 10 years, this system contains a decade of rich personal history, supports ev
 **1. Calendar View (Primary Interface)**
 - Year/month/week/day views with smooth transitions (app launches to year view)
 - Existing events in their assigned colors (100% opacity)
-- Unpushed events shown as translucent (60% opacity) - Phase 2
-- Click event → right-side edit panel (title, time, description, color) - Phase 2
-- Hover shows preview without modal interruption (Phase 1: basic tooltip, Phase 3: data source timeline 0-100ms)
+- Unpushed events shown as translucent (60% opacity) - Tier 2
+- Click event → right-side edit panel (title, time, description, color) - Tier 2
+- Hover shows preview without modal interruption (Tier 1: basic tooltip, Tier 3: data source timeline 0-100ms)
 - Keyboard navigation for power users
 
-**2. Event Editing & Publishing (Phase 2)**
+**2. Event Editing & Publishing (Tier 2)**
 - **Event creation:** Drag-to-create on calendar OR "+ Add Event" button
 - **Select mode:** Click to select individual events, shift-click for ranges
 - **Visual feedback:** Selected events highlighted with red 2px outline
@@ -316,7 +316,7 @@ In 10 years, this system contains a decade of rich personal history, supports ev
 - **Success animation:** Smooth transition from translucent → full opacity
 - **Undo safety net:** Recent publish visible with quick undo option
 
-**3. Data Import (Phase 3 - Frequent Operation)**
+**3. Data Import (Tier 3 - Frequent Operation)**
 - Drag-and-drop for files (call logs CSV, YouTube JSON)
 - "Fetch from Toggl/Outlook" buttons with last sync timestamp
 - Progress indication for API calls
@@ -456,22 +456,22 @@ Requirements organized by capability, each with acceptance criteria and domain c
 ### FR-3: Calendar Display & Interaction
 
 **FR-3.1: Unified Calendar View**
-- **Capability:** Display Google Calendar events (Phase 1: read-only, Phase 2: with unpushed events)
+- **Capability:** Display Google Calendar events (Tier 1: read-only, Tier 2: with unpushed events)
 - **Visual Distinction:**
   - Published events: Show in their assigned colors with full opacity (100%)
-  - Unpushed/pending events: Translucent (60% opacity) - Phase 2
-  - Selected events: Red 2px solid outline - Phase 2
+  - Unpushed/pending events: Translucent (60% opacity) - Tier 2
+  - Selected events: Red 2px solid outline - Tier 2
 - **View Modes:** Year, month, week, day with smooth transitions
 - **Launch Behavior:** App opens to year view with date selection
 - **Acceptance Criteria:**
   - Fetch and cache Google Calendar events on launch
-  - Phase 1: Display published events in read-only mode
-  - Phase 2: Render both published and unpushed events with visual distinction
+  - Tier 1: Display published events in read-only mode
+  - Tier 2: Render both published and unpushed events with visual distinction
   - Visual distinction between states clear at a glance
   - Smooth transitions between view modes
   - Performance: <1 second to render month with 200+ events
 
-**FR-3.2: Event Editing (Phase 2)**
+**FR-3.2: Event Editing (Tier 2)**
 - **Capability:** Click any event to edit title, start/end times, description, color
 - **Interface:** Right-side edit panel (slide-in, not modal) for fluid workflow
 - **Time Picker:** 15-minute increments aligned with 8/15 rounding
@@ -484,7 +484,7 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - Changes auto-save to local database immediately (0-lag)
   - Esc key closes panel, changes already saved
 
-**FR-3.3: Event Selection & Batch Operations (Phase 2)**
+**FR-3.3: Event Selection & Batch Operations (Tier 2)**
 - **Capability:** Select multiple events for batch publishing
 - **Selection Modes:**
   - Click individual events
@@ -500,7 +500,7 @@ Requirements organized by capability, each with acceptance criteria and domain c
 
 ### FR-4: Approval & Publishing Workflow
 
-**FR-4.1: Event Selection for Publishing (Phase 2)**
+**FR-4.1: Event Selection for Publishing (Tier 2)**
 - **Capability:** Select events for publishing to Google Calendar
 - **Workflow:**
   - Create/edit events locally (auto-saved, marked as unpushed)
@@ -513,7 +513,7 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - Push to GCal button updates count dynamically
   - Can deselect before publishing
 
-**FR-4.2: Batch Publishing (Phase 2)**
+**FR-4.2: Batch Publishing (Tier 2)**
 - **Capability:** Publish selected events to Google Calendar in batch
 - **Workflow:**
   - "Push to Google Calendar" button shows count of selected events
@@ -542,7 +542,7 @@ Requirements organized by capability, each with acceptance criteria and domain c
 
 ### FR-5: Date State Tracking
 
-**FR-5.1: Per-Date State Flags (Phase 3)**
+**FR-5.1: Per-Date State Flags (Tier 3)**
 - **Capability:** Track which data sources have been published for each date
 - **Flags:**
   - `call_log_data_published`
@@ -558,7 +558,7 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - Manual override capability
   - Visual indicators for data source completeness per date
 
-**FR-5.2: Contiguity Edge Calculation (Phase 3)**
+**FR-5.2: Contiguity Edge Calculation (Tier 3)**
 - **Capability:** Calculate the last date with complete walkthrough approval
 - **Purpose:** Know where to start "fill to present" workflow
 - **Logic:** Most recent date where `complete_walkthrough_approval = true` and all subsequent dates are incomplete (except tracked gaps)
@@ -603,9 +603,9 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - Updates local database (marks unpublished)
   - Undo expires after next publish or app close
 
-### FR-7: Weekly Status Tracking (Phase 3)
+### FR-7: Weekly Status Tracking (Tier 3)
 
-**FR-7.1: Calculate Weekly Completion (Phase 3)**
+**FR-7.1: Calculate Weekly Completion (Tier 3)**
 - **Capability:** Calculate completion status per data source per ISO 8601 week
 - **Logic:**
   - Week starts Monday
@@ -617,7 +617,7 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - Historical weeks calculated on demand
   - Current week updates in real-time
 
-**FR-7.2: Sync to Excel Cloud (Phase 3)**
+**FR-7.2: Sync to Excel Cloud (Tier 3)**
 - **Capability:** Write weekly status to Excel file on OneDrive/SharePoint via Microsoft Graph
 - **Format:** Rows = weeks, Columns = data sources, Values = Yes/Partial/No
 - **Authentication:** OAuth 2.0 (shared with Outlook integration)
@@ -959,7 +959,7 @@ Each epic will contain bite-sized stories (<200 lines of code) suitable for AI a
 - **Database Schemas:** `docs/_database-schemas.md`
 - **Color Definitions:** `docs/_color-definitions.md`
 - **Key Decisions:** `docs/_key-decisions.md`
-- **Phase 1 Requirements:** `docs/_phase-1-requirements.md`
+- **Tier 1 Requirements:** `docs/tier-1-requirements.md`
 
 ---
 
