@@ -1,17 +1,38 @@
 using System.ComponentModel;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.ViewModels;
+using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 
 namespace GoogleCalendarManagement.Views;
 
 public sealed partial class MainPage : Page
 {
+    private readonly Dictionary<ViewMode, Button> _viewModeButtons;
+    private readonly Brush _selectorBackground = new SolidColorBrush(Colors.Transparent);
+    private readonly Brush _selectorBorderBrush = new SolidColorBrush(Colors.Transparent);
+    private readonly Brush _selectorHoverBackground;
+    private readonly Brush _selectorSelectedBackground;
+    private readonly Brush _selectorSelectedForeground;
+    private readonly Brush _selectorUnselectedForeground;
+
     public MainPage(MainViewModel viewModel)
     {
         ViewModel = viewModel;
         InitializeComponent();
+        _selectorHoverBackground = (Brush)Application.Current.Resources["CalendarSelectorHoverBrush"];
+        _selectorSelectedBackground = (Brush)Application.Current.Resources["CalendarSelectionHoverBrush"];
+        _selectorSelectedForeground = (Brush)Application.Current.Resources["WhiteBrush"];
+        _selectorUnselectedForeground = new SolidColorBrush(ColorHelper.FromArgb(0xE0, 0xFF, 0xFF, 0xFF));
+        _viewModeButtons = new Dictionary<ViewMode, Button>
+        {
+            [ViewMode.Year] = YearViewButton,
+            [ViewMode.Month] = MonthViewButton,
+            [ViewMode.Week] = WeekViewButton,
+            [ViewMode.Day] = DayViewButton
+        };
         Loaded += MainPage_Loaded;
         Unloaded += MainPage_Unloaded;
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -45,24 +66,26 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private async void YearButton_Click(object sender, RoutedEventArgs e)
+    private async void ViewModeButton_Click(object sender, RoutedEventArgs e)
     {
-        await ViewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Year);
+        if (sender is not Button { Tag: string tag } ||
+            !Enum.TryParse<ViewMode>(tag, out var mode) ||
+            mode == ViewModel.CurrentViewMode)
+        {
+            return;
+        }
+
+        await ViewModel.SwitchViewModeCommand.ExecuteAsync(mode);
     }
 
-    private async void MonthButton_Click(object sender, RoutedEventArgs e)
+    private async void PreviousButton_Click(object sender, RoutedEventArgs e)
     {
-        await ViewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Month);
+        await ViewModel.NavigatePreviousCommand.ExecuteAsync(null);
     }
 
-    private async void WeekButton_Click(object sender, RoutedEventArgs e)
+    private async void NextButton_Click(object sender, RoutedEventArgs e)
     {
-        await ViewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Week);
-    }
-
-    private async void DayButton_Click(object sender, RoutedEventArgs e)
-    {
-        await ViewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Day);
+        await ViewModel.NavigateNextCommand.ExecuteAsync(null);
     }
 
     private async void JumpToDatePicker_DateChanged(CalendarDatePicker sender, CalendarDatePickerDateChangedEventArgs args)
@@ -110,9 +133,24 @@ public sealed partial class MainPage : Page
 
     private void UpdateViewModeButtons()
     {
-        YearButton.IsEnabled = ViewModel.CurrentViewMode != ViewMode.Year;
-        MonthButton.IsEnabled = ViewModel.CurrentViewMode != ViewMode.Month;
-        WeekButton.IsEnabled = ViewModel.CurrentViewMode != ViewMode.Week;
-        DayButton.IsEnabled = ViewModel.CurrentViewMode != ViewMode.Day;
+        foreach (var (mode, button) in _viewModeButtons)
+        {
+            var isSelected = mode == ViewModel.CurrentViewMode;
+
+            button.Background = isSelected ? _selectorSelectedBackground : _selectorBackground;
+            button.Foreground = isSelected ? _selectorSelectedForeground : _selectorUnselectedForeground;
+            button.BorderThickness = new Thickness(0);
+            button.CornerRadius = new CornerRadius(12);
+            button.FontWeight = isSelected
+                ? Microsoft.UI.Text.FontWeights.SemiBold
+                : Microsoft.UI.Text.FontWeights.Normal;
+
+            button.Resources["ButtonBackgroundPointerOver"] = isSelected ? _selectorSelectedBackground : _selectorHoverBackground;
+            button.Resources["ButtonBackgroundPressed"] = isSelected ? _selectorSelectedBackground : _selectorHoverBackground;
+            button.Resources["ButtonBorderBrushPointerOver"] = _selectorBorderBrush;
+            button.Resources["ButtonBorderBrushPressed"] = _selectorBorderBrush;
+            button.Resources["ButtonForegroundPointerOver"] = isSelected ? _selectorSelectedForeground : _selectorSelectedForeground;
+            button.Resources["ButtonForegroundPressed"] = isSelected ? _selectorSelectedForeground : _selectorSelectedForeground;
+        }
     }
 }

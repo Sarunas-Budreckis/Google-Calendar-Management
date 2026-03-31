@@ -15,8 +15,16 @@
             </ResourceDictionary.MergedDictionaries>
             <!-- Other app resources here -->
             <Color x:Key="Primary">#512BD4</Color>
+            <Color x:Key="CalendarSelectorSurfaceColor">#FFF0F1F3</Color>
+            <Color x:Key="CalendarSelectorHoverColor">#FFD9DEE4</Color>
+            <Color x:Key="CalendarSelectionColor">#FF5B616A</Color>
+            <Color x:Key="CalendarSelectionHoverColor">#FF6A717B</Color>
 
             <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary}" />
+            <SolidColorBrush x:Key="CalendarSelectorSurfaceBrush" Color="{StaticResource CalendarSelectorSurfaceColor}" />
+            <SolidColorBrush x:Key="CalendarSelectorHoverBrush" Color="{StaticResource CalendarSelectorHoverColor}" />
+            <SolidColorBrush x:Key="CalendarSelectionBrush" Color="{StaticResource CalendarSelectionColor}" />
+            <SolidColorBrush x:Key="CalendarSelectionHoverBrush" Color="{StaticResource CalendarSelectionHoverColor}" />
             <SolidColorBrush x:Key="WhiteBrush" Color="White" />
             <SolidColorBrush x:Key="BlackBrush" Color="Black" />
 

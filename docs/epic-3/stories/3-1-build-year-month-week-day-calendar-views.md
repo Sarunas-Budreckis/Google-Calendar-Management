@@ -482,6 +482,7 @@ Add to `GoogleCalendarManagement.Tests/TestData/`:
 - 2026-03-30: Switched app startup from `SettingsPage` to `MainPage`, added navigation-state persistence, and wired settings access from the calendar toolbar.
 - 2026-03-30: Added unit/integration coverage for color fallback, navigation state, calendar query projection, and main calendar navigation logic.
 - 2026-03-30: Updated the solution build configuration so `dotnet build -p:Platform=x64` builds the app project cleanly, with `dotnet test GoogleCalendarManagement.Tests/` remaining the separate validation step.
+- 2026-03-31: Refined the 3.1 shell UX with a top-right settings action, segmented view selector, arrow navigation buttons, a highlighted date-range pill, and a responsive week layout; drafted Story 3.9 for the larger year-view event-indicator enhancement.
 
 ### Implementation Plan
 
@@ -496,6 +497,9 @@ Add to `GoogleCalendarManagement.Tests/TestData/`:
 - Implemented `MainPage`, `MainViewModel`, and the year/month/week/day calendar pages with toolbar navigation, jump-to-date, empty-state handling, local-time event placement, and settings access.
 - Added JSON calendar fixtures plus 5 new automated test files; current automated validation is green via `dotnet build -p:Platform=x64` and `dotnet test GoogleCalendarManagement.Tests/` (68 passing tests).
 - Launched the app briefly and confirmed the executable started, then terminated the spawned process. Full manual interaction verification for view switching and restart-state persistence remains pending, so the story is left `in-progress`.
+- Refined the in-scope 3.1 shell interaction model by moving settings to the top-right, replacing the view toggles with a segmented single-select strip, switching previous/next to arrow buttons beneath the selector, and highlighting the current date-range label with a rounded grey pill.
+- Updated the week view so its seven-day timeline expands to the available window width instead of leaving unused space on the right, while still preserving horizontal scrolling on narrower windows.
+- Drafted follow-up Story 3.9 to handle the out-of-scope year-view event-marker and all-day tooltip behavior separately from 3.1 shell/layout work.
 
 ## File List
 
@@ -537,7 +541,10 @@ Add to `GoogleCalendarManagement.Tests/TestData/`:
 - `Views/WeekViewControl.xaml.cs`
 - `Views/YearViewControl.xaml`
 - `Views/YearViewControl.xaml.cs`
+- `docs/epic-3/stories/3-9-enhance-year-view-with-event-indicators-and-all-day-previews.md`
+- `docs/sprint-status.yaml`
 
 ## Change Log
 
 - 2026-03-30: Implemented Story 3.1 calendar shell, calendar pages, navigation persistence, read-only query services, automated tests, and x64 solution build validation.
+- 2026-03-31: Refined the 3.1 toolbar/view-selector layout, changed previous/next to arrow navigation beneath the selector, highlighted the active date range, made week view responsive to window width, and drafted Story 3.9 for advanced year-view event indicators.

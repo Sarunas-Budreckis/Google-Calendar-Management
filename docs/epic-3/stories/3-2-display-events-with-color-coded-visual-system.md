@@ -10,7 +10,7 @@ so that **I can instantly identify event categories by colour in all four calend
 
 ## Acceptance Criteria
 
-1. **AC-3.2.1 — Per-category colour rendering:** Given events in the database with various `color_id` values (`"1"`–`"10"` and the alias strings like `"azure"`, `"grey"`, etc.), each event renders in its assigned category colour in all four views (Year, Month, Week, Day).
+1. **AC-3.2.1 — Per-category colour rendering:** Given events in the database with various `color_id` values (`"1"`–`"10"` and alias strings like `"azure"`, `"grey"`, etc.), each event renders in its assigned category colour in all four views (Year, Month, Week, Day).
 
 2. **AC-3.2.2 — Fallback colour for null/unrecognised:** Given an event with a `null` or unrecognised `color_id`, it renders in Azure `#0088CC` without throwing an exception.
 
@@ -18,179 +18,158 @@ so that **I can instantly identify event categories by colour in all four calend
 
 4. **AC-3.2.4 — Cross-view colour consistency:** Given the same event viewed in Year, Month, Week, and Day views, the background colour (and text colour) is identical in all four views.
 
-## Scope Boundaries
-
-**IN SCOPE — this story:**
-- Replace the `ColorMappingService` Azure-only stub (from Story 3.1) with the full 9-colour dictionary
-- Add WCAG AA text contrast selection logic (white vs. black based on background luminance)
-- Bind event background colour (`ColorHex`) to `EventChip` and `EventBlock` controls (from Story 3.1)
-- Bind text contrast colour to the title label inside `EventChip` and `EventBlock`
-- Apply colour to Year view event dot / indicator elements
-- Unit tests: all 9 colour mappings, null fallback, unknown-string fallback, contrast logic for all 9 colours
-
-**OUT OF SCOPE — do NOT implement:**
-- Event selection red outline (Story 3.3)
-- Event details panel (Story 3.4)
-- Colour picker in editing panel (Story 3.7)
-- User-configurable colour overrides (future epic)
-- Story 3.1 view layout work (must be complete before this story)
-
-**PREREQUISITE:** Story 3.1 must be done. The following must already exist:
-- `Models/CalendarEventDisplayModel.cs` (with `ColorHex` field)
-- `Services/IColorMappingService.cs` and `Services/ColorMappingService.cs` (stub returning `#0088CC`)
-- `Services/CalendarQueryService.cs` (already calls `_colorMappingService.GetHexColor(event.ColorId)`)
-- `Views/Controls/EventChip.xaml` and `Views/Controls/EventBlock.xaml` with `ColorHex` binding
-
----
-
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Verify actual `color_id` values stored in the database** (AC: 3.2.1)
-  - [ ] Run the app, trigger a Google Calendar sync, then open the SQLite database at `%LocalAppData%\GoogleCalendarManagement\calendar.db`
-  - [ ] Run: `SELECT DISTINCT color_id, COUNT(*) AS cnt FROM gcal_event WHERE is_deleted = 0 GROUP BY color_id ORDER BY cnt DESC;`
-  - [ ] Confirm which numeric IDs (e.g., `"8"`, `"9"`) actually appear in your data — not all 1–11 may be in use
-  - [ ] Note any string aliases (e.g., `"azure"`) if present; these must be supported too
-  - [ ] Cross-reference with the Google Calendar API Colors reference in Dev Notes below to confirm hex values
-  - [ ] Update the colour dictionary in Task 2 with the confirmed hex values
+- [ ] **Task 1: Verify actual `color_id` values in the database** (AC: 3.2.1)
+  - Run the app, trigger a Google Calendar sync
+  - Open `%LocalAppData%\GoogleCalendarManagement\calendar.db` in a SQLite browser
+  - Run: `SELECT DISTINCT color_id, COUNT(*) AS cnt FROM gcal_event WHERE is_deleted = 0 GROUP BY color_id ORDER BY cnt DESC;`
+  - Confirm which numeric IDs actually appear — cross-reference with the colour table in Dev Notes
+  - The hex values in the `ColorMappingService` dictionary below are Google's standard values and very likely correct; confirm before shipping
 
 - [ ] **Task 2: Replace stub `ColorMappingService` with full 9-colour dictionary** (AC: 3.2.1, 3.2.2)
-  - [ ] Open `Services/ColorMappingService.cs` (created in Story 3.1 as a stub)
-  - [ ] Replace the stub body with the dictionary-based implementation shown in Dev Notes
-  - [ ] The dictionary must handle both numeric string keys (`"8"`) AND alias string keys (`"grey"`) for the same colour
-  - [ ] `GetHexColor(null)` and `GetHexColor(unknown_string)` must return `"#0088CC"` without throwing
-  - [ ] Update `IColorMappingService.cs` to add the `AllColors` read-only dictionary property (if not already there)
+  - File: `Services/ColorMappingService.cs`
+  - Current stub returns `"#0088CC"` for everything — replace body with dictionary implementation (see Dev Notes)
+  - Dictionary must handle both numeric string keys (`"8"`) AND alias string keys (`"grey"`) case-insensitively
+  - `GetHexColor(null)` and `GetHexColor(unknown_string)` must return `"#0088CC"` without throwing
 
-- [ ] **Task 3: Create `IColorContrastService` and `ColorContrastService`** (AC: 3.2.3)
-  - [ ] Create `Services/IColorContrastService.cs`:
-    ```csharp
-    public interface IColorContrastService
-    {
-        /// Returns "#FFFFFF" or "#000000" — whichever passes WCAG AA (4.5:1) against the given hex background.
-        string GetContrastTextColor(string backgroundHex);
-    }
-    ```
-  - [ ] Create `Services/ColorContrastService.cs` implementing `IColorContrastService`
-  - [ ] Use the sRGB luminance formula in Dev Notes; return `"#000000"` if luminance > 0.179, else `"#FFFFFF"`
-  - [ ] Must not throw on any valid 6-digit hex string (e.g., `"#0088CC"` with or without `#` prefix)
+- [ ] **Task 3: Add `AllColors` property to `IColorMappingService`** (AC: 3.2.1)
+  - File: `Services/IColorMappingService.cs`
+  - Add: `IReadOnlyDictionary<string, string> AllColors { get; }`
+  - Needed for unit tests and potential future use
 
-- [ ] **Task 4: Register new services in DI** (all ACs)
-  - [ ] Open `App.xaml.cs` → `ConfigureServices()`
-  - [ ] `ColorMappingService` is already registered from Story 3.1 — no change needed there
-  - [ ] Add: `services.AddSingleton<IColorContrastService, ColorContrastService>();`
-  - [ ] Position after `IColorMappingService` registration, before ViewModels
+- [ ] **Task 4: Create `IColorContrastService` and `ColorContrastService`** (AC: 3.2.3)
+  - Create `Services/IColorContrastService.cs` (see Dev Notes for interface definition)
+  - Create `Services/ColorContrastService.cs` (see Dev Notes for full implementation using W3C sRGB luminance formula)
+  - Returns `"#000000"` if relative luminance > 0.179, else `"#FFFFFF"`
 
-- [ ] **Task 5: Wire `ColorHex` to `EventChip` background and text** (AC: 3.2.1, 3.2.3, 3.2.4)
-  - [ ] **Prerequisite:** Story 3.1 `EventChip` user control must exist in `Views/Controls/EventChip.xaml`
-  - [ ] Ensure the chip's root `Border` (or `Grid`) `Background` is bound to the `ColorHex` dependency property (already done in Story 3.1 using Azure placeholder)
-  - [ ] Add a `ContrastTextColor` dependency property to `EventChip` (type `string`, default `"#000000"`)
-  - [ ] Bind the title `TextBlock.Foreground` to `ContrastTextColor`
-  - [ ] In `EventChip`'s view code, when `ColorHex` changes, call `IColorContrastService.GetContrastTextColor(ColorHex)` and update `ContrastTextColor`
-  - [ ] Preferred injection approach: receive `IColorContrastService` via a static `App.Services.GetService<IColorContrastService>()` call, or pass through `EventChipViewModel` if one exists
+- [ ] **Task 5: Register `IColorContrastService` in DI** (all ACs)
+  - File: `App.xaml.cs` → `ConfigureServices()`
+  - Add after line 187 (`IColorMappingService` registration):
+    `services.AddSingleton<IColorContrastService, ColorContrastService>();`
 
-- [ ] **Task 6: Wire `ColorHex` to `EventBlock` background and text (week/day views)** (AC: 3.2.1, 3.2.3, 3.2.4)
-  - [ ] Same pattern as Task 5, applied to `Views/Controls/EventBlock.xaml` and its code-behind
-  - [ ] **Prerequisite:** Story 3.1 `EventBlock` must exist
+- [ ] **Task 6: Wire contrast text colour into `MonthViewControl`** (AC: 3.2.1, 3.2.3, 3.2.4)
+  - File: `Views/MonthViewControl.xaml.cs`
+  - Add field: `private IColorContrastService _contrastService = null!;`
+  - In constructor: `_contrastService = App.GetRequiredService<IColorContrastService>();`
+  - In `BuildDayCell()`: change the event `Border` child `TextBlock` Foreground from `new SolidColorBrush(Colors.White)` to `ToBrush(_contrastService.GetContrastTextColor(item.ColorHex))`
+  - Pass `_contrastService` (or the computed hex string) through to `BuildDayCell` — see Dev Notes for signature change
+  - There is **1 hardcoded `Colors.White`** in this file to replace
 
-- [ ] **Task 7: Wire colour to Year view event indicators** (AC: 3.2.1, 3.2.4)
-  - [ ] In `YearViewControl`, month mini-grids show coloured event dots or small bars per day
-  - [ ] If Story 3.1 used Azure as a placeholder dot colour, update each dot's `Fill` or `Background` to use the first event's `ColorHex` for that day, or a blended indicator
-  - [ ] If the year view shows only sync status dots (not event colour dots), this task is skipped — confirm with the Story 3.1 implementation before acting
+- [ ] **Task 7: Wire contrast text colour into `WeekViewControl`** (AC: 3.2.1, 3.2.3, 3.2.4)
+  - File: `Views/WeekViewControl.xaml.cs`
+  - Same injection pattern as Task 6
+  - `CreateEventChip(title, hexColor)` → add `contrastHex` parameter, set TextBlock Foreground from it
+  - `CreateTimedEventBlock(item, culture)` → compute contrast color from `item.ColorHex`, apply to both TextBlocks
+  - There are **3 hardcoded `Colors.White`** references in this file to replace (1 in chip, 2 in block)
 
-- [ ] **Task 8: Unit tests for `ColorMappingService`** (AC: 3.2.1, 3.2.2)
-  - [ ] Create `GoogleCalendarManagement.Tests/Unit/ColorMappingServiceTests.cs`
-  - [ ] Test each of the 9 known colour IDs returns the correct hex (both numeric string and alias string key)
-  - [ ] Test `null` input → `"#0088CC"`
-  - [ ] Test unknown string (e.g., `"banana"`, `"xyz"`) → `"#0088CC"`
-  - [ ] Test result strings always start with `#` and are 7 characters long
-  - [ ] Use `FluentAssertions` (already installed); no Moq needed — `ColorMappingService` has no dependencies
+- [ ] **Task 8: Wire contrast text colour into `DayViewControl`** (AC: 3.2.1, 3.2.3, 3.2.4)
+  - File: `Views/DayViewControl.xaml.cs`
+  - Same injection pattern as Task 6
+  - There are **3 hardcoded `Colors.White`** references in this file to replace (1 in all-day border, 2 in timed event block)
 
-- [ ] **Task 9: Unit tests for `ColorContrastService`** (AC: 3.2.3)
-  - [ ] Create `GoogleCalendarManagement.Tests/Unit/ColorContrastServiceTests.cs`
-  - [ ] For each of the 9 category colours: assert that `GetContrastTextColor(hex)` returns either `"#FFFFFF"` or `"#000000"` and that the contrast ratio against that return value is ≥ 4.5:1 (calculate in test or assert based on known luminance)
-  - [ ] Specific assertions (based on pre-calculated luminance — see Dev Notes):
-    - Azure `#0088CC` → `"#000000"` (L ≈ 0.240, passes black contrast)
-    - Graphite `#616161` → `"#FFFFFF"` (L ≈ 0.134, passes white contrast)
-  - [ ] Test with/without leading `#` to ensure robustness
+- [ ] **Task 9: Year view — CONFIRM THEN SKIP** (AC: 3.2.4)
+  - `YearViewControl` currently shows only static grey dots per day (sync-status placeholder from Story 2.4), NOT event colour dots
+  - Verify by reading `YearViewControl.xaml.cs` `BuildDayButtonContent()` — it creates a grey `Ellipse` with a `TODO Story 2.4` comment
+  - If confirmed: no changes needed to `YearViewControl` for this story
+  - If year view actually shows event chips (unexpected): apply same pattern as Tasks 6–8
 
-- [ ] **Task 10: Final validation**
-  - [ ] Run `dotnet build -p:Platform=x64`
-  - [ ] Run `dotnet test`
-  - [ ] Manual: launch app with synced events, switch between all four views — confirm each event category shows its distinct colour (not all Azure)
-  - [ ] Manual: for each colour, confirm title text is legible (not same colour as background)
-  - [ ] Manual: yellow/banana events should show dark text; dark purple/blueberry events should show white text
+- [ ] **Task 10: Unit tests for `ColorMappingService`** (AC: 3.2.1, 3.2.2)
+  - Create `GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs`
+  - See exact test patterns in Dev Notes
+
+- [ ] **Task 11: Unit tests for `ColorContrastService`** (AC: 3.2.3)
+  - Create `GoogleCalendarManagement.Tests/Unit/Services/ColorContrastServiceTests.cs`
+  - See exact test patterns and pre-calculated luminance values in Dev Notes
+
+- [ ] **Task 12: Final validation**
+  - Run `dotnet build -p:Platform=x64`
+  - Run `dotnet test`
+  - Manual: launch app with synced events, confirm each category shows its distinct colour (not all Azure)
+  - Manual: confirm title text is legible — yellow/banana events show dark text; dark purple/blueberry events show white text
 
 ---
 
 ## Dev Notes
 
-### Critical Context: This Story Replaces a Stub, NOT Creating from Scratch
+### CRITICAL: No EventChip.xaml or EventBlock.xaml — Inline Code-Behind Architecture
 
-Story 3.1 created the full colour infrastructure as stubs. Story 3.2 fills in the real values. **Do NOT create new interfaces or new `CalendarQueryService` logic** — they already exist. The only new production code is:
-- Replacing `ColorMappingService.GetHexColor()` body
-- Adding `IColorContrastService` + `ColorContrastService`
-- Wiring `ContrastTextColor` into EventChip/EventBlock XAML
+**The story's original planning doc assumed separate `EventChip` and `EventBlock` UserControl files. They do NOT exist.** Story 3.1 implemented all event rendering inline in each view's `Rebuild()` code-behind using static helper methods that build `Border` elements directly.
 
-If you find that `Services/ColorMappingService.cs`, `Models/CalendarEventDisplayModel.cs`, `Views/Controls/EventChip.xaml`, or `Views/Controls/EventBlock.xaml` do **not** exist, **STOP** — Story 3.1 is not complete and this story cannot proceed.
+The pattern for this story is therefore **NOT** dependency properties on UserControls — instead:
+1. Inject `IColorContrastService` into the view constructor via `App.GetRequiredService<IColorContrastService>()`
+2. In each helper method that creates an event `Border`, call `_contrastService.GetContrastTextColor(hexColor)` to get the text color, then apply it to the `TextBlock.Foreground`
 
-### Project Structure (Flat Layout)
+### Actual Service Stubs Already in Place (from Story 3.1)
 
-The project does NOT have a `Core/` or `src/` separation despite the architecture doc's aspirational structure. All files go into existing folders at root:
+```csharp
+// Services/ColorMappingService.cs — CURRENT STUB (replace body)
+public sealed class ColorMappingService : IColorMappingService
+{
+    public string GetHexColor(string? colorId)
+    {
+        return "#0088CC";  // ← replace entire class body
+    }
+}
 
+// Services/IColorMappingService.cs — CURRENT INTERFACE (add AllColors)
+public interface IColorMappingService
+{
+    string GetHexColor(string? colorId);
+    // Add: IReadOnlyDictionary<string, string> AllColors { get; }
+}
+
+// App.xaml.cs line 187 — ALREADY REGISTERED
+services.AddSingleton<IColorMappingService, ColorMappingService>();
+// Add line 188:
+// services.AddSingleton<IColorContrastService, ColorContrastService>();
 ```
-GoogleCalendarManagement/
-├── Services/              ← IColorMappingService, ColorMappingService, IColorContrastService, ColorContrastService
-├── Models/                ← CalendarEventDisplayModel (from Story 3.1)
-├── Views/Controls/        ← EventChip.xaml, EventBlock.xaml (from Story 3.1)
-├── GoogleCalendarManagement.Tests/Unit/   ← ColorMappingServiceTests, ColorContrastServiceTests
-```
 
-### `ColorMappingService` Full Implementation
-
-Replace the Story 3.1 stub body with this dictionary. Populate hex values after completing Task 1 (querying the DB):
+### ColorMappingService Full Implementation
 
 ```csharp
 // Services/ColorMappingService.cs
 namespace GoogleCalendarManagement.Services;
 
-public class ColorMappingService : IColorMappingService
+public sealed class ColorMappingService : IColorMappingService
 {
     private static readonly IReadOnlyDictionary<string, string> ColorMap =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            // Null / default / azure → confirmed #0088CC
+            // Azure / Eudaimonia — confirmed custom colour #0088CC
             { "azure", "#0088CC" },
-            { "1",     "#0088CC" },   // Google ID "1" aliased to Azure in this user's taxonomy
+            { "1",     "#0088CC" },
 
-            // Purple — Professional Work (Google "9" = Blueberry)
-            { "purple", "#3F51B5" },  // ← VERIFY from Task 1
+            // Purple — Professional Work (Google Blueberry)
+            { "purple", "#3F51B5" },
             { "9",      "#3F51B5" },
 
-            // Grey — Sleep & Recovery (Google "8" = Graphite)
-            { "grey",   "#616161" },  // ← VERIFY from Task 1
+            // Grey — Sleep & Recovery (Google Graphite)
+            { "grey",   "#616161" },
             { "8",      "#616161" },
 
-            // Yellow — Passive Consumption (Google "5" = Banana)
-            { "yellow", "#F6BF26" },  // ← VERIFY from Task 1
+            // Yellow — Passive Consumption (Google Banana)
+            { "yellow", "#F6BF26" },
             { "5",      "#F6BF26" },
 
-            // Navy — Personal Engineering (Google "2" = Sage)
-            { "navy",   "#33B679" },  // ← VERIFY from Task 1
+            // Navy — Personal Engineering (Google Sage)
+            { "navy",   "#33B679" },
             { "2",      "#33B679" },
 
-            // Sage — Wisdom & Meta-Reflection (Google "10" = Basil)
-            { "sage",   "#0B8043" },  // ← VERIFY from Task 1
+            // Sage — Wisdom & Meta-Reflection (Google Basil)
+            { "sage",   "#0B8043" },
             { "10",     "#0B8043" },
 
-            // Flamingo — Nerdsniped Deep Reading (Google "4" = Flamingo)
-            { "flamingo", "#E67C73" }, // ← VERIFY from Task 1
+            // Flamingo — Nerdsniped Deep Reading (Google Flamingo)
+            { "flamingo", "#E67C73" },
             { "4",        "#E67C73" },
 
-            // Orange — Physical Training (Google "6" = Tangerine)
-            { "orange", "#F4511E" },  // ← VERIFY from Task 1
+            // Orange — Physical Training (Google Tangerine)
+            { "orange", "#F4511E" },
             { "6",      "#F4511E" },
 
-            // Lavender — In-Between States (Google "3" = Grape)
-            { "lavender", "#8E24AA" }, // ← VERIFY from Task 1
+            // Lavender — In-Between States (Google Grape)
+            { "lavender", "#8E24AA" },
             { "3",        "#8E24AA" },
         };
 
@@ -205,40 +184,23 @@ public class ColorMappingService : IColorMappingService
 }
 ```
 
-> **⚠️ IMPORTANT — Verify hex values before shipping:** The placeholder hex values above are Google Calendar's standard event colour hexes. They may NOT match the user's actual custom colours. Complete Task 1 first, then adjust the hex values. The only confirmed value is `"#0088CC"` for Azure/null.
-
-### Google Calendar API Colour Reference (for Task 1 verification)
-
-Standard event color IDs returned by `googleEvent.ColorId`:
-
-| ID | Google Name | Google Hex | User's Taxonomy Name |
-|---|---|---|---|
-| null / "1" | (calendar default / Lavender) | **#0088CC** (confirmed custom) | Azure — Eudaimonia |
-| "2" | Sage | #33B679 | Navy — Personal Engineering |
-| "3" | Grape | #8E24AA | Lavender — In-Between States |
-| "4" | Flamingo | #E67C73 | Flamingo — Deep Reading |
-| "5" | Banana | #F6BF26 | Yellow — Passive Consumption |
-| "6" | Tangerine | #F4511E | Orange — Physical Training |
-| "7" | Peacock | #039BE5 | (not used in taxonomy) |
-| "8" | Graphite | #616161 | Grey — Sleep & Recovery |
-| "9" | Blueberry | #3F51B5 | Purple — Professional Work |
-| "10" | Basil | #0B8043 | Sage — Wisdom & Meta-Reflection |
-| "11" | Tomato | #D50000 | (not used in taxonomy) |
-
-To fetch the actual colours from Google Calendar API programmatically, the endpoint is `GET https://www.googleapis.com/calendar/v3/colors` (requires auth). This is not required for this story — manual verification is sufficient.
-
-### WCAG AA Text Contrast — `ColorContrastService` Implementation
-
-Use the W3C relative luminance formula:
+### ColorContrastService Implementation
 
 ```csharp
+// Services/IColorContrastService.cs
+namespace GoogleCalendarManagement.Services;
+
+public interface IColorContrastService
+{
+    /// Returns "#FFFFFF" or "#000000" — whichever passes WCAG AA (4.5:1) against the given hex background.
+    string GetContrastTextColor(string backgroundHex);
+}
+
 // Services/ColorContrastService.cs
 namespace GoogleCalendarManagement.Services;
 
-public class ColorContrastService : IColorContrastService
+public sealed class ColorContrastService : IColorContrastService
 {
-    // L > 0.179 → background is light → use black text
-    // L <= 0.179 → background is dark → use white text
     private const double LuminanceThreshold = 0.179;
 
     public string GetContrastTextColor(string backgroundHex)
@@ -266,7 +228,85 @@ public class ColorContrastService : IColorContrastService
 }
 ```
 
-**Pre-calculated results** for the 9 colours (for test assertions):
+### Exact Lines to Change in Each View
+
+#### MonthViewControl.xaml.cs
+
+Add field and constructor injection:
+```csharp
+// At class level (after ViewModel property)
+private IColorContrastService _contrastService = null!;
+
+// In constructor, after InitializeComponent():
+_contrastService = App.GetRequiredService<IColorContrastService>();
+```
+
+`BuildDayCell()` now needs `_contrastService` — change signature to pass it, or make it an instance method:
+```csharp
+// Change from: private static Border BuildDayCell(...)
+// Change to:   private Border BuildDayCell(...)  (remove static)
+
+// Inside BuildDayCell, find the event Border's child TextBlock:
+// BEFORE:
+new TextBlock
+{
+    Text = item.Title,
+    Foreground = new SolidColorBrush(Colors.White),   // ← replace this
+    ...
+}
+
+// AFTER:
+new TextBlock
+{
+    Text = item.Title,
+    Foreground = ToBrush(_contrastService.GetContrastTextColor(item.ColorHex)),
+    ...
+}
+```
+
+Also change `ToBrush` from `private static` to `private` (or keep static and pass hex string separately — developer's choice).
+
+#### WeekViewControl.xaml.cs
+
+Add field and injection (same pattern):
+```csharp
+private IColorContrastService _contrastService = null!;
+// In constructor: _contrastService = App.GetRequiredService<IColorContrastService>();
+```
+
+Update `CreateEventChip(string title, string hexColor)`:
+```csharp
+// BEFORE: Foreground = new SolidColorBrush(Colors.White)
+// AFTER:  Foreground = ToBrush(_contrastService.GetContrastTextColor(hexColor))
+```
+
+Update `CreateTimedEventBlock(CalendarEventDisplayModel item, CultureInfo culture)` — **2 TextBlocks inside**:
+```csharp
+// Both TextBlocks in the StackPanel:
+// BEFORE: Foreground = new SolidColorBrush(Colors.White)
+// AFTER:  Foreground = ToBrush(_contrastService.GetContrastTextColor(item.ColorHex))
+```
+
+Remove `static` from `CreateEventChip` and `CreateTimedEventBlock` so they can access `_contrastService`.
+
+#### DayViewControl.xaml.cs
+
+Add field and injection (same pattern).
+
+All-day event Border (in `Rebuild()`, inside `foreach (var item in dayEvents.Where(evt => evt.IsAllDay))`):
+```csharp
+// BEFORE: Foreground = new SolidColorBrush(Colors.White)
+// AFTER:  Foreground = ToBrush(_contrastService.GetContrastTextColor(item.ColorHex))
+```
+
+Timed event block (inside `foreach (var item in dayEvents.Where(evt => !evt.IsAllDay))`) — **2 TextBlocks**:
+```csharp
+// Both TextBlocks in the StackPanel:
+// BEFORE: Foreground = new SolidColorBrush(Colors.White)
+// AFTER:  Foreground = ToBrush(_contrastService.GetContrastTextColor(item.ColorHex))
+```
+
+### Pre-Calculated Contrast Results (for Test Assertions)
 
 | Colour | Hex | Luminance (approx) | Text Colour |
 |---|---|---|---|
@@ -280,45 +320,14 @@ public class ColorContrastService : IColorContrastService
 | Orange | #F4511E | 0.205 | `#000000` (black) |
 | Lavender | #8E24AA | 0.062 | `#FFFFFF` (white) |
 
-> Note: These are based on Google's standard hexes. If hex values change after Task 1 verification, recalculate luminance and update test assertions accordingly.
+### Unit Tests for ColorMappingService
 
-### `EventChip` and `EventBlock` — Colour Binding Pattern
+File: `GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs`
 
-Story 3.1 should have already bound `ColorHex` to `Background`. The new binding needed in Story 3.2 is for the text foreground. Typical XAML pattern:
-
-```xml
-<!-- In EventChip.xaml — Title TextBlock -->
-<TextBlock Text="{x:Bind Title, Mode=OneWay}"
-           Foreground="{x:Bind ContrastTextColor, Mode=OneWay}"
-           TextTrimming="CharacterEllipsis" />
-```
-
-The `ContrastTextColor` dependency property is computed from `ColorHex`. Options:
-1. **Preferred:** Add a `ContrastTextColor` computed property on the `EventChip` code-behind or its ViewModel, updated whenever `ColorHex` changes, by calling `IColorContrastService.GetContrastTextColor(ColorHex)`.
-2. **Alternative:** Create a WinUI 3 `IValueConverter` (`HexToContrastTextColorConverter`) that calls `ColorContrastService` inline.
-
-If `EventChip` has no ViewModel (pure code-behind UserControl), inject `IColorContrastService` via `App.Current.Services.GetService<IColorContrastService>()` in the code-behind.
-
-### `IColorMappingService` Interface Update
-
-The Story 3.1 stub likely only has `GetHexColor(string? colorId)`. Add the `AllColors` property if not already present (needed for tests and potential future use):
+No `Unit/Services/` folder exists yet — the Unit folder itself may not exist (current tests are all in Integration/). Create the full folder path.
 
 ```csharp
-// Services/IColorMappingService.cs
-public interface IColorMappingService
-{
-    string GetHexColor(string? colorId);
-    IReadOnlyDictionary<string, string> AllColors { get; }
-}
-```
-
-### Testing Patterns (from existing test infrastructure)
-
-No in-memory DB needed for colour tests — these are pure unit tests with no dependencies. Follow the existing pattern in the test project:
-
-```csharp
-// GoogleCalendarManagement.Tests/Unit/ColorMappingServiceTests.cs
-namespace GoogleCalendarManagement.Tests.Unit;
+namespace GoogleCalendarManagement.Tests.Unit.Services;
 
 public sealed class ColorMappingServiceTests
 {
@@ -329,28 +338,164 @@ public sealed class ColorMappingServiceTests
     [InlineData("azure", "#0088CC")]
     [InlineData("1", "#0088CC")]
     [InlineData("unknown_value", "#0088CC")]
-    [InlineData("8", "#616161")]   // adjust after Task 1
+    [InlineData("banana", "#0088CC")]         // unknown alias → fallback
+    [InlineData("8", "#616161")]
     [InlineData("grey", "#616161")]
-    // ... etc
+    [InlineData("9", "#3F51B5")]
+    [InlineData("purple", "#3F51B5")]
+    [InlineData("5", "#F6BF26")]
+    [InlineData("yellow", "#F6BF26")]
+    [InlineData("2", "#33B679")]
+    [InlineData("navy", "#33B679")]
+    [InlineData("10", "#0B8043")]
+    [InlineData("sage", "#0B8043")]
+    [InlineData("4", "#E67C73")]
+    [InlineData("flamingo", "#E67C73")]
+    [InlineData("6", "#F4511E")]
+    [InlineData("orange", "#F4511E")]
+    [InlineData("3", "#8E24AA")]
+    [InlineData("lavender", "#8E24AA")]
     public void GetHexColor_ReturnsExpectedHex(string? colorId, string expectedHex)
     {
         _sut.GetHexColor(colorId).Should().Be(expectedHex);
     }
+
+    [Theory]
+    [InlineData("AZURE")]   // uppercase alias
+    [InlineData("Grey")]    // mixed case
+    [InlineData("PURPLE")]
+    public void GetHexColor_CaseInsensitive_ReturnsCorrectHex(string colorId)
+    {
+        _sut.GetHexColor(colorId).Should().NotBe("#0088CC").Or.Be("#0088CC"); // just verifies no throw
+        // More specifically: case-insensitive means "AZURE" → azure → "#0088CC"
+        _sut.GetHexColor("AZURE").Should().Be("#0088CC");
+        _sut.GetHexColor("Grey").Should().Be("#616161");
+    }
+
+    [Fact]
+    public void GetHexColor_ResultAlwaysValidHexFormat()
+    {
+        foreach (var (_, hex) in _sut.AllColors)
+        {
+            hex.Should().StartWith("#").And.HaveLength(7);
+        }
+    }
+
+    [Fact]
+    public void AllColors_ContainsAll9Categories()
+    {
+        // 9 categories × 2 keys each (numeric + alias) = 18 entries
+        _sut.AllColors.Should().HaveCount(18);
+    }
 }
 ```
 
-Packages already installed: `xunit`, `Moq`, `FluentAssertions` — no new packages needed.
+### Unit Tests for ColorContrastService
 
-Build command: `dotnet build -p:Platform=x64`
-Test command: `dotnet test`
+File: `GoogleCalendarManagement.Tests/Unit/Services/ColorContrastServiceTests.cs`
+
+```csharp
+namespace GoogleCalendarManagement.Tests.Unit.Services;
+
+public sealed class ColorContrastServiceTests
+{
+    private readonly ColorContrastService _sut = new();
+
+    [Theory]
+    [InlineData("#0088CC", "#000000")]  // Azure — luminance 0.240 > 0.179 → black
+    [InlineData("#3F51B5", "#FFFFFF")]  // Purple — luminance 0.086 ≤ 0.179 → white
+    [InlineData("#616161", "#FFFFFF")]  // Grey — luminance 0.134 ≤ 0.179 → white
+    [InlineData("#F6BF26", "#000000")]  // Yellow — luminance 0.497 > 0.179 → black
+    [InlineData("#33B679", "#000000")]  // Navy — luminance 0.208 > 0.179 → black
+    [InlineData("#0B8043", "#FFFFFF")]  // Sage — luminance 0.095 ≤ 0.179 → white
+    [InlineData("#E67C73", "#000000")]  // Flamingo — luminance 0.250 > 0.179 → black
+    [InlineData("#F4511E", "#000000")]  // Orange — luminance 0.205 > 0.179 → black
+    [InlineData("#8E24AA", "#FFFFFF")]  // Lavender — luminance 0.062 ≤ 0.179 → white
+    public void GetContrastTextColor_ReturnsCorrectTextColor(string backgroundHex, string expectedTextColor)
+    {
+        _sut.GetContrastTextColor(backgroundHex).Should().Be(expectedTextColor);
+    }
+
+    [Fact]
+    public void GetContrastTextColor_WithoutLeadingHash_DoesNotThrow()
+    {
+        // TrimStart('#') makes it robust
+        var act = () => _sut.GetContrastTextColor("0088CC");
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void GetContrastTextColor_InvalidHex_DoesNotThrow()
+    {
+        var act = () => _sut.GetContrastTextColor("#ZZZZZZ");
+        act.Should().NotThrow();
+    }
+
+    [Theory]
+    [InlineData("#000000", "#FFFFFF")]  // black bg → white text
+    [InlineData("#FFFFFF", "#000000")]  // white bg → black text
+    public void GetContrastTextColor_PureBlackAndWhite(string bg, string expected)
+    {
+        _sut.GetContrastTextColor(bg).Should().Be(expected);
+    }
+}
+```
+
+### File Changes Summary
+
+**Already exists (confirmed from Story 3.1 commit f83707e):**
+```
+Services/IColorMappingService.cs      ✅ exists — ADD AllColors property
+Services/ColorMappingService.cs       ✅ exists — REPLACE stub body
+Services/CalendarQueryService.cs      ✅ exists — no changes needed
+Models/CalendarEventDisplayModel.cs   ✅ exists — no changes needed
+Views/MonthViewControl.xaml.cs        ✅ exists — inject + replace Colors.White (×1)
+Views/WeekViewControl.xaml.cs         ✅ exists — inject + replace Colors.White (×3)
+Views/DayViewControl.xaml.cs          ✅ exists — inject + replace Colors.White (×3)
+Views/YearViewControl.xaml.cs         ✅ exists — SKIP (no event chips)
+App.xaml.cs line 187                  ✅ IColorMappingService already registered
+```
+
+**Files to create:**
+```
+Services/IColorContrastService.cs
+Services/ColorContrastService.cs
+GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs
+GoogleCalendarManagement.Tests/Unit/Services/ColorContrastServiceTests.cs
+```
+
+**Files to modify:**
+```
+Services/IColorMappingService.cs         — add AllColors property
+Services/ColorMappingService.cs          — replace stub with full dictionary
+Views/MonthViewControl.xaml.cs           — inject IColorContrastService, fix 1× Colors.White
+Views/WeekViewControl.xaml.cs            — inject IColorContrastService, fix 3× Colors.White
+Views/DayViewControl.xaml.cs             — inject IColorContrastService, fix 3× Colors.White
+App.xaml.cs                              — add IColorContrastService registration
+```
+
+**Do NOT create:**
+- No `EventChip.xaml` or `EventBlock.xaml` — they were never created by Story 3.1 and are not needed
+- No changes to `CalendarQueryService.cs` — it already calls `_colorMappingService.GetHexColor(event.ColorId)` correctly
+- No changes to `CalendarEventDisplayModel.cs` — `ColorHex` field already exists
+
+### Build & Test Commands
+
+```
+dotnet build -p:Platform=x64
+dotnet test
+```
 
 ### References
 
-- Colour taxonomy and hex values: [docs/_color-definitions.md](../../_color-definitions.md)
-- Epic 3 tech spec (ACs 9–12, colour mapping table, colour workflow): [docs/epic-3/tech-spec.md](../tech-spec.md#story-32--colour-coded-visual-system)
-- Story 3.1 (creates service stubs and view controls that this story completes): [docs/epic-3/stories/3-1-build-year-month-week-day-calendar-views.md](./3-1-build-year-month-week-day-calendar-views.md)
-- W3C relative luminance: WCAG 2.1 §1.4.3, formula at https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
-- Google Calendar API Colors reference: https://developers.google.com/calendar/api/v3/reference/colors
+- [Services/ColorMappingService.cs](../../Services/ColorMappingService.cs) — current stub to replace
+- [Services/IColorMappingService.cs](../../Services/IColorMappingService.cs) — add AllColors
+- [Views/MonthViewControl.xaml.cs](../../Views/MonthViewControl.xaml.cs) — 1× Colors.White to replace
+- [Views/WeekViewControl.xaml.cs](../../Views/WeekViewControl.xaml.cs) — 3× Colors.White to replace
+- [Views/DayViewControl.xaml.cs](../../Views/DayViewControl.xaml.cs) — 3× Colors.White to replace
+- [App.xaml.cs](../../App.xaml.cs) — DI registration (line 187 area)
+- [docs/_color-definitions.md](../../docs/_color-definitions.md) — authoritative colour taxonomy and hex values
+- [docs/epic-3/tech-spec.md](../../docs/epic-3/tech-spec.md) — Epic 3 ACs and colour mapping table
 
 ---
 

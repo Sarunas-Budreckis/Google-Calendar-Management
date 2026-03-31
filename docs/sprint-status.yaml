@@ -30,11 +30,11 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-03-31T00:30:00Z
+last_updated: 2026-03-31T20:48:09Z
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
-story_location: "{project-root}/docs/epic-2/stories"
+story_location: "{project-root}/docs/epic-3/stories"
 
 development_status:
   epic-1: contexted
@@ -64,4 +64,5 @@ development_status:
   3-6-implement-event-creation-drag-to-create-and-button: backlog
   3-7-implement-color-picker-for-event-colors: backlog
   3-8-add-date-navigation-and-jump-to-date-features: backlog
+  3-9-enhance-year-view-with-event-indicators-and-all-day-previews: ready-for-dev
   epic-3-retrospective: optional

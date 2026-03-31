@@ -34,7 +34,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 - `ux_file` = `{planning_artifacts}/*ux*.md`
 - `story_title` = "" (will be elicited if not derivable)
 - `project_context` = `**/project-context.md` (load if exists)
-- `default_output_file` = `{implementation_artifacts}/{{story_key}}.md`
+- `default_output_file` = `{implementation_artifacts}/epic-{{epic_num}}/stories/{{story_key}}.md`
 
 ### Input Files
 
@@ -225,8 +225,8 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
   (As a, I want, so that) - Detailed acceptance criteria (already BDD formatted) - Technical requirements specific to this story -
   Business context and value - Success criteria <!-- Previous story analysis for context continuity -->
   <check if="story_num > 1">
-    <action>Find {{previous_story_num}}: scan {implementation_artifacts} for the story file in epic {{epic_num}} with the highest story number less than {{story_num}}</action>
-    <action>Load previous story file: {implementation_artifacts}/{{epic_num}}-{{previous_story_num}}-*.md</action> **PREVIOUS STORY INTELLIGENCE:** -
+    <action>Find {{previous_story_num}}: scan {implementation_artifacts}/epic-{{epic_num}}/stories for the story file with the highest story number less than {{story_num}}</action>
+    <action>Load previous story file: {implementation_artifacts}/epic-{{epic_num}}/stories/{{epic_num}}-{{previous_story_num}}-*.md</action> **PREVIOUS STORY INTELLIGENCE:** -
   Dev notes and learnings from previous story - Review feedback and corrections needed - Files that were created/modified and their
   patterns - Testing approaches that worked/didn't work - Problems encountered and solutions found - Code patterns established <action>Extract
   all learnings that could impact current story implementation</action>

@@ -9,12 +9,17 @@ namespace GoogleCalendarManagement.Views;
 
 public sealed partial class WeekViewControl : Page
 {
+    private const double TimeColumnWidth = 72;
+    private const double MinimumDayColumnWidth = 100;
+    private const double HorizontalChromeAllowance = 48;
+
     public WeekViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
         InitializeComponent();
         Loaded += WeekViewControl_Loaded;
         Unloaded += WeekViewControl_Unloaded;
+        SizeChanged += WeekViewControl_SizeChanged;
     }
 
     public MainViewModel ViewModel { get; }
@@ -38,16 +43,28 @@ public sealed partial class WeekViewControl : Page
         }
     }
 
+    private void WeekViewControl_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        Rebuild();
+    }
+
     private void Rebuild()
     {
         WeekGrid.Children.Clear();
         WeekGrid.RowDefinitions.Clear();
         WeekGrid.ColumnDefinitions.Clear();
 
-        WeekGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
+        var viewportWidth = Math.Max(0d, ActualWidth - HorizontalChromeAllowance);
+        var minimumContentWidth = TimeColumnWidth + (MinimumDayColumnWidth * 7);
+        var contentWidth = Math.Max(minimumContentWidth, viewportWidth);
+        var availableDayWidth = (contentWidth - TimeColumnWidth) / 7d;
+
+        WeekGrid.Width = contentWidth;
+
+        WeekGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(TimeColumnWidth) });
         for (var column = 0; column < 7; column++)
         {
-            WeekGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
+            WeekGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(availableDayWidth) });
         }
 
         WeekGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

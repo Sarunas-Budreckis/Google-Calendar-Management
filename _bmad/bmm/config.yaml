@@ -6,7 +6,7 @@
 project_name: Google Calendar Management
 user_skill_level: intermediate
 planning_artifacts: "{project-root}/_bmad-output/planning-artifacts"
-implementation_artifacts: "{project-root}/_bmad-output/implementation-artifacts"
+implementation_artifacts: "{project-root}/docs"
 project_knowledge: "{project-root}/docs"
 
 # Core Configuration Values
