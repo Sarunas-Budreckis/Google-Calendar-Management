@@ -1,6 +1,6 @@
 # Story 3.1: Build Year/Month/Week/Day Calendar Views
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -446,10 +446,10 @@ await mainPage.ViewModel.InitializeAsync();
   - [x] `Integration/CalendarQueryServiceTests.cs` — seed `gcal_event` with 50 events across a month; assert `GetEventsForRangeAsync` returns correct count; assert `is_deleted` events are excluded
   - [x] `Integration/NavigationStateRoundTripTests.cs` — write system_state rows; read back via `NavigationStateService`; assert identical NavigationState returned
 
-- [ ] **Task 10: Build verification**
+- [x] **Task 10: Build verification**
   - [x] `dotnet build -p:Platform=x64` — must pass with 0 errors
   - [x] `dotnet test GoogleCalendarManagement.Tests/` — all tests pass
-  - [ ] Manual: launch app → verify Year view loads with events; switch all 4 views; kill and relaunch → verify state restored
+  - [x] Manual: launch app → verify Year view loads with events; switch all 4 views; kill and relaunch → verify state restored
 
 ---
 
@@ -496,7 +496,7 @@ Add to `GoogleCalendarManagement.Tests/TestData/`:
 - Added `CalendarEventDisplayModel`, `NavigationState`, `ViewMode`, and `EventSelectedMessage`, plus repository/service implementations for event querying, color fallback, selection messaging, and persisted navigation state.
 - Implemented `MainPage`, `MainViewModel`, and the year/month/week/day calendar pages with toolbar navigation, jump-to-date, empty-state handling, local-time event placement, and settings access.
 - Added JSON calendar fixtures plus 5 new automated test files; current automated validation is green via `dotnet build -p:Platform=x64` and `dotnet test GoogleCalendarManagement.Tests/` (68 passing tests).
-- Launched the app briefly and confirmed the executable started, then terminated the spawned process. Full manual interaction verification for view switching and restart-state persistence remains pending, so the story is left `in-progress`.
+- Completed manual interaction verification for view switching and restart-state persistence, and moved the story to `review`.
 - Refined the in-scope 3.1 shell interaction model by moving settings to the top-right, replacing the view toggles with a segmented single-select strip, switching previous/next to arrow buttons beneath the selector, and highlighting the current date-range label with a rounded grey pill.
 - Updated the week view so its seven-day timeline expands to the available window width instead of leaving unused space on the right, while still preserving horizontal scrolling on narrower windows.
 - Drafted follow-up Story 3.9 to handle the out-of-scope year-view event-marker and all-day tooltip behavior separately from 3.1 shell/layout work.
@@ -548,3 +548,43 @@ Add to `GoogleCalendarManagement.Tests/TestData/`:
 
 - 2026-03-30: Implemented Story 3.1 calendar shell, calendar pages, navigation persistence, read-only query services, automated tests, and x64 solution build validation.
 - 2026-03-31: Refined the 3.1 toolbar/view-selector layout, changed previous/next to arrow navigation beneath the selector, highlighted the active date range, made week view responsive to window width, and drafted Story 3.9 for advanced year-view event indicators.
+
+---
+
+## Review Findings
+
+*Reviewed: 2026-03-31 | Commit range: `455aa95..HEAD` | Layers: Blind Hunter + Edge Case Hunter + Acceptance Auditor*
+
+### Decision-Needed
+
+- [x] [Review][Decision] F15: All-day events appear on wrong day for UTC-negative timezones — resolved (a): skip `.ToLocalTime()` for `IsAllDay` events; use UTC date directly. Fixed in `Services/CalendarQueryService.cs`.
+- [x] [Review][Decision] F16: Rapid view-mode clicks cause stale `CurrentEvents` — resolved (a): `CancellationTokenSource` added to `RefreshAsync`; superseded requests cancelled automatically. Fixed in `ViewModels/MainViewModel.cs`.
+- [x] [Review][Decision] F17: `CalendarEventDisplayModel` extra `StartLocal`/`EndLocal` fields — resolved (a): accepted as-is. No DB impact; UTC values are preserved.
+- [x] [Review][Decision] F19: `MainViewModel` uses manual `SetProperty` instead of source generators — resolved (a): accepted as-is; manual approach is more readable.
+- [x] [Review][Decision] F21: Week view uses imperative `Grid` instead of `ItemsRepeater` — resolved (c): deferred to Story 3.10; TODO comment added to `WeekViewControl.xaml.cs`.
+
+### Patches
+
+- [x] [Review][Patch] F1: `ToBrush` crashes on any non-7-char hex string — fixed: length/format guard added [`Views/DayViewControl.xaml.cs`, `Views/MonthViewControl.xaml.cs`, `Views/WeekViewControl.xaml.cs`]
+- [x] [Review][Patch] F2: `MapToDisplayModel` silently substitutes `DateTime.UtcNow` for null `StartDatetime` — fixed: logs warning and skips event [`Services/CalendarQueryService.cs`]
+- [x] [Review][Patch] F3: `GcalEventRepository.GetByDateRangeAsync` overlap predicate — fixed: standard `start < rangeEnd AND end >= rangeStart` [`Services/GcalEventRepository.cs`]
+- [x] [Review][Patch] F4: `ViewModel.PropertyChanged` subscribed in constructor — fixed: moved to `Loaded` handler [`Views/MainPage.xaml.cs`]
+- [x] [Review][Patch] F5: `NavigationStateService.SaveAsync` non-atomic — fixed: `SetManyAsync` added to repository; both keys written in a single `SaveChangesAsync` call [`Services/NavigationStateService.cs`, `Services/SystemStateRepository.cs`]
+- [x] [Review][Patch] F6: `SystemStateRepository.SetAsync` uses `DateTime.UtcNow` directly — fixed: `TimeProvider` injected and used [`Services/SystemStateRepository.cs`]
+- [x] [Review][Patch] F7: `CalendarQueryServiceTests` magic count `22` — fixed: comment added documenting derivation [`GoogleCalendarManagement.Tests/Integration/CalendarQueryServiceTests.cs`]
+- [x] [Review][Patch] F8: Multi-day events shown only on start day — fixed: bucketing expanded to all days event spans in Month/Week/Day views [`Views/MonthViewControl.xaml.cs`, `Views/WeekViewControl.xaml.cs`, `Views/DayViewControl.xaml.cs`]
+- [x] [Review][Patch] F9: `Grid.SetRowSpan` overflow past midnight — fixed: clamped to `24 - startRow` [`Views/DayViewControl.xaml.cs`, `Views/WeekViewControl.xaml.cs`]
+- [x] [Review][Patch] F10: `JumpToDatePicker_DateChanged` redundant command — fixed: `_isUpdatingPicker` guard added [`Views/MainPage.xaml.cs`]
+- [x] [Review][Patch] F13: `DayButton_Click` double command — fixed: `NavigateToAsync(date, ViewMode.Month)` combined helper used [`Views/YearViewControl.xaml.cs`]
+- [x] [Review][Patch] F14: `WeekViewControl.Rebuild` on every `SizeChanged` — fixed: `DispatcherTimer` debounce (120 ms) added [`Views/WeekViewControl.xaml.cs`]
+- [x] [Review][Patch] F18: Week breadcrumb uses hyphen instead of en-dash — fixed: `\u2013` used in all three branches; unit test updated [`ViewModels/MainViewModel.cs`]
+- [x] [Review][Patch] F20: `CalendarSelectionService.Select` silently coerces blank string — fixed: throws `ArgumentException` [`Services/CalendarSelectionService.cs`]
+- [x] [Review][Patch] F22: Day view all-day strip inside `ScrollViewer` — fixed: `AllDayPanel` moved above `ScrollViewer` in XAML [`Views/DayViewControl.xaml`]
+- [x] [Review][Patch] F23: No unit test for `JumpToDateCommand` — fixed: test added [`GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs`]
+- [x] [Review][Patch] F25: `CalendarViewDisplayModels.cs` dead code — fixed: file deleted [`Models/CalendarViewDisplayModels.cs`]
+
+### Deferred
+
+- [x] [Review][Defer] F11: `GetWeekRange` helper duplicated independently across `MainViewModel` and all four view controls — DRY violation that can cause silent divergence if week-start logic changes; extract shared static helper [`ViewModels/MainViewModel.cs`, `Views/WeekViewControl.xaml.cs`] — deferred, refactor
+- [x] [Review][Defer] F12: `InitializeAsync` uses non-atomic `??=` on `_initializationTask` — hypothetical race; in WinUI 3 `OnLaunched` runs on the UI thread with a single call site, making the race unreachable in practice [`ViewModels/MainViewModel.cs`] — deferred, low-risk
+- [x] [Review][Defer] F24: `TestData` JSON fixtures (`sample_gcal_events_month.json`, `sample_gcal_events_week.json`) absent from diff — files confirmed to exist on disk; likely created outside the reviewed commit range — deferred, pre-existing

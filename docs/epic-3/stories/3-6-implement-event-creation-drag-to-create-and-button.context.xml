@@ -1,0 +1,268 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>6</storyId>
+    <title>Implement Event Creation (Drag-to-Create and Button)</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-31</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-3/stories/3-6-implement-event-creation-drag-to-create-and-button.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to create new local calendar events by dragging in week/day view or by using a toolbar button</iWant>
+    <soThat>I can capture unpublished events immediately and finish editing them in the same details panel flow</soThat>
+    <tasks>
+      - Add the planned Tier 2 pending_event EF Core path instead of trying to store new drafts in gcal_event
+      - Widen the current Google-only shared event identity contracts so pending drafts can flow through query, selection, and details-panel logic
+      - Extend the shared calendar query service to return both synced Google events and pending local drafts in the active range
+      - Add drag-to-create gesture handling and live preview overlays to DayViewControl and WeekViewControl using 15-minute snapping
+      - Add a + Add Event toolbar button in MainPage that gathers date/time defaults, creates the pending draft, refreshes the range, selects it, and opens the details panel in edit mode
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-3.6.1">Given the user is in Week or Day view and drags on empty timeline space, a new local-only event draft is created for the snapped drag range when the pointer is released.</ac>
+    <ac id="AC-3.6.2">Given the user drags to create, both the start and end of the created event snap to 15-minute boundaries, and a drag shorter than one slot still produces at least one 15-minute block.</ac>
+    <ac id="AC-3.6.3">Given a new event is created by drag or button, the event becomes the active selection and the right-side details panel opens immediately in edit mode for that newly created draft.</ac>
+    <ac id="AC-3.6.4">Given the user clicks + Add Event, a lightweight date/time prompt opens with start time prefilled to the current local time rounded to the nearest 15 minutes and end time defaulted to one hour later; confirming creates the new draft and opens it in the details/edit flow.</ac>
+    <ac id="AC-3.6.5">Given a new event is created, it is persisted as a pending_event row with a generated pending ID, no Google event ID yet, app_created = true, source_system = manual, and ready_to_publish = false.</ac>
+    <ac id="AC-3.6.6">Given a new draft exists in the visible range, it appears immediately using the default Azure colour and 60% opacity with a visible local-only status such as Not yet published to Google Calendar.</ac>
+    <ac id="AC-3.6.7">Given the user starts a drag but presses Esc, releases outside the active day column, or otherwise cancels before completion, no record is created and no phantom preview remains on screen.</ac>
+    <ac id="AC-3.6.8">Given the user clicks an existing Google-synced event, current selection, tooltip, navigation, and details-panel behavior continue to work; creation logic does not steal input from existing event blocks.</ac>
+    <ac id="AC-3.6.9">Given the visible date range contains both synced gcal_event rows and local pending_event rows, the shared query/display pipeline returns both, ordered correctly by start time, without duplicating or dropping either source.</ac>
+    <ac id="AC-3.6.10">Unit and integration tests cover pending-event persistence, 15-minute snapping math, and range queries that mix synced and pending events.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-3/stories/3-6-implement-event-creation-drag-to-create-and-button.md</path>
+        <title>Story 3.6 (primary reference)</title>
+        <section>Acceptance Criteria, Dev Notes, Tasks</section>
+        <snippet>Primary implementation guide. Resolves the critical mismatch between Google-only event contracts in the live repo and the Tier 2 requirement to create unpublished local drafts.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic breakdown</title>
+        <section>Story 3.6 requirements and technical notes</section>
+        <snippet>Authoritative user-story language for drag-to-create and + Add Event, including Azure defaults, 15-minute snapping, and local-only unpublished behavior.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/tech-spec.md</path>
+        <title>Epic 3 technical specification</title>
+        <section>Overview, dependencies, data-model extension note</section>
+        <snippet>Important guardrail: Epic 3 originally states future model extensions must not assume GcalEventId is the only event source. Story 3.6 is the first place that becomes operationally true.</snippet>
+      </doc>
+      <doc>
+        <path>docs/ux-design-specification.md</path>
+        <title>UX design specification</title>
+        <section>Event Creation, Visual State Language, Tier 2 journey</section>
+        <snippet>Defines the UX for drag-to-create, + Add Event defaults, and 60% opacity for unpublished drafts.</snippet>
+      </doc>
+      <doc>
+        <path>docs/tier-2-requirements.md</path>
+        <title>Tier 2 requirements</title>
+        <section>Event Creation, Visual State Indicators, Workflow</section>
+        <snippet>Confirms the Tier 2 workflow: drag or button creation, instant local persistence, and translucent unpublished state.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database schemas</title>
+        <section>3B pending_event, migration strategy</section>
+        <snippet>Authoritative schema source for pending_event. Story 3.6 must use this table for new drafts because gcal_event is the synced Google cache and requires a non-null Google event ID.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture document</title>
+        <section>ADR-014 Separate pending_event Table, Tier 2 editing and publishing</section>
+        <snippet>Reinforces the separate-table design for unpublished local drafts and the 60% opacity UI model. Treat this as the architectural source of truth when it conflicts with the narrower 3.5 draft.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_documentation-alignment-summary.md</path>
+        <title>Documentation alignment summary</title>
+        <section>Feature reassignments, event creation methods, visual feedback system</section>
+        <snippet>Confirms Story 3.6 sits in Tier 2 and that drag creation and the + Add Event button are both intended, with pending drafts rendered translucently.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/stories/3-4-create-event-details-panel-read-only-for-phase-1.md</path>
+        <title>Story 3.4</title>
+        <section>Dev Notes</section>
+        <snippet>Defines the shared details-panel host location in MainPage and the selection-driven open/close path that Story 3.6 must reuse for new drafts.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/stories/3-5-implement-event-editing-panel-phase-2.md</path>
+        <title>Story 3.5</title>
+        <section>Dev Notes, scope boundaries</section>
+        <snippet>Important dependency context. Its current draft is Google-event-centric and must be widened so the same panel/edit flow can save pending drafts as well.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>Data/CalendarDbContext.cs</path>
+        <kind>dbcontext</kind>
+        <symbol>CalendarDbContext</symbol>
+        <reason>Currently exposes only Tier 1 tables. Story 3.6 must add DbSet&lt;PendingEvent&gt; and a matching configuration so EF can create and query pending_event.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/GcalEvent.cs</path>
+        <kind>entity</kind>
+        <symbol>GcalEvent</symbol>
+        <reason>Confirms gcal_event is keyed by non-null string GcalEventId and already represents the synced Google cache, not an unpublished local-draft store.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/GcalEventConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>GcalEventConfiguration</symbol>
+        <reason>Shows gcal_event_id is the primary key with ValueGeneratedNever(). This is the concrete reason Story 3.6 must not force new drafts into gcal_event.</reason>
+      </file>
+      <file>
+        <path>Models/CalendarEventDisplayModel.cs</path>
+        <kind>model</kind>
+        <symbol>CalendarEventDisplayModel</symbol>
+        <reason>Currently uses GcalEventId as if every visible event were Google-backed. Story 3.6 must widen this shared display model to represent pending drafts too.</reason>
+      </file>
+      <file>
+        <path>Services/ICalendarQueryService.cs</path>
+        <kind>interface</kind>
+        <symbol>ICalendarQueryService</symbol>
+        <reason>Currently exposes GetEventByGcalIdAsync(...). Story 3.6 must generalize this query path to source-agnostic event identity instead of adding a second pending-only details lookup.</reason>
+      </file>
+      <file>
+        <path>Services/CalendarQueryService.cs</path>
+        <kind>service</kind>
+        <symbol>CalendarQueryService</symbol>
+        <reason>Today it maps only GcalEvent rows. Story 3.6 must union gcal_event and pending_event while preserving local-time projection and ordering.</reason>
+      </file>
+      <file>
+        <path>Services/ICalendarSelectionService.cs</path>
+        <kind>interface</kind>
+        <symbol>ICalendarSelectionService</symbol>
+        <reason>Its SelectedGcalEventId naming is too narrow for Tier 2 creation. Widen this shared contract before pending drafts start flowing through selection and panel logic.</reason>
+      </file>
+      <file>
+        <path>Services/CalendarSelectionService.cs</path>
+        <kind>service</kind>
+        <symbol>CalendarSelectionService</symbol>
+        <reason>Reused source of truth for event selection. Story 3.6 should still route selection through this service; it just needs source-agnostic event IDs instead of Google-only naming.</reason>
+      </file>
+      <file>
+        <path>Messages/EventSelectedMessage.cs</path>
+        <kind>message</kind>
+        <symbol>EventSelectedMessage</symbol>
+        <reason>Currently carries GcalEventId. Widen the payload meaning before using it to open the panel on newly created pending drafts.</reason>
+      </file>
+      <file>
+        <path>ViewModels/MainViewModel.cs</path>
+        <kind>viewmodel</kind>
+        <symbol>MainViewModel</symbol>
+        <reason>Main shared range owner. Story 3.6 must reuse its refresh path after creation, and any event-change message introduced here should be generic enough for both update and create flows.</reason>
+      </file>
+      <file>
+        <path>Views/MainPage.xaml</path>
+        <kind>view</kind>
+        <symbol>MainPage</symbol>
+        <reason>Owns the toolbar where + Add Event belongs and hosts the shared shell that also contains the details panel overlay path from Story 3.4.</reason>
+      </file>
+      <file>
+        <path>Views/MainPage.xaml.cs</path>
+        <kind>code-behind</kind>
+        <symbol>MainPage</symbol>
+        <reason>Add the button flow here and keep shell-level keyboard handling consistent with the existing accelerator pattern.</reason>
+      </file>
+      <file>
+        <path>Views/WeekViewControl.xaml.cs</path>
+        <kind>view</kind>
+        <symbol>WeekViewControl</symbol>
+        <reason>Current timed-event rendering is hour-granular and imperative. Story 3.6 must add empty-space drag hit targets and 15-minute preview/render math here.</reason>
+      </file>
+      <file>
+        <path>Views/DayViewControl.xaml.cs</path>
+        <kind>view</kind>
+        <symbol>DayViewControl</symbol>
+        <reason>Same drag-to-create and quarter-hour rendering problem as WeekViewControl, but simpler because it only hosts one day column.</reason>
+      </file>
+      <file>
+        <path>Views/MonthViewControl.xaml.cs</path>
+        <kind>view</kind>
+        <symbol>MonthViewControl</symbol>
+        <reason>Even though month view does not support drag creation, it must still render pending drafts distinctly once the shared query path includes them.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs</path>
+        <kind>unit-test</kind>
+        <symbol>MainViewModelTests</symbol>
+        <reason>Reference test style for view-model work. Extend or mirror this pattern for any creation-triggered range refresh behavior.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Integration/CalendarQueryServiceTests.cs</path>
+        <kind>integration-test</kind>
+        <symbol>CalendarQueryServiceTests</symbol>
+        <reason>Reference integration pattern for local database-backed query tests. Story 3.6 should add pending-event union coverage alongside the existing gcal_event tests.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="Microsoft.WindowsAppSDK" version="1.*" use="WinUI 3 controls, Pointer events, ContentDialog, DatePicker, TimePicker, and visual-layer primitives needed for drag previews." />
+          <package name="CommunityToolkit.Mvvm" version="8.4.0" use="Existing observable/view-model and messenger infrastructure reused by selection and details-panel coordination." />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" use="Tier 2 migration plus repository/query work for pending_event." />
+          <package name="Microsoft.EntityFrameworkCore.Tools" version="9.0.12" use="Migration creation for pending_event." />
+          <package name="xUnit" version="existing" use="Unit and integration testing." />
+          <package name="FluentAssertions" version="existing" use="Readable assertions in new tests." />
+        </existing>
+        <newPackagesNeeded>None. Story 3.6 should use the packages already referenced by the app and test projects.</newPackagesNeeded>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="project-structure">Project structure is flat at the repo root. New files belong under Data/, Services/, Views/, ViewModels/, Models/, or Messages/ directly. Do not create Core/, src/, or a second assembly.</constraint>
+    <constraint id="C2" category="pending-storage">Do not store newly created unpublished drafts in gcal_event. The non-null string primary key and synced-cache semantics make that contract wrong for Story 3.6.</constraint>
+    <constraint id="C3" category="tier2-schema">Add the planned pending_event table through EF Core before or alongside the first creation flow. Story 3.6 is the first Tier 2 story that operationally requires it.</constraint>
+    <constraint id="C4" category="shared-contracts">Do not add a parallel pending-only selection or query path. Widen the existing shared event identity contracts so synced and pending events use the same shell/panel flow.</constraint>
+    <constraint id="C5" category="drag-scope">Drag-to-create is Week and Day view only. Do not add drag creation to Month or Year view.</constraint>
+    <constraint id="C6" category="time-grid">Current hour-only timed-event placement is insufficient. Do not declare Story 3.6 done unless newly created drafts render at quarter-hour precision, not just hour buckets.</constraint>
+    <constraint id="C7" category="button-defaults">The + Add Event flow must round the default start time to the nearest 15-minute boundary and default the end time to one hour later.</constraint>
+    <constraint id="C8" category="draft-flags">New pending drafts must be local-only: app_created = true, source_system = manual, ready_to_publish = false, no Google event ID yet.</constraint>
+    <constraint id="C9" category="visual-language">Pending drafts must render at 60% opacity with Azure default colour and an unpublished status label. Do not hide the local-only state inside one view or panel only.</constraint>
+    <constraint id="C10" category="panel-reuse">Reuse the right-side details/edit panel path from Stories 3.4 and 3.5. Create the pending record first, then select it, then open it in edit mode.</constraint>
+    <constraint id="C11" category="selection-source-of-truth">Selection ownership remains in CalendarSelectionService and EventSelectedMessage. Creation logic must not introduce a second active-event state machine.</constraint>
+    <constraint id="C12" category="view-boundary">Do not query CalendarDbContext directly from the view code-behind. Views should translate completed drag gestures into service/repository operations only.</constraint>
+    <constraint id="C13" category="single-flow">Do not build separate persistence models for drag creation and button creation. Both input methods must converge on the same pending-event creation path and shared rendering/panel flow.</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit plus FluentAssertions. Use real SQLite-backed integration tests for pending_event persistence and mixed-source query behavior. Keep drag-slot math in a small helper or service so it can be unit-tested without UI automation.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Integration/PendingEventRepositoryTests.cs
+      GoogleCalendarManagement.Tests/Integration/CalendarQueryServiceTests.cs
+      GoogleCalendarManagement.Tests/Unit/Services/CalendarTimeSlotHelperTests.cs
+      GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs
+    </locations>
+    <ideas>
+      <test name="CreatePendingEvent_PersistsExpectedDefaults">
+        Insert a new draft through the pending-event repository and assert PendingEventId uses the pending_ prefix, CalendarId is primary, AppCreated is true, SourceSystem is manual, and ReadyToPublish is false.
+      </test>
+      <test name="CalendarQueryService_WhenRangeContainsGoogleAndPendingEvents_ReturnsBothSources">
+        Seed one gcal_event row and one pending_event row in the same day range, load through the shared query service, and assert both appear with the correct source metadata and ordering.
+      </test>
+      <test name="CalendarQueryService_PendingDraftsRenderAsTranslucent">
+        Seed a pending_event row and assert the mapped CalendarEventDisplayModel carries IsPending = true, Opacity = 0.6, and the expected unpublished status label.
+      </test>
+      <test name="SnapRangeToQuarterHour_RoundsAndNormalizesShortDrag">
+        Feed drag start/end values through a shared snapping helper and assert both ends snap to 15-minute boundaries with a minimum duration of one slot.
+      </test>
+      <test name="ButtonDefaults_RoundCurrentTimeToNearestQuarterHour">
+        Fix the current time in a test seam, create button-flow defaults, and assert the start time rounds to a 15-minute boundary and end = start + one hour.
+      </test>
+      <test name="CancelDrag_CreatesNoPendingRecord">
+        Simulate the cancel path in the creation service or coordinator and assert no pending_event row is inserted and no refresh/select message is emitted.
+      </test>
+    </ideas>
+  </tests>
+</story-context>

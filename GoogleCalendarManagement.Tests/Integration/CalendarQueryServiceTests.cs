@@ -38,7 +38,10 @@ public sealed class CalendarQueryServiceTests : IDisposable
             new DateOnly(2026, 01, 10),
             new DateOnly(2026, 01, 20));
 
-        events.Should().HaveCount(22);
+        // Seed places events on days (index % 28) + 1 for index 0..49.
+        // Days 10–20 (inclusive, 11 days) appear at indices 9–19 and 37–47 → 2 events each = 22 total.
+        const int expectedCount = 22;
+        events.Should().HaveCount(expectedCount);
     }
 
     [Fact]

@@ -53,8 +53,13 @@ public sealed class NavigationStateService : INavigationStateService
 
     public async Task SaveAsync(NavigationState state, CancellationToken ct = default)
     {
-        await _systemStateRepository.SetAsync(CurrentViewModeKey, state.ViewMode.ToString(), ct);
-        await _systemStateRepository.SetAsync(CurrentViewDateKey, state.CurrentDate.ToString("yyyy-MM-dd"), ct);
+        await _systemStateRepository.SetManyAsync(
+            new Dictionary<string, string>
+            {
+                [CurrentViewModeKey] = state.ViewMode.ToString(),
+                [CurrentViewDateKey] = state.CurrentDate.ToString("yyyy-MM-dd")
+            },
+            ct);
     }
 
     private NavigationState GetDefaultState()

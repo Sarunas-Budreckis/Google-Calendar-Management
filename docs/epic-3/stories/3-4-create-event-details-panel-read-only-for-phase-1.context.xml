@@ -1,0 +1,244 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>4</storyId>
+    <title>Create Event Details Panel (Read-Only for Tier 1)</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-31</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-3/stories/3-4-create-event-details-panel-read-only-for-phase-1.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to inspect the currently selected event in a read-only side panel</iWant>
+    <soThat>I can see full event details without leaving the calendar shell</soThat>
+    <tasks>
+      - Extend the shared calendar display model and query path so the panel has all required display fields, including a colour display name
+      - Create EventDetailsPanelViewModel that subscribes to EventSelectedMessage and exposes read-only panel state
+      - Create EventDetailsPanelControl with right-side layout, close button, disabled Edit button, and presentation-only open/close animation
+      - Host the panel in MainPage as a sibling overlay to CalendarFrame so it survives Year/Month/Week/Day page navigation
+      - Reuse ICalendarSelectionService for close behavior and Escape handling instead of adding a second selection state path
+      - Add unit tests for view-model behavior and extend colour-service tests if shared colour-name lookup is added here
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-3.4.1">Given an event is selected through ICalendarSelectionService, the details panel appears on the right side of the main calendar shell and completes its slide-in or open transition within 200 ms.</ac>
+    <ac id="AC-3.4.2">Given the panel is open, it displays the selected event's title, local start/end date-time, colour swatch, colour name, description area, source label "From Google Calendar", and last-synced timestamp.</ac>
+    <ac id="AC-3.4.3">Given the panel is open, the Edit button is visible but disabled, with tooltip text "Coming in Tier 2", and clicking it takes no action.</ac>
+    <ac id="AC-3.4.4">Given the panel is open, clicking the close button or pressing Esc clears selection through ICalendarSelectionService.ClearSelection(), and the panel closes.</ac>
+    <ac id="AC-3.4.5">Given the panel is open, switching Year, Month, Week, or Day view does not clear selection and the same event remains displayed.</ac>
+    <ac id="AC-3.4.6">Given the panel is open, when EventSelectedMessage(null) is published, the panel closes and clears its visible content state.</ac>
+    <ac id="AC-3.4.7">Given the selected event has null or unknown optional data such as Description, LastSyncedAt, or colour metadata, the panel renders fallback values without throwing or showing broken layout.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-3/stories/3-4-create-event-details-panel-read-only-for-phase-1.md</path>
+        <title>Story 3.4 (primary reference)</title>
+        <section>Tasks, Dev Notes, References</section>
+        <snippet>Repo-accurate implementation guide for the read-only details panel, including the MainPage overlay requirement, reuse of the existing selection/message services, and the current colour-mapping gap.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/tech-spec.md</path>
+        <title>Epic 3 Technical Specification</title>
+        <section>Detailed Design, Workflows, Acceptance Criteria, NFRs</section>
+        <snippet>Primary product-level source for Story 3.4 behavior: right-side details panel, non-modal interaction, Esc-to-close, persistence across view switches, and performance target under 200 ms.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 3.4 requirements and technical notes</section>
+        <snippet>Confirms the user story, Tier 1 read-only scope, panel width guidance, and dependency on Story 3.3 event selection.</snippet>
+      </doc>
+      <doc>
+        <path>docs/ux-design-specification.md</path>
+        <title>UX Design Specification</title>
+        <section>Tier 2 detail panel pattern, navigation patterns, responsive layout</section>
+        <snippet>The right-side detail panel is a fixed-width desktop rail with Escape-to-close behavior. Even though Story 3.4 is read-only, it should lay the structural groundwork for the Tier 2 editable panel.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_color-definitions.md</path>
+        <title>Color Definitions</title>
+        <section>Active Color Definitions</section>
+        <snippet>Authoritative source for human-readable colour names. Azure is the only currently implemented mapping in code, but this document defines the intended display names for the broader taxonomy.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/stories/3-3-implement-event-selection-with-visual-feedback.md</path>
+        <title>Story 3.3</title>
+        <section>Dev Notes - Actual contracts and Esc handling</section>
+        <snippet>Important dependency context: ICalendarSelectionService, CalendarSelectionService, and EventSelectedMessage already exist and must be reused rather than recreated for the panel workflow.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>Views/MainPage.xaml</path>
+        <kind>view</kind>
+        <symbol>MainPage</symbol>
+        <reason>Main calendar shell that owns CalendarFrame. EventDetailsPanelControl must be hosted here as a sibling overlay so the panel persists across frame navigation.</reason>
+      </file>
+      <file>
+        <path>Views/MainPage.xaml.cs</path>
+        <kind>code-behind</kind>
+        <symbol>MainPage</symbol>
+        <reason>Contains the existing keyboard-accelerator setup and view-mode switching. Add Escape handling here so panel close reuses the same global selection-clear path as Story 3.3.</reason>
+      </file>
+      <file>
+        <path>ViewModels/EventDetailsPanelViewModel.cs</path>
+        <kind>viewmodel</kind>
+        <symbol>EventDetailsPanelViewModel</symbol>
+        <reason>New view model for the read-only details panel. Owns panel visibility, formatted display fields, and messenger-driven selection handling.</reason>
+      </file>
+      <file>
+        <path>Views/EventDetailsPanelControl.xaml</path>
+        <kind>view</kind>
+        <symbol>EventDetailsPanelControl</symbol>
+        <reason>New right-side panel view. Responsible for read-only layout, disabled Edit button, close affordance, and the presentation layer of the open/close animation.</reason>
+      </file>
+      <file>
+        <path>Views/EventDetailsPanelControl.xaml.cs</path>
+        <kind>code-behind</kind>
+        <symbol>EventDetailsPanelControl</symbol>
+        <reason>Use only for DI/DataContext hookup and presentation-only animation or focus plumbing. Do not move query or selection logic here.</reason>
+      </file>
+      <file>
+        <path>Models/CalendarEventDisplayModel.cs</path>
+        <kind>model</kind>
+        <symbol>CalendarEventDisplayModel</symbol>
+        <reason>The current shared UI model lacks a colour display name. Extend it here rather than inventing a panel-only parallel model unless implementation proves a separate details DTO is clearly better.</reason>
+      </file>
+      <file>
+        <path>Services/ICalendarQueryService.cs</path>
+        <kind>interface</kind>
+        <symbol>ICalendarQueryService</symbol>
+        <reason>Already exposes GetEventByGcalIdAsync(string ...). Reuse this contract for panel loads; do not add a second event-details query path without need.</reason>
+      </file>
+      <file>
+        <path>Services/CalendarQueryService.cs</path>
+        <kind>service</kind>
+        <symbol>CalendarQueryService</symbol>
+        <reason>Current mapping already handles UTC-to-local conversion and LastSyncedAt. Extend the projection here if the details panel needs more display metadata such as colour name.</reason>
+      </file>
+      <file>
+        <path>Services/IColorMappingService.cs</path>
+        <kind>interface</kind>
+        <symbol>IColorMappingService</symbol>
+        <reason>The repo currently exposes only GetHexColor. Story 3.4 may need a small shared extension so the panel can render a colour name without duplicating lookup logic.</reason>
+      </file>
+      <file>
+        <path>Services/ColorMappingService.cs</path>
+        <kind>service</kind>
+        <symbol>ColorMappingService</symbol>
+        <reason>Currently the Azure-only stub from Story 3.1. If Story 3.2 has not been implemented yet, make the smallest compatible change here and keep the mapping centralized.</reason>
+      </file>
+      <file>
+        <path>Services/ICalendarSelectionService.cs</path>
+        <kind>interface</kind>
+        <symbol>ICalendarSelectionService</symbol>
+        <reason>Selection ownership already lives here. Both the panel close button and Escape handling must route through ClearSelection() to keep selection and panel state synchronized.</reason>
+      </file>
+      <file>
+        <path>Services/CalendarSelectionService.cs</path>
+        <kind>service</kind>
+        <symbol>CalendarSelectionService</symbol>
+        <reason>Publishes EventSelectedMessage and suppresses duplicate same-ID selections. The panel should expect message-driven state transitions from this service.</reason>
+      </file>
+      <file>
+        <path>Messages/EventSelectedMessage.cs</path>
+        <kind>message</kind>
+        <symbol>EventSelectedMessage</symbol>
+        <reason>Existing messenger contract for open and close behavior: non-null ID opens or refreshes the panel; null closes it.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/GcalEvent.cs</path>
+        <kind>entity</kind>
+        <symbol>GcalEvent</symbol>
+        <reason>Source entity for title, description, timestamps, colour ID, recurrence flags, and LastSyncedAt. GcalEventId is the actual string primary key.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/GcalEventConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>GcalEventConfiguration</symbol>
+        <reason>Confirms gcal_event_id is the PK and last_synced_at is mapped directly on GcalEvent. Use this instead of stale planning assumptions about integer IDs or DataSourceRefresh lookups.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs</path>
+        <kind>unit-test</kind>
+        <symbol>EventDetailsPanelViewModelTests</symbol>
+        <reason>New test file for messenger-driven load and close behavior, null-data fallbacks, and close-command integration with ICalendarSelectionService.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs</path>
+        <kind>unit-test</kind>
+        <symbol>ColorMappingServiceTests</symbol>
+        <reason>If Story 3.4 extends the colour service contract, update the existing tests here instead of creating a second colour-service test file.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="CommunityToolkit.Mvvm" version="8.4.0" use="ObservableObject, RelayCommand, AsyncRelayCommand, WeakReferenceMessenger" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" use="Existing query/repository stack; no direct DB access from the panel" />
+          <package name="Microsoft.WindowsAppSDK" version="1.*" use="WinUI 3 views, keyboard accelerators, animations, layout controls" />
+          <package name="Moq" version="existing test dependency" use="Mock ICalendarQueryService and ICalendarSelectionService in EventDetailsPanelViewModel tests" />
+          <package name="FluentAssertions" version="existing test dependency" use="Readable assertions in new unit tests" />
+          <package name="xUnit" version="existing test dependency" use="Unit-test framework" />
+        </existing>
+        <newPackagesNeeded>None. This story should build on the packages already referenced by the application and test projects.</newPackagesNeeded>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="project-structure">The repository is flat at the project root. New files belong under Views/ and ViewModels/ at the root. Do not create Core/, src/, or a second UI assembly for this story.</constraint>
+    <constraint id="C2" category="host-location">EventDetailsPanelControl must be hosted in MainPage, not inside YearViewControl, MonthViewControl, WeekViewControl, or DayViewControl, otherwise the panel will be destroyed by frame navigation and AC-3.4.5 will fail.</constraint>
+    <constraint id="C3" category="selection-source-of-truth">Close behavior must flow through ICalendarSelectionService.ClearSelection() and EventSelectedMessage(null). Do not add a separate local boolean-only state machine for panel closing.</constraint>
+    <constraint id="C4" category="pk-type">GcalEventId is a string PK. Never use int event IDs in view models, tests, messages, or service calls for this story.</constraint>
+    <constraint id="C5" category="query-path">Reuse ICalendarQueryService.GetEventByGcalIdAsync(...) for panel loads. Do not bypass the repository stack with direct CalendarDbContext queries from the panel or its view model.</constraint>
+    <constraint id="C6" category="timezone">CalendarQueryService already converts UTC timestamps to local display values. Do not apply a second local-time conversion in the view or view model.</constraint>
+    <constraint id="C7" category="color-sharing">Do not create a panel-specific colour dictionary. If more metadata than GetHexColor is needed, extend the shared IColorMappingService path or consume Story 3.2's implementation once available.</constraint>
+    <constraint id="C8" category="tier-boundary">Story 3.4 remains read-only. The Edit button is visible only as disabled scaffolding for Story 3.5; do not implement editing, auto-save, validation, or event persistence here.</constraint>
+    <constraint id="C9" category="converters">The repo currently has no reusable BoolToVisibilityConverter or StringToVisibilityConverter. Prefer explicit bindable visibility properties over adding converter infrastructure unless there is a clear broader reuse case.</constraint>
+    <constraint id="C10" category="code-behind-boundary">Code-behind may handle DI/DataContext hookup, keyboard wiring, and presentation-only animation. Business logic, selection logic, and query logic stay in the view model and services.</constraint>
+    <constraint id="C11" category="dependency-state">Story 3.3 contracts already exist in code, but its UI wiring is still a separate story concern. Story 3.4 must reuse those contracts without reimplementing Story 3.3 inside the panel.</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit plus FluentAssertions for unit tests. Use Moq for service doubles, following the style already established in MainViewModelTests and SettingsViewModelTests.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs
+      GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs
+    </locations>
+    <ideas>
+      <test name="HandleEventSelectedMessage_WithValidEvent_ShowsPanelAndPopulatesFields">
+        Mock ICalendarQueryService to return a display model with title, local time range, colour metadata, description, and LastSyncedAt. Publish EventSelectedMessage("evt-1") and assert the view model exposes visible panel state and formatted display values.
+      </test>
+      <test name="HandleEventSelectedMessage_WithNullId_HidesPanel">
+        Publish EventSelectedMessage(null) and assert IsPanelVisible becomes false and panel-facing properties reset to their hidden-state values.
+      </test>
+      <test name="CloseCommand_CallsClearSelection">
+        Execute CloseCommand and verify ICalendarSelectionService.ClearSelection() is called exactly once.
+      </test>
+      <test name="MissingDescription_UsesReadableFallback">
+        Return a display model with null or whitespace description and assert DescriptionDisplay becomes a placeholder such as "No description provided."
+      </test>
+      <test name="MissingLastSyncedAt_UsesNeverFallback">
+        Return a display model with LastSyncedAt null and assert LastSyncedDisplay equals "Never".
+      </test>
+      <test name="UnknownEventId_DoesNotThrowOrShowBrokenState">
+        Mock ICalendarQueryService.GetEventByGcalIdAsync to return null for a selected ID and assert no exception is thrown and the panel remains hidden or safely cleared.
+      </test>
+      <test name="ViewModeSwitchWithoutSelectionClear_PanelStateRemainsStable">
+        Open the panel once, then simulate unrelated shell state changes without publishing EventSelectedMessage(null). Assert the panel view model retains the selected event state.
+      </test>
+      <test name="ColorMappingService_IfExtended_StillPreservesAzureFallback">
+        If Story 3.4 adds shared colour-name lookup, verify null and unknown colour IDs still resolve to Azure fallback values without throwing.
+      </test>
+    </ideas>
+  </tests>
+</story-context>

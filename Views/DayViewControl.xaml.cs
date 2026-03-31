@@ -52,8 +52,12 @@ public sealed partial class DayViewControl : Page
         }
 
         var culture = CultureInfo.CurrentCulture;
+        // Include all-day events that start on this day, and timed events that overlap this day.
         var dayEvents = ViewModel.CurrentEvents
-            .Where(evt => DateOnly.FromDateTime(evt.StartLocal.Date) == ViewModel.CurrentDate)
+            .Where(evt => evt.IsAllDay
+                ? DateOnly.FromDateTime(evt.StartLocal.Date) == ViewModel.CurrentDate
+                : DateOnly.FromDateTime(evt.StartLocal.Date) <= ViewModel.CurrentDate &&
+                  DateOnly.FromDateTime(evt.EndLocal.Date) >= ViewModel.CurrentDate)
             .OrderBy(evt => evt.StartLocal)
             .ToList();
 
@@ -121,9 +125,11 @@ public sealed partial class DayViewControl : Page
                 }
             };
 
-            Grid.SetRow(eventBlock, item.StartLocal.Hour);
+            var startRow = item.StartLocal.Hour;
+            var span = (int)Math.Ceiling((item.EndLocal - item.StartLocal).TotalHours);
+            Grid.SetRow(eventBlock, startRow);
             Grid.SetColumn(eventBlock, 1);
-            Grid.SetRowSpan(eventBlock, Math.Max(1, (int)Math.Ceiling((item.EndLocal - item.StartLocal).TotalHours)));
+            Grid.SetRowSpan(eventBlock, Math.Max(1, Math.Min(span, 24 - startRow)));
             DayGrid.Children.Add(eventBlock);
         }
 
@@ -132,10 +138,15 @@ public sealed partial class DayViewControl : Page
 
     private static SolidColorBrush ToBrush(string hex)
     {
-        return new SolidColorBrush(ColorHelper.FromArgb(
-            0xFF,
-            Convert.ToByte(hex.Substring(1, 2), 16),
-            Convert.ToByte(hex.Substring(3, 2), 16),
-            Convert.ToByte(hex.Substring(5, 2), 16)));
+        if (hex.Length == 7 && hex[0] == '#')
+        {
+            return new SolidColorBrush(ColorHelper.FromArgb(
+                0xFF,
+                Convert.ToByte(hex.Substring(1, 2), 16),
+                Convert.ToByte(hex.Substring(3, 2), 16),
+                Convert.ToByte(hex.Substring(5, 2), 16)));
+        }
+
+        return new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x00, 0x88, 0xCC));
     }
 }

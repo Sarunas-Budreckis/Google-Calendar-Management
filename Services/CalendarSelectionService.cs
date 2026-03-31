@@ -11,8 +11,7 @@ public sealed class CalendarSelectionService : ICalendarSelectionService
     {
         if (string.IsNullOrWhiteSpace(gcalEventId))
         {
-            ClearSelection();
-            return;
+            throw new ArgumentException("Event ID must be a non-empty, non-whitespace string.", nameof(gcalEventId));
         }
 
         if (string.Equals(SelectedGcalEventId, gcalEventId, StringComparison.Ordinal))

@@ -63,9 +63,28 @@ public sealed partial class MonthViewControl : Page
             MonthGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(160) });
         }
 
-        var eventsByDay = ViewModel.CurrentEvents
-            .GroupBy(item => DateOnly.FromDateTime(item.StartLocal.Date))
-            .ToDictionary(group => group.Key, group => group.OrderBy(item => item.StartLocal).ToList());
+        // Expand multi-day events so they appear in every day they cover, not just their start day.
+        var eventsByDay = new Dictionary<DateOnly, List<CalendarEventDisplayModel>>();
+        foreach (var evt in ViewModel.CurrentEvents)
+        {
+            var startDay = DateOnly.FromDateTime(evt.StartLocal.Date);
+            var endDay = DateOnly.FromDateTime(evt.EndLocal.Date);
+            for (var d = startDay; d <= endDay; d = d.AddDays(1))
+            {
+                if (!eventsByDay.TryGetValue(d, out var list))
+                {
+                    list = [];
+                    eventsByDay[d] = list;
+                }
+
+                list.Add(evt);
+            }
+        }
+
+        foreach (var list in eventsByDay.Values)
+        {
+            list.Sort((a, b) => a.StartLocal.CompareTo(b.StartLocal));
+        }
 
         var currentDay = gridStart;
         for (var row = 0; row < totalRows; row++)
@@ -138,11 +157,16 @@ public sealed partial class MonthViewControl : Page
 
     private static SolidColorBrush ToBrush(string hex)
     {
-        return new SolidColorBrush(ColorHelper.FromArgb(
-            0xFF,
-            Convert.ToByte(hex.Substring(1, 2), 16),
-            Convert.ToByte(hex.Substring(3, 2), 16),
-            Convert.ToByte(hex.Substring(5, 2), 16)));
+        if (hex.Length == 7 && hex[0] == '#')
+        {
+            return new SolidColorBrush(ColorHelper.FromArgb(
+                0xFF,
+                Convert.ToByte(hex.Substring(1, 2), 16),
+                Convert.ToByte(hex.Substring(3, 2), 16),
+                Convert.ToByte(hex.Substring(5, 2), 16)));
+        }
+
+        return new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x00, 0x88, 0xCC));
     }
 
     private static DateOnly StartOfWeek(DateOnly date)

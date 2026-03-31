@@ -1,0 +1,157 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>8</storyId>
+    <title>Add Date Navigation and Jump-to-Date Features</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-31</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-3/stories/3-8-add-date-navigation-and-jump-to-date-features.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>calendar user</asA>
+    <iWant>date navigation controls and shortcuts to feel explicit, predictable, and discoverable</iWant>
+    <soThat>I can move through time quickly without guessing which keys work or accidentally fighting the UI focus state</soThat>
+    <tasks>
+      - Extend the existing Story 3.1 navigation shell instead of rewriting it
+      - Add shell-level Left and Right keyboard accelerators for previous and next navigation
+      - Constrain arrow-key accelerators so they do not hijack text-entry or open date-picker interactions
+      - Add tooltip or equivalent shortcut hints to the navigation and view-mode controls
+      - Preserve the single-fire jump-to-date interaction path built around _isUpdatingPicker
+      - Expand navigation tests for NavigateNext, breadcrumb correctness, and persisted state behavior
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-3.8.1">Given any calendar view is active, clicking Previous or Next continues to move by one unit of the active view, clicking Today jumps to the current local date, and the breadcrumb updates to the correct date range.</ac>
+    <ac id="AC-3.8.2">Given the main calendar shell has focus and the user is not interacting with a text-entry control or open date-picker popup, pressing Left triggers the same behavior as Previous and pressing Right triggers the same behavior as Next.</ac>
+    <ac id="AC-3.8.3">Given the main calendar shell has focus, the existing shortcuts remain functional: T for Today, G to open jump-to-date, and the current view-mode shortcuts 1-4 and Y/M/W/D continue to switch views.</ac>
+    <ac id="AC-3.8.4">Given the user hovers or keyboard-focuses the navigation controls, tooltips or equivalent hints expose the available shortcuts for Previous, Next, Today, Jump to date, and each view-mode button.</ac>
+    <ac id="AC-3.8.5">Given the user opens the jump-to-date control via mouse or G, selecting a date triggers exactly one navigation to that date, updates the breadcrumb, and does not cause duplicate refreshes or duplicate system_state writes.</ac>
+    <ac id="AC-3.8.6">Given the user navigates to a new date range or switches views, the resulting NavigationState is still persisted to system_state, and restarting the app restores the same view mode and date.</ac>
+    <ac id="AC-3.8.7">Given focus is inside a text input, editable details-panel field, or an open date-picker popup, shell-level arrow-key navigation does not steal those keystrokes from the focused control.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-3/stories/3-8-add-date-navigation-and-jump-to-date-features.md</path>
+        <title>Story 3.8 (primary reference)</title>
+        <section>Acceptance Criteria, Tasks, Dev Notes, References</section>
+        <snippet>Repo-accurate navigation polish story that treats 3.1 as the shipped baseline and focuses on arrow-key navigation, shortcut discoverability, jump-to-date polish, and focus-safe accelerator behavior.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/stories/3-1-build-year-month-week-day-calendar-views.md</path>
+        <title>Story 3.1</title>
+        <section>Completed navigation plumbing and review follow-ups</section>
+        <snippet>Shows that contextual navigation, persisted state, breadcrumb generation, jump-to-date handling, and duplicate-refresh fixes already landed in 3.1. 3.8 should extend this work rather than reimplement it.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 3.8 original business intent</section>
+        <snippet>Original story intent emphasizes multiple navigation options, contextual date movement, preserved navigation state, and discoverable keyboard shortcuts.</snippet>
+      </doc>
+      <doc>
+        <path>docs/ux-design-specification.md</path>
+        <title>UX Design Specification</title>
+        <section>Navigation Patterns and keyboard shortcuts</section>
+        <snippet>Calls out arrow keys for date navigation and keyboard accessibility expectations. This story closes those remaining UX gaps in the repo implementation.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>ViewModels/MainViewModel.cs</path>
+        <kind>viewmodel</kind>
+        <symbol>MainViewModel</symbol>
+        <reason>Already owns contextual date arithmetic, breadcrumb generation, persisted NavigationState, and refresh cancellation. Extend tests around this class rather than duplicating date logic in the view.</reason>
+      </file>
+      <file>
+        <path>Views/MainPage.xaml</path>
+        <kind>view</kind>
+        <symbol>MainPage</symbol>
+        <reason>Existing surface for Previous, Today, Next, JumpToDatePicker, and view-mode buttons. Add tooltip discoverability here without redesigning the shell.</reason>
+      </file>
+      <file>
+        <path>Views/MainPage.xaml.cs</path>
+        <kind>code-behind</kind>
+        <symbol>MainPage</symbol>
+        <reason>Current home of keyboard accelerators, JumpToDate picker open behavior, and the _isUpdatingPicker guard. Add Left/Right accelerators here and constrain them based on focus state.</reason>
+      </file>
+      <file>
+        <path>Services/NavigationStateService.cs</path>
+        <kind>service</kind>
+        <symbol>NavigationStateService</symbol>
+        <reason>Existing state persistence path. Preserve this implementation and ensure 3.8 changes do not reintroduce mismatched state writes.</reason>
+      </file>
+      <file>
+        <path>Services/SystemStateRepository.cs</path>
+        <kind>service</kind>
+        <symbol>SystemStateRepository</symbol>
+        <reason>Current SetManyAsync path writes navigation state atomically in one SaveChangesAsync call. 3.8 should keep using this rather than splitting navigation writes.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs</path>
+        <kind>unit-test</kind>
+        <symbol>MainViewModelTests</symbol>
+        <reason>Existing navigation test suite. Extend it with NavigateNext and any breadcrumb or persistence edge cases introduced by 3.8.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Unit/Services/NavigationStateServiceTests.cs</path>
+        <kind>unit-test</kind>
+        <symbol>NavigationStateServiceTests</symbol>
+        <reason>Reference test suite for persisted navigation behavior if any state edge cases are adjusted.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="Microsoft.WindowsAppSDK" version="1.8.3" use="KeyboardAccelerator, CalendarDatePicker, ToolTipService, and the existing WinUI shell controls" />
+          <package name="CommunityToolkit.Mvvm" version="8.x" use="AsyncRelayCommand-based navigation commands already exposed by MainViewModel" />
+          <package name="xUnit" version="existing" use="Unit tests for navigation commands and persistence" />
+          <package name="FluentAssertions" version="existing" use="Readable assertions for breadcrumb and date-range expectations" />
+        </existing>
+        <newPackagesNeeded>None. This story should extend the existing WinUI 3 shell and test stack already in the solution.</newPackagesNeeded>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="repo-truth">Treat Story 3.1 as the implemented baseline. 3.8 is a follow-up polish and hardening story in this repo, not a greenfield navigation implementation.</constraint>
+    <constraint id="C2" category="single-navigation-owner">MainViewModel remains the single owner of date arithmetic and persisted NavigationState. Do not duplicate previous/next/today logic in MainPage code-behind.</constraint>
+    <constraint id="C3" category="accelerator-scope">KeyboardAccelerator is global by default in WinUI. Any Left or Right accelerators added here must be constrained so they do not hijack focused text-entry or open date-picker interactions.</constraint>
+    <constraint id="C4" category="jump-to-date-guard">Preserve the existing _isUpdatingPicker guard in MainPage.xaml.cs so programmatic date changes do not trigger duplicate JumpToDateCommand executions.</constraint>
+    <constraint id="C5" category="shortcut-docs-match-code">Tooltip or discoverability text must match the accelerators actually registered in code. Do not document shortcuts that are not active.</constraint>
+    <constraint id="C6" category="no-shell-redesign">Do not redesign the top strip or replace CalendarDatePicker with a new navigation component unless a concrete implementation blocker forces it. Prefer additive polish to the existing shell.</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit plus FluentAssertions for command and persistence tests. UI accelerator and tooltip behavior should be validated manually unless a lightweight existing harness can cover it without introducing brittle UI automation.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs
+      GoogleCalendarManagement.Tests/Unit/Services/NavigationStateServiceTests.cs
+      GoogleCalendarManagement.Tests/Integration/NavigationStateRoundTripTests.cs
+    </locations>
+    <ideas>
+      <test name="NavigateNextCommand_YearView_AdvancesOneYear">
+        Initialize MainViewModel in Year view on a known date, execute NavigateNextCommand, and assert the date advanced by exactly one year while the breadcrumb still shows the target year.
+      </test>
+      <test name="NavigateNextCommand_WeekView_AdvancesSevenDays">
+        Initialize MainViewModel in Week view, execute NavigateNextCommand, and assert the date advanced by seven days and the breadcrumb reflects the next week range.
+      </test>
+      <test name="NavigateTodayCommand_PreservesActiveViewMode">
+        Initialize MainViewModel in Month, Week, or Day view, execute NavigateTodayCommand, and assert CurrentViewMode is unchanged while CurrentDate becomes the TimeProvider date.
+      </test>
+      <test name="NavigationState_SaveThenLoad_AfterMultipleNavigations_RoundTrips">
+        Save the state after navigating in one view and then loading again to confirm the final view/date pair persists correctly.
+      </test>
+      <test name="ManualVerification_LeftRightAndGShortcuts_MatchTooltips">
+        Verify Previous and Next tooltips mention Left and Right, Today mentions T, Jump to date mentions G, and actual keyboard behavior matches the displayed hints.
+      </test>
+    </ideas>
+  </tests>
+</story-context>

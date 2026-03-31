@@ -13,6 +13,8 @@ public sealed partial class WeekViewControl : Page
     private const double MinimumDayColumnWidth = 100;
     private const double HorizontalChromeAllowance = 48;
 
+    private DispatcherTimer? _resizeDebounceTimer;
+
     public WeekViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
@@ -27,12 +29,20 @@ public sealed partial class WeekViewControl : Page
     private void WeekViewControl_Loaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        _resizeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+        _resizeDebounceTimer.Tick += (_, _) =>
+        {
+            _resizeDebounceTimer.Stop();
+            Rebuild();
+        };
         Rebuild();
     }
 
     private void WeekViewControl_Unloaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        _resizeDebounceTimer?.Stop();
+        _resizeDebounceTimer = null;
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -45,7 +55,14 @@ public sealed partial class WeekViewControl : Page
 
     private void WeekViewControl_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        Rebuild();
+        if (_resizeDebounceTimer is null)
+        {
+            Rebuild();
+            return;
+        }
+
+        _resizeDebounceTimer.Stop();
+        _resizeDebounceTimer.Start();
     }
 
     private void Rebuild()
@@ -133,13 +150,21 @@ public sealed partial class WeekViewControl : Page
             }
 
             foreach (var item in ViewModel.CurrentEvents
-                         .Where(evt => DateOnly.FromDateTime(evt.StartLocal.Date) == currentDay && !evt.IsAllDay)
+                         .Where(evt => !evt.IsAllDay &&
+                                       DateOnly.FromDateTime(evt.StartLocal.Date) <= currentDay &&
+                                       DateOnly.FromDateTime(evt.EndLocal.Date) >= currentDay)
                          .OrderBy(evt => evt.StartLocal))
             {
                 var eventBlock = CreateTimedEventBlock(item, culture);
-                Grid.SetRow(eventBlock, item.StartLocal.Hour + 2);
+                var startRow = item.StartLocal.Hour + 2;
+                var span = (int)Math.Ceiling((item.EndLocal - item.StartLocal).TotalHours);
+                Grid.SetRow(eventBlock, startRow);
                 Grid.SetColumn(eventBlock, column);
-                Grid.SetRowSpan(eventBlock, Math.Max(1, (int)Math.Ceiling((item.EndLocal - item.StartLocal).TotalHours)));
+                Grid.SetRowSpan(eventBlock, Math.Max(1, Math.Min(span, 24 - item.StartLocal.Hour)));
+                // TODO Story 3.x (WeekView virtualization): replace this imperative Grid + Children.Add approach
+                // with ItemsRepeater + RecyclingElementFactory as specified. The current approach rebuilds all
+                // event blocks synchronously on every Rebuild() call (including SizeChanged), which will be slow
+                // at 200+ events. See review finding F21 in story 3-1.
                 WeekGrid.Children.Add(eventBlock);
             }
         }
@@ -197,11 +222,16 @@ public sealed partial class WeekViewControl : Page
 
     private static SolidColorBrush ToBrush(string hex)
     {
-        return new SolidColorBrush(ColorHelper.FromArgb(
-            0xFF,
-            Convert.ToByte(hex.Substring(1, 2), 16),
-            Convert.ToByte(hex.Substring(3, 2), 16),
-            Convert.ToByte(hex.Substring(5, 2), 16)));
+        if (hex.Length == 7 && hex[0] == '#')
+        {
+            return new SolidColorBrush(ColorHelper.FromArgb(
+                0xFF,
+                Convert.ToByte(hex.Substring(1, 2), 16),
+                Convert.ToByte(hex.Substring(3, 2), 16),
+                Convert.ToByte(hex.Substring(5, 2), 16)));
+        }
+
+        return new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x00, 0x88, 0xCC));
     }
 
     private static (DateOnly From, DateOnly To) GetWeekRange(DateOnly date)

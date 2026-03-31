@@ -40,7 +40,7 @@ public sealed class MainViewModelTests
 
         queryService.LastFrom.Should().Be(new DateOnly(2026, 03, 23));
         queryService.LastTo.Should().Be(new DateOnly(2026, 03, 29));
-        viewModel.BreadcrumbLabel.Should().Be("Mar 23-29, 2026");
+        viewModel.BreadcrumbLabel.Should().Be("Mar 23\u201329, 2026");
     }
 
     [Fact]
@@ -93,6 +93,23 @@ public sealed class MainViewModelTests
         viewModel.BreadcrumbLabel.Should().Be("2026");
         queryService.LastFrom.Should().Be(new DateOnly(2026, 01, 01));
         queryService.LastTo.Should().Be(new DateOnly(2026, 12, 31));
+    }
+
+    [Fact]
+    public async Task JumpToDateCommand_SetsCurrentDateAndLoadsCorrectRange()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 01, 01)));
+        var viewModel = CreateViewModel(queryService, navigationStateService);
+
+        await viewModel.InitializeAsync();
+        await viewModel.JumpToDateCommand.ExecuteAsync(new DateOnly(2026, 06, 15));
+
+        viewModel.CurrentDate.Should().Be(new DateOnly(2026, 06, 15));
+        viewModel.CurrentViewMode.Should().Be(ViewMode.Month);
+        queryService.LastFrom.Should().Be(new DateOnly(2026, 06, 01));
+        queryService.LastTo.Should().Be(new DateOnly(2026, 06, 30));
     }
 
     private static MainViewModel CreateViewModel(

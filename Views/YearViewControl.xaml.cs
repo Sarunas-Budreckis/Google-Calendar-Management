@@ -46,8 +46,7 @@ public sealed partial class YearViewControl : Page
             return;
         }
 
-        await ViewModel.JumpToDateCommand.ExecuteAsync(date);
-        await ViewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Month);
+        await ViewModel.NavigateToAsync(date, ViewMode.Month);
     }
 
     private void Rebuild()

@@ -460,6 +460,10 @@ GoogleCalendarManagement.Tests/Unit/Services/CalendarSelectionServiceTests.cs
 
 ## Dev Agent Record
 
+### Context Reference
+
+- [Story Context XML](3-3-implement-event-selection-with-visual-feedback.context.xml) - Generated 2026-03-31
+
 ### Agent Model Used
 
 claude-sonnet-4-6

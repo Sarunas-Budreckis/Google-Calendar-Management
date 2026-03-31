@@ -5,401 +5,185 @@ Status: ready-for-dev
 ## Story
 
 As a **user**,
-I want **to view full event details when I select an event**,
-So that **I can see all information about the event without leaving the calendar view**.
+I want **to see the full details of the currently selected event without leaving the calendar shell**,
+so that **I can inspect the event before navigating elsewhere or editing it in Tier 2**.
 
 ## Acceptance Criteria
 
-1. **AC-3.4.1 — Panel Appears on Selection:** Given a calendar view is displayed and an event is selected (via `ICalendarSelectionService.Select`), the `EventDetailsPanelControl` slides in from the right within 200 ms and becomes visible.
-
-2. **AC-3.4.2 — Panel Displays All Required Fields:** Given the panel is visible, it shows: event title (large), start and end date/time (local timezone), colour indicator swatch with colour name, description (scrollable `ScrollViewer`, empty state handled), source label ("From Google Calendar"), and last synced timestamp (from `GcalEvent.LastSyncedAt`, formatted as local time or "Never" if null).
-
-3. **AC-3.4.3 — Edit Button Disabled with Tooltip:** Given the panel is visible, it contains an "Edit" button that is `IsEnabled="False"` with `ToolTipService.ToolTip="Coming in Tier 2"` and clicking it takes no action.
-
-4. **AC-3.4.4 — Panel Closes on Esc or Close Button:** Given the panel is visible, pressing Esc or clicking the close (×) button slides the panel out, sets `IsPanelVisible = false`, and calls `ICalendarSelectionService.ClearSelection()`.
-
-5. **AC-3.4.5 — Panel Persists Across View Mode Switches:** Given the panel is open showing event details, when the user switches view mode (Year/Month/Week/Day), `IsPanelVisible` remains `true` and the same event details remain displayed.
-
-6. **AC-3.4.6 — Panel Hides When Selection Cleared:** Given the panel is visible, when `EventSelectedMessage(null)` is received (selection cleared by Esc, empty-area click, or `ClearSelection()`), the panel slides out.
-
-7. **AC-3.4.7 — No Crash on Missing Data:** Given an event has null `Description`, null `LastSyncedAt`, or an unrecognised `ColorId`, the panel renders gracefully with empty/fallback values (no exception thrown, no empty white box).
+1. **AC-3.4.1 - Panel opens from selection:** Given an event is selected through `ICalendarSelectionService`, the details panel appears on the right side of the main calendar shell and completes its slide-in/open transition within 200 ms.
+2. **AC-3.4.2 - Required event fields are shown:** Given the panel is open, it displays the selected event's title, local start/end date-time, colour swatch, colour name, description area, source label `"From Google Calendar"`, and last-synced timestamp.
+3. **AC-3.4.3 - Edit button is disabled in Tier 1:** Given the panel is open, the `"Edit"` button is visible but disabled, with tooltip text `"Coming in Tier 2"`, and clicking it takes no action.
+4. **AC-3.4.4 - Close behavior is unified:** Given the panel is open, clicking the close button or pressing `Esc` clears the selection through `ICalendarSelectionService.ClearSelection()`, and the panel closes.
+5. **AC-3.4.5 - Panel survives view-mode switches:** Given the panel is open, switching Year/Month/Week/Day view does not clear selection and the same event remains displayed.
+6. **AC-3.4.6 - Selection clear hides panel:** Given the panel is open, when `EventSelectedMessage(null)` is published, the panel closes and clears its visible content state.
+7. **AC-3.4.7 - Missing event data is handled safely:** Given the selected event has null or unknown optional data (`Description`, `LastSyncedAt`, incomplete colour metadata), the panel renders fallback values without throwing or showing broken layout.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Define shared data contracts (if not yet created by Story 3.3)** (AC: all)
-  - [ ] Create `Messages/EventSelectedMessage.cs` — `public record EventSelectedMessage(string? GcalEventId);` (null = clear selection)
-  - [ ] Create `Core/Interfaces/ICalendarSelectionService.cs` with `string? SelectedGcalEventId`, `void Select(string gcalEventId)`, `void ClearSelection()`
-  - [ ] Create `Core/Services/CalendarSelectionService.cs` — holds selected ID, sends `EventSelectedMessage` via `WeakReferenceMessenger.Default`
-  - [ ] Create `Core/Models/CalendarEventDisplayModel.cs` (record, see Dev Notes for exact fields)
-  - [ ] Create `Core/Interfaces/IColorMappingService.cs` with `string GetHexColor(string? colorId)` and `string GetColorName(string? colorId)`
-  - [ ] Create `Core/Services/ColorMappingService.cs` — hardcoded dictionary, Azure fallback `#0088CC` (see Dev Notes)
-  - [ ] Create `Core/Interfaces/ICalendarQueryService.cs` — include at minimum `Task<CalendarEventDisplayModel?> GetEventByIdAsync(string gcalEventId, CancellationToken ct = default)`
-  - [ ] Create `Core/Services/CalendarQueryService.cs` — implements `GetEventByIdAsync` by querying `gcal_event` via `IDbContextFactory<CalendarDbContext>`
+- [ ] **Task 1: Extend shared display data for panel rendering** (AC: 3.4.2, 3.4.7)
+  - [ ] Update [Models/CalendarEventDisplayModel.cs](../../../Models/CalendarEventDisplayModel.cs) with the additional shared display data the panel needs, most importantly a colour display name alongside the existing hex value.
+  - [ ] Update [Services/CalendarQueryService.cs](../../../Services/CalendarQueryService.cs) so `GetEventByGcalIdAsync` returns the full display model needed by the panel, while preserving the existing UTC-to-local projection and `LastSyncedAt` passthrough.
+  - [ ] Reuse `IColorMappingService` for colour metadata. If Story 3.2 has not landed yet, make the smallest shared additive change there instead of creating panel-specific colour lookup logic.
 
-- [ ] **Task 2: Implement EventDetailsPanelViewModel** (AC: 3.4.1, 3.4.2, 3.4.3, 3.4.4, 3.4.5, 3.4.6)
-  - [ ] Create `ViewModels/EventDetailsPanelViewModel.cs` extending `ObservableObject`
-  - [ ] Subscribe to `EventSelectedMessage` via `WeakReferenceMessenger.Default.Register<EventSelectedMessage>` in constructor
-  - [ ] On message with non-null `GcalEventId`: call `ICalendarQueryService.GetEventByIdAsync`, populate observable properties, set `IsPanelVisible = true`
-  - [ ] On message with null `GcalEventId`: set `IsPanelVisible = false`, clear properties
-  - [ ] Expose `IsPanelVisible`, `Title`, `StartEndDisplay`, `ColorHex`, `ColorName`, `Description`, `LastSyncedDisplay` as observable properties
-  - [ ] Implement `CloseCommand` (RelayCommand): calls `_selectionService.ClearSelection()` (triggers `EventSelectedMessage(null)`)
-  - [ ] Unsubscribe in `IDisposable.Dispose` (implement `IDisposable`)
+- [ ] **Task 2: Create `EventDetailsPanelViewModel`** (AC: 3.4.1, 3.4.2, 3.4.4, 3.4.5, 3.4.6, 3.4.7)
+  - [ ] Create [ViewModels/EventDetailsPanelViewModel.cs](../../../ViewModels/EventDetailsPanelViewModel.cs) as an `ObservableObject`.
+  - [ ] Inject `ICalendarQueryService` and `ICalendarSelectionService`.
+  - [ ] Register once with `WeakReferenceMessenger.Default` for `EventSelectedMessage`.
+  - [ ] On non-null selection, load the event with `GetEventByGcalIdAsync`, populate bindable properties, and show the panel.
+  - [ ] On null selection, hide the panel and reset visible state.
+  - [ ] Expose bindable properties for `IsPanelVisible`, `PanelVisibility`, `Title`, `StartEndDisplay`, `ColorHex`, `ColorName`, `DescriptionDisplay`, `SourceDisplay`, `LastSyncedDisplay`, and `CloseCommand`.
+  - [ ] Implement `CloseCommand` by calling `_selectionService.ClearSelection()`.
+  - [ ] Ensure missing values fall back cleanly:
+    - [ ] Empty/null description -> readable placeholder such as `"No description provided."`
+    - [ ] Null last-synced -> `"Never"`
+    - [ ] Unknown/null colour metadata -> Azure fallback values already defined by the shared colour mapping path
 
-- [ ] **Task 3: Implement EventDetailsPanelControl XAML** (AC: 3.4.1, 3.4.2, 3.4.3, 3.4.4)
-  - [ ] Create `Views/EventDetailsPanelControl.xaml` + `Views/EventDetailsPanelControl.xaml.cs`
-  - [ ] ~375 px fixed width, full height, right-side panel
-  - [ ] Slide-in animation via `ThemeTransition` or `TranslationTransition` on `Visibility` change
-  - [ ] Bind `DataContext` to `EventDetailsPanelViewModel`
-  - [ ] Handle Esc key: call `ViewModel.CloseCommand` (wire in code-behind via `KeyDown` on parent or `Page.KeyboardAccelerators`)
-  - [ ] Display: large `TextBlock` for title, date/time row, `Rectangle` colour swatch + colour name `TextBlock`, scrollable description, source label, last-synced label
-  - [ ] Disabled "Edit" `Button` with `IsEnabled="False"` and `ToolTipService.ToolTip="Coming in Tier 2"`
-  - [ ] Close `Button` (×) bound to `CloseCommand`
+- [ ] **Task 3: Create `EventDetailsPanelControl`** (AC: 3.4.1, 3.4.2, 3.4.3, 3.4.4)
+  - [ ] Create [Views/EventDetailsPanelControl.xaml](../../../Views/EventDetailsPanelControl.xaml) and [Views/EventDetailsPanelControl.xaml.cs](../../../Views/EventDetailsPanelControl.xaml.cs).
+  - [ ] Resolve the view model from DI in the control constructor and set `DataContext`.
+  - [ ] Build a right-side panel with fixed-width desktop layout (~375-400 px), full height, and scroll support for long descriptions.
+  - [ ] Display the required read-only fields and a disabled `"Edit"` button with `ToolTipService.ToolTip="Coming in Tier 2"`.
+  - [ ] Add a close button bound to `CloseCommand`.
+  - [ ] Implement open/close animation in the control layer only. Prefer WinUI transitions first; if close animation needs explicit orchestration, keep that logic limited to presentation behavior in code-behind.
 
-- [ ] **Task 4: Register in DI and wire into App shell** (AC: all)
-  - [ ] In `App.xaml.cs` `ConfigureServices`: register `ICalendarSelectionService` (singleton), `IColorMappingService` (singleton), `ICalendarQueryService` (singleton), `EventDetailsPanelViewModel` (singleton), `EventDetailsPanelControl` (transient)
-  - [ ] Panel is a child control inside the future `MainWindow`; for now it can be placed inside `SettingsPage` shell or a new `MainPage` as a stub host — confirm placement with existing shell structure
+- [ ] **Task 4: Host the panel in `MainPage` so it persists across frame navigation** (AC: 3.4.1, 3.4.4, 3.4.5, 3.4.6)
+  - [ ] Update [Views/MainPage.xaml](../../../Views/MainPage.xaml) to host `EventDetailsPanelControl` in the row-1 shell grid as a sibling overlay beside `CalendarFrame`, not inside `YearViewControl` / `MonthViewControl` / `WeekViewControl` / `DayViewControl`.
+  - [ ] Update [Views/MainPage.xaml.cs](../../../Views/MainPage.xaml.cs) to include an `Escape` keyboard accelerator that calls `ICalendarSelectionService.ClearSelection()`, reusing the same close path as Story 3.3.
+  - [ ] Register `EventDetailsPanelViewModel` as singleton and `EventDetailsPanelControl` as transient in [App.xaml.cs](../../../App.xaml.cs).
+  - [ ] Do not duplicate selection logic in the panel. Selection remains owned by `ICalendarSelectionService` and `EventSelectedMessage`.
 
-- [ ] **Task 5: Write unit tests** (AC: 3.4.1, 3.4.2, 3.4.4, 3.4.5, 3.4.6, 3.4.7)
-  - [ ] `GoogleCalendarManagement.Tests/Unit/EventDetailsPanelViewModelTests.cs`
-  - [ ] Test: `EventSelectedMessage("gcal_123")` → `IsPanelVisible = true`, all display properties populated
-  - [ ] Test: `EventSelectedMessage(null)` → `IsPanelVisible = false`
-  - [ ] Test: View mode switch does NOT close panel (simulate by not sending null message → `IsPanelVisible` stays true)
-  - [ ] Test: null `Description` → `Description` property is empty string, no exception
-  - [ ] Test: null `LastSyncedAt` → `LastSyncedDisplay` is "Never"
-  - [ ] Test: `CloseCommand.Execute()` → `ClearSelection()` called, `IsPanelVisible = false`
-  - [ ] `GoogleCalendarManagement.Tests/Unit/CalendarSelectionServiceTests.cs`
-  - [ ] Test: `Select("id")` sends `EventSelectedMessage("id")` via messenger
-  - [ ] Test: `ClearSelection()` sends `EventSelectedMessage(null)`
-  - [ ] `GoogleCalendarManagement.Tests/Unit/ColorMappingServiceTests.cs`
-  - [ ] Test: null/unknown `colorId` returns `#0088CC` with no exception
-  - [ ] Test: `"1"` / `"azure"` returns `#0088CC`
+- [ ] **Task 5: Add or update automated tests** (AC: 3.4.1, 3.4.2, 3.4.4, 3.4.5, 3.4.6, 3.4.7)
+  - [ ] Create [GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs](../../../GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs).
+  - [ ] Cover:
+    - [ ] selected message loads event and shows panel
+    - [ ] null message hides panel
+    - [ ] close command clears selection
+    - [ ] null description uses placeholder
+    - [ ] null last-synced renders `"Never"`
+    - [ ] view-mode switch does not affect panel state if selection remains unchanged
+    - [ ] missing event from query service does not throw
+  - [ ] If this story extends `IColorMappingService`, update [GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs](../../../GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs) to cover the new shared behaviour.
 
-- [ ] **Task 6: Build and test** (AC: all)
-  - [ ] `dotnet build -p:Platform=x64`
-  - [ ] `dotnet test`
-  - [ ] Manual: select an event → panel slides in with correct data, close × → panel slides out
+- [ ] **Task 6: Validate locally** (AC: all)
+  - [ ] Run `dotnet build -p:Platform=x64`
+  - [ ] Run `dotnet test`
+  - [ ] Manual verification:
+    - [ ] select event -> panel opens with correct data
+    - [ ] press `Esc` -> selection clears and panel closes
+    - [ ] switch view mode while panel is open -> same event remains shown
+    - [ ] select event with missing description / last-synced -> fallback values appear, no crash
 
 ## Dev Notes
 
-### CRITICAL: Schema Discrepancy — Integer vs String PK
+### Current Codebase Truth
 
-The epic tech-spec and architecture doc describe `CalendarEventDisplayModel.Id` as `int` mapping to `gcal_event.id (PK)`. **This is wrong.** The actual implemented schema has:
+The original planning docs are partly stale. Build against the repository as it exists now:
 
-```csharp
-// GcalEventConfiguration.cs — GcalEventId IS the PK (string, Google Calendar's event ID)
-builder.HasKey(e => e.GcalEventId);
-// There is NO integer 'id' column in gcal_event
-```
+- The project is **flat at the repo root**, not split into `src/` or `Core/` libraries.
+- The shared contracts already exist from Stories 3.1 and 3.3:
+  - [Services/ICalendarSelectionService.cs](../../../Services/ICalendarSelectionService.cs)
+  - [Services/CalendarSelectionService.cs](../../../Services/CalendarSelectionService.cs)
+  - [Messages/EventSelectedMessage.cs](../../../Messages/EventSelectedMessage.cs)
+  - [Services/ICalendarQueryService.cs](../../../Services/ICalendarQueryService.cs)
+  - [Services/CalendarQueryService.cs](../../../Services/CalendarQueryService.cs)
+- `GcalEvent.GcalEventId` is the **actual string primary key**. Do not introduce an integer event ID anywhere in this story.
 
-**Resolution for all Epic 3 stories:** Use `string GcalEventId` as the event key throughout. All service interfaces, messages, and display models must use `string` not `int`.
+### Panel Host Must Live in `MainPage`
 
-```csharp
-// CORRECT CalendarEventDisplayModel
-public record CalendarEventDisplayModel(
-    string GcalEventId,          // gcal_event.gcal_event_id — use this as the unique key
-    string Title,                // gcal_event.summary (empty string "" if null)
-    DateTime? StartUtc,          // gcal_event.start_datetime (nullable in DB)
-    DateTime? EndUtc,            // gcal_event.end_datetime (nullable in DB)
-    bool IsAllDay,               // gcal_event.is_all_day ?? false
-    string ColorHex,             // resolved by IColorMappingService
-    string ColorName,            // resolved by IColorMappingService (e.g. "Azure")
-    bool IsRecurringInstance,    // gcal_event.is_recurring_instance
-    string? Description,         // gcal_event.description
-    DateTime? LastSyncedAt       // gcal_event.last_synced_at (directly on GcalEvent entity)
-);
+`MainPage` already owns the top toolbar and the `CalendarFrame` that swaps `YearViewControl`, `MonthViewControl`, `WeekViewControl`, and `DayViewControl`.
 
-// CORRECT ICalendarSelectionService
-public interface ICalendarSelectionService
-{
-    string? SelectedGcalEventId { get; }
-    void Select(string gcalEventId);
-    void ClearSelection();
-}
+To satisfy AC 3.4.5, the details panel must be hosted in [Views/MainPage.xaml](../../../Views/MainPage.xaml) as a sibling overlay to `CalendarFrame`. If you place it inside one of the view pages, frame navigation will destroy and recreate it on every view-mode switch.
 
-// CORRECT EventSelectedMessage
-public record EventSelectedMessage(string? GcalEventId);  // null = cleared
-```
+### Query and Data Mapping Guardrails
 
-### LastSyncedAt Source
+- `ICalendarQueryService` already exposes `GetEventByGcalIdAsync(string gcalEventId, ...)`.
+- `CalendarQueryService` already converts UTC DB fields into local display values. Do not reconvert local time again in the view or view model.
+- `GcalEventRepository` already filters `IsDeleted == false`; the panel should not bypass the repository and query `CalendarDbContext` directly.
+- `LastSyncedAt` comes directly from `GcalEvent.LastSyncedAt`, not from `DataSourceRefresh`.
 
-`GcalEvent` has a `LastSyncedAt` property directly (`gcal_event.last_synced_at`). Use this field directly when projecting to `CalendarEventDisplayModel`. **Do NOT query `DataSourceRefresh` for individual event panel display** — that table tracks bulk sync operations, not per-event sync timestamps. The `DataSourceRefresh` table is used in `SettingsViewModel` for "Last Sync" overall display.
+### Colour Mapping Reality
 
-```csharp
-// CalendarQueryService.GetEventByIdAsync projection
-var ev = await context.GcalEvents
-    .AsNoTracking()
-    .FirstOrDefaultAsync(e => e.GcalEventId == gcalEventId && !e.IsDeleted, ct);
+Current repo state:
 
-if (ev == null) return null;
+- [Services/IColorMappingService.cs](../../../Services/IColorMappingService.cs) only exposes `GetHexColor`.
+- [Services/ColorMappingService.cs](../../../Services/ColorMappingService.cs) is still the Story 3.1 Azure-only stub.
+- Story 3.2 is the shared place where the 9-colour system is meant to become real.
 
-return new CalendarEventDisplayModel(
-    GcalEventId: ev.GcalEventId,
-    Title: ev.Summary ?? "",
-    StartUtc: ev.StartDatetime,
-    EndUtc: ev.EndDatetime,
-    IsAllDay: ev.IsAllDay ?? false,
-    ColorHex: _colorService.GetHexColor(ev.ColorId),
-    ColorName: _colorService.GetColorName(ev.ColorId),
-    IsRecurringInstance: ev.IsRecurringInstance,
-    Description: ev.Description,
-    LastSyncedAt: ev.LastSyncedAt
-);
-```
+Implication for 3.4:
 
-### Project Structure — No "Core" Folder Exists Yet
+- The panel needs both a swatch and a display name.
+- Do **not** create a private colour dictionary inside the panel or its view model.
+- Reuse the shared colour service path. If Story 3.2 is already implemented by the time 3.4 is built, consume that shared mapping. If not, make the smallest compatible extension to `IColorMappingService` needed to expose a display name and keep the mapping logic centralized.
 
-The architecture describes a `Core` layer but **no such folder exists**. Create it for Epic 3 services:
+### Selection and Close Behavior
 
-```
-GoogleCalendarManagement/
-├── Core/
-│   ├── Interfaces/
-│   │   ├── ICalendarSelectionService.cs
-│   │   ├── IColorMappingService.cs
-│   │   └── ICalendarQueryService.cs
-│   ├── Services/
-│   │   ├── CalendarSelectionService.cs
-│   │   ├── ColorMappingService.cs
-│   │   └── CalendarQueryService.cs
-│   └── Models/
-│       └── CalendarEventDisplayModel.cs
-├── Messages/
-│   └── EventSelectedMessage.cs        ← new (AuthenticationSucceededMessage.cs exists as pattern)
-├── ViewModels/
-│   └── EventDetailsPanelViewModel.cs  ← new (SettingsViewModel.cs exists as pattern)
-└── Views/
-    ├── EventDetailsPanelControl.xaml   ← new
-    └── EventDetailsPanelControl.xaml.cs ← new
-```
+Selection is already centralized in `CalendarSelectionService` and broadcasts `EventSelectedMessage`.
 
-**Namespace convention** (matches existing code):
-- `GoogleCalendarManagement.Core.Interfaces`
-- `GoogleCalendarManagement.Core.Services`
-- `GoogleCalendarManagement.Core.Models`
-- `GoogleCalendarManagement.Messages`
-- `GoogleCalendarManagement.ViewModels`
-- `GoogleCalendarManagement.Views`
+Use that as the single source of truth:
 
-### Existing WeakReferenceMessenger Pattern
+- Panel opens because a non-null `EventSelectedMessage` arrives.
+- Panel closes because `ClearSelection()` publishes `EventSelectedMessage(null)`.
+- The close button and `Esc` should both call `ClearSelection()`, not directly toggle panel flags.
 
-Follow exactly the pattern in `Messages/AuthenticationSucceededMessage.cs` and `ViewModels/SettingsViewModel.cs`:
+This keeps Story 3.3 and Story 3.4 aligned instead of creating two competing state machines.
 
-```csharp
-// Send (in CalendarSelectionService)
-WeakReferenceMessenger.Default.Send(new EventSelectedMessage(gcalEventId));
+### Avoid Extra Converters Unless They Are Actually Needed
 
-// Register (in EventDetailsPanelViewModel constructor)
-WeakReferenceMessenger.Default.Register<EventSelectedMessage>(this, (r, m) =>
-{
-    // Update UI on UI thread if needed
-    _ = LoadEventDetailsAsync(m.GcalEventId);
-});
-```
+The repo does not currently contain a reusable `BoolToVisibilityConverter` or `StringToVisibilityConverter`.
 
-### ColorMappingService — Confirmed Hex Values
+The simplest implementation path is to expose view-model properties such as:
 
-Only Azure is confirmed: `#0088CC`. Other hex values are NOT yet defined in `_color-definitions.md`. For this story, implement the service with Azure confirmed + TBD placeholders for the other 8 colors (Story 3.2 owns finalizing all 9 hex values). Use Azure as fallback for any unrecognised `ColorId`.
+- `PanelVisibility`
+- `DescriptionVisibility`
+- `DescriptionDisplay`
 
-```csharp
-// GoogleCalendarId → (HexColor, DisplayName) mapping
-// ColorId values from Google Calendar API are "1"-"11" numeric strings
-private static readonly Dictionary<string, (string Hex, string Name)> _map = new()
-{
-    { "1",          ("#0088CC", "Azure") },        // Eudaimonia — confirmed
-    { "azure",      ("#0088CC", "Azure") },        // alias
-    { "2",          ("#TBD",    "Navy") },          // Personal Engineering — TBD Story 3.2
-    { "lavender",   ("#TBD",    "Lavender") },      // alias — TBD
-    { "3",          ("#TBD",    "Lavender") },
-    { "flamingo",   ("#TBD",    "Flamingo") },
-    { "4",          ("#TBD",    "Flamingo") },
-    { "5",          ("#TBD",    "Yellow") },
-    { "banana",     ("#TBD",    "Yellow") },
-    { "6",          ("#TBD",    "Orange") },
-    { "tangerine",  ("#TBD",    "Orange") },
-    { "7",          ("#TBD",    "Sage") },
-    { "sage",       ("#TBD",    "Sage") },
-    { "8",          ("#TBD",    "Grey") },
-    { "graphite",   ("#TBD",    "Grey") },
-    { "9",          ("#TBD",    "Purple") },
-    { "blueberry",  ("#TBD",    "Purple") },
-    { "10",         ("#TBD",    "Sage") },          // Google "basil" → Sage in custom taxonomy
-    { "11",         ("#TBD",    "Flamingo") },      // Google "tomato" → Flamingo in custom taxonomy
-};
-// Fallback for null or unknown:
-public string GetHexColor(string? colorId) =>
-    colorId != null && _map.TryGetValue(colorId, out var v) ? v.Hex : "#0088CC";
-public string GetColorName(string? colorId) =>
-    colorId != null && _map.TryGetValue(colorId, out var v) ? v.Name : "Azure";
-```
+instead of adding converter infrastructure only for this story.
 
-### ViewModel Pattern — Match SettingsViewModel
+### UI-Thread and Code-Behind Boundaries
 
-```csharp
-// EventDetailsPanelViewModel.cs
-public sealed class EventDetailsPanelViewModel : ObservableObject, IDisposable
-{
-    private readonly ICalendarQueryService _queryService;
-    private readonly ICalendarSelectionService _selectionService;
-    private bool _isPanelVisible;
-    private string _title = "";
-    // ... other backing fields
-
-    public EventDetailsPanelViewModel(
-        ICalendarQueryService queryService,
-        ICalendarSelectionService selectionService)
-    {
-        _queryService = queryService;
-        _selectionService = selectionService;
-        CloseCommand = new RelayCommand(ExecuteClose);
-
-        WeakReferenceMessenger.Default.Register<EventSelectedMessage>(this, (r, m) =>
-            _ = HandleEventSelectedAsync(m.GcalEventId));
-    }
-
-    public bool IsPanelVisible
-    {
-        get => _isPanelVisible;
-        private set => SetProperty(ref _isPanelVisible, value);
-    }
-
-    // ... observable properties for Title, StartEndDisplay, ColorHex, ColorName, Description, LastSyncedDisplay
-
-    public IRelayCommand CloseCommand { get; }
-
-    private async Task HandleEventSelectedAsync(string? gcalEventId)
-    {
-        if (gcalEventId == null)
-        {
-            IsPanelVisible = false;
-            return;
-        }
-        var ev = await _queryService.GetEventByIdAsync(gcalEventId);
-        if (ev == null) return;  // event disappeared (soft-deleted); ignore
-
-        Title = ev.Title;
-        // ... populate remaining properties
-        IsPanelVisible = true;
-    }
-
-    private void ExecuteClose() => _selectionService.ClearSelection();
-
-    public void Dispose() =>
-        WeakReferenceMessenger.Default.UnregisterAll(this);
-}
-```
-
-### Date/Time Display
-
-All UTC datetimes must be converted to local time for display:
-```csharp
-// StartEndDisplay computed property
-private string FormatStartEnd(CalendarEventDisplayModel ev)
-{
-    if (ev.IsAllDay)
-    {
-        var start = ev.StartUtc?.ToLocalTime().ToString("ddd, MMM d, yyyy") ?? "";
-        return ev.EndUtc.HasValue
-            ? $"{start} (All Day)"
-            : start;
-    }
-    var s = ev.StartUtc?.ToLocalTime().ToString("ddd, MMM d, yyyy h:mm tt") ?? "Unknown";
-    var e = ev.EndUtc?.ToLocalTime().ToString("h:mm tt") ?? "";
-    return $"{s} – {e}";
-}
-```
-
-### XAML Slide Animation
-
-Use `TranslationTransition` (WinUI 3 / Windows App SDK 1.8):
-```xml
-<UserControl.Resources>
-    <TransitionCollection x:Key="SlideTransitions">
-        <EntranceThemeTransition FromHorizontalOffset="375" IsStaggeringEnabled="False"/>
-    </TransitionCollection>
-</UserControl.Resources>
-
-<!-- Panel visibility binding with transition -->
-<Grid x:Name="PanelRoot"
-      Width="375"
-      Visibility="{x:Bind ViewModel.IsPanelVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"
-      Transitions="{StaticResource SlideTransitions}">
-```
-
-If `EntranceThemeTransition` alone doesn't produce the desired slide on hide, use `Connected Animation` or `Storyboard` as fallback (target < 200 ms).
-
-### DI Registration (App.xaml.cs ConfigureServices)
-
-```csharp
-// Add after existing service registrations:
-services.AddSingleton<ICalendarSelectionService, CalendarSelectionService>();
-services.AddSingleton<IColorMappingService, ColorMappingService>();
-services.AddSingleton<ICalendarQueryService, CalendarQueryService>();
-services.AddSingleton<EventDetailsPanelViewModel>();
-services.AddTransient<EventDetailsPanelControl>();
-```
-
-### Story 3.3 Dependency
-
-Story 3.3 owns `ICalendarSelectionService` and `EventSelectedMessage` as part of implementing event click selection. If story 3.4 is being implemented before 3.3 is done, you must create these contracts in this story. They MUST match the contracts that story 3.3 will depend on — do not create incompatible parallel definitions.
-
-The `EventDetailsPanelViewModel` must NOT assume it is the only consumer of `EventSelectedMessage`. Stories 3.1–3.3 view controls will also subscribe to selection changes.
-
-### CalendarQueryService DI
-
-Use `IDbContextFactory<CalendarDbContext>` (already registered as `AddDbContextFactory` in App.xaml.cs) for thread-safe async DB access:
-
-```csharp
-public class CalendarQueryService : ICalendarQueryService
-{
-    private readonly IDbContextFactory<CalendarDbContext> _contextFactory;
-    private readonly IColorMappingService _colorService;
-
-    public CalendarQueryService(IDbContextFactory<CalendarDbContext> contextFactory, IColorMappingService colorService)
-    {
-        _contextFactory = contextFactory;
-        _colorService = colorService;
-    }
-
-    public async Task<CalendarEventDisplayModel?> GetEventByIdAsync(string gcalEventId, CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var ev = await context.GcalEvents
-            .AsNoTracking()
-            .FirstOrDefaultAsync(e => e.GcalEventId == gcalEventId && !e.IsDeleted, ct);
-        if (ev == null) return null;
-        return Project(ev);
-    }
-    // ...
-}
-```
+- Keep DB access and state shaping in the view model and services.
+- Code-behind is acceptable only for:
+  - DI/DataContext hookup
+  - focus/keyboard wiring
+  - presentation-only animation orchestration
+- If the messenger callback or asynchronous load path needs UI-thread marshaling, use the WinUI dispatcher/queue pattern instead of mutating bound state from an arbitrary thread.
 
 ### Anti-Patterns to Avoid
 
-- **DO NOT** use `DbContext` directly (use `IDbContextFactory<CalendarDbContext>` for thread-safety)
-- **DO NOT** use integer `Id` for event identity — there is no integer PK on `gcal_event`
-- **DO NOT** put business logic in XAML code-behind — keep code-behind only for wiring (KeyDown handlers, setting DataContext)
-- **DO NOT** subscribe to `WeakReferenceMessenger` without unsubscribing in `Dispose` (memory leak)
-- **DO NOT** call `DataSourceRefresh` for per-event last-synced — use `GcalEvent.LastSyncedAt` directly
-- **DO NOT** import WinUI 3 namespaces (`Microsoft.UI.*`) into Core layer classes
+- Do **not** recreate `ICalendarSelectionService`, `EventSelectedMessage`, or `ICalendarQueryService`.
+- Do **not** query `CalendarDbContext` directly from the panel control.
+- Do **not** host the panel inside one of the individual calendar pages.
+- Do **not** add business logic to XAML code-behind beyond animation or keyboard plumbing.
+- Do **not** use integer IDs, `DataSourceRefresh`, or duplicate colour lookup logic for this story.
 
-### Test Data Guidance
+### Test Guidance
 
-Use `SettingsViewModelTests.cs` as reference for test setup patterns. For `EventDetailsPanelViewModelTests`:
-- Mock `ICalendarQueryService` returning a seeded `CalendarEventDisplayModel`
-- Use `WeakReferenceMessenger.Default` directly to send test messages (same messenger the ViewModel registers with)
-- Verify ViewModel observable property changes after message delivery
+Follow the existing unit-test style in:
 
-## References
+- [GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs](../../../GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs)
+- [GoogleCalendarManagement.Tests/Unit/SettingsViewModelTests.cs](../../../GoogleCalendarManagement.Tests/Unit/SettingsViewModelTests.cs)
+- [GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs](../../../GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs)
 
-- [Epic 3 Tech Spec](../tech-spec.md) — authoritative service contracts, AC, and XAML composition
-- [Architecture.md](../../architecture.md) — layering rules, WeakReferenceMessenger usage
-- [GcalEvent entity](../../../Data/Entities/GcalEvent.cs) — actual DB fields (`GcalEventId` is string PK)
-- [GcalEventConfiguration.cs](../../../Data/Configurations/GcalEventConfiguration.cs) — confirms `HasKey(e => e.GcalEventId)`
-- [SettingsViewModel.cs](../../../ViewModels/SettingsViewModel.cs) — ObservableObject + AsyncRelayCommand + WeakReferenceMessenger pattern
-- [App.xaml.cs](../../../App.xaml.cs) — DI registration pattern, `IDbContextFactory` usage
-- [AuthenticationSucceededMessage.cs](../../../Messages/AuthenticationSucceededMessage.cs) — message record pattern
-- [_color-definitions.md](../../_color-definitions.md) — confirmed Azure = #0088CC; other hex TBD (Story 3.2)
-- [Sprint Status](../../sprint-status.yaml) — story 3.3 (prerequisite) still backlog; create `ICalendarSelectionService` here if needed
+Use Moq for service dependencies, and unregister messenger subscriptions in test cleanup if the test creates live listeners on `WeakReferenceMessenger.Default`.
+
+### References
+
+- [docs/epic-3/tech-spec.md](../tech-spec.md)
+- [docs/epics.md](../../epics.md)
+- [docs/ux-design-specification.md](../../ux-design-specification.md)
+- [App.xaml.cs](../../../App.xaml.cs)
+- [Views/MainPage.xaml](../../../Views/MainPage.xaml)
+- [Views/MainPage.xaml.cs](../../../Views/MainPage.xaml.cs)
+- [Models/CalendarEventDisplayModel.cs](../../../Models/CalendarEventDisplayModel.cs)
+- [Services/ICalendarQueryService.cs](../../../Services/ICalendarQueryService.cs)
+- [Services/CalendarQueryService.cs](../../../Services/CalendarQueryService.cs)
+- [Services/IColorMappingService.cs](../../../Services/IColorMappingService.cs)
+- [Services/ColorMappingService.cs](../../../Services/ColorMappingService.cs)
+- [Services/ICalendarSelectionService.cs](../../../Services/ICalendarSelectionService.cs)
+- [Services/CalendarSelectionService.cs](../../../Services/CalendarSelectionService.cs)
+- [Messages/EventSelectedMessage.cs](../../../Messages/EventSelectedMessage.cs)
+- [Data/Entities/GcalEvent.cs](../../../Data/Entities/GcalEvent.cs)
+- [Data/Configurations/GcalEventConfiguration.cs](../../../Data/Configurations/GcalEventConfiguration.cs)
 
 ## Dev Agent Record
 
@@ -412,9 +196,5 @@ Use `SettingsViewModelTests.cs` as reference for test setup patterns. For `Event
 <!-- to be filled by dev agent -->
 
 ### File List
-
-<!-- to be filled by dev agent -->
-
-### Change Log
 
 <!-- to be filled by dev agent -->

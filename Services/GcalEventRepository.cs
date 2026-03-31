@@ -23,14 +23,9 @@ public sealed class GcalEventRepository : IGcalEventRepository
             .AsNoTracking()
             .Where(gcalEvent =>
                 !gcalEvent.IsDeleted &&
-                (
-                    (gcalEvent.StartDatetime.HasValue && gcalEvent.StartDatetime.Value < rangeEndExclusiveUtc) ||
-                    (gcalEvent.EndDatetime.HasValue && gcalEvent.EndDatetime.Value < rangeEndExclusiveUtc)
-                ) &&
-                (
-                    (gcalEvent.EndDatetime.HasValue && gcalEvent.EndDatetime.Value >= rangeStartUtc) ||
-                    (gcalEvent.StartDatetime.HasValue && gcalEvent.StartDatetime.Value >= rangeStartUtc)
-                ))
+                gcalEvent.StartDatetime.HasValue &&
+                gcalEvent.StartDatetime.Value < rangeEndExclusiveUtc &&
+                (gcalEvent.EndDatetime ?? gcalEvent.StartDatetime.Value) >= rangeStartUtc)
             .OrderBy(gcalEvent => gcalEvent.StartDatetime ?? gcalEvent.EndDatetime)
             .ThenBy(gcalEvent => gcalEvent.Summary)
             .ToListAsync(ct);

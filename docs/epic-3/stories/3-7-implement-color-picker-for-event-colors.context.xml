@@ -1,0 +1,182 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>7</storyId>
+    <title>Implement Color Picker for Event Colors</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-31</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-3/stories/3-7-implement-color-picker-for-event-colors.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to assign an event color from the app's fixed visual palette while editing</iWant>
+    <soThat>I can categorize the event by mental state without remembering color IDs or typing color names</soThat>
+    <tasks>
+      - Extend the shared color-mapping contract so the picker can consume ordered color metadata, display names, and canonical keys from one place
+      - Carry canonical color metadata through CalendarEventDisplayModel and CalendarQueryService instead of introducing panel-only lookup logic
+      - Extend EventDetailsPanelViewModel from Story 3.5 with editable color state and an immediate save command for swatch selection
+      - Replace the Story 3.5 disabled color stub with a Flyout-hosted 3x3 swatch grid in EventDetailsPanelControl
+      - Persist color changes through the existing edit/update pipeline, storing canonical color keys in gcal_event.color_id
+      - Write a gcal_event_version snapshot before manual color overwrites using ChangedBy = manual_edit and ChangeReason = color_changed
+      - Refresh the currently visible calendar surfaces after save using the shared event-updated message path rather than a full shell reload
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-3.7.1">Given the event details panel is in edit mode, when the user activates the color field, a light-dismiss picker opens anchored to that field within 100 ms.</ac>
+    <ac id="AC-3.7.2">Given the picker is open, it shows exactly these 9 options with swatch plus label: Azure, Purple, Grey, Yellow, Navy, Sage, Flamingo, Orange, Lavender.</ac>
+    <ac id="AC-3.7.3">Given the picker is open, the current selection is visibly highlighted, each swatch is keyboard reachable, and each option exposes an accessible name containing its label and hex.</ac>
+    <ac id="AC-3.7.4">Given the user selects a color option, the picker closes automatically, the panel updates immediately, and the change is persisted without waiting for the 500 ms text-edit debounce.</ac>
+    <ac id="AC-3.7.5">Given a color is selected, the chosen value is saved to gcal_event.color_id using the app's canonical semantic key, UpdatedAt and AppLastModifiedAt are updated, AppPublished remains false, and GcalEventId is unchanged.</ac>
+    <ac id="AC-3.7.6">Given a color change has been saved, the selected event re-renders with the new colour in the details panel and any currently visible Month, Week, or Day view without restarting the app.</ac>
+    <ac id="AC-3.7.7">Given an existing event's color is changed, the pre-change row state is written to gcal_event_version before the live row is updated, using ChangedBy = manual_edit and ChangeReason = color_changed.</ac>
+    <ac id="AC-3.7.8">Given an event has a null, empty, unknown, or legacy numeric color_id, the picker opens with Azure selected as the safe fallback and no exception is thrown. Given the user dismisses the picker without selecting a new color, no database write occurs.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-3/stories/3-7-implement-color-picker-for-event-colors.md</path>
+        <title>Story 3.7 (primary reference)</title>
+        <section>Acceptance Criteria, Tasks, Dev Notes, References</section>
+        <snippet>Repo-accurate implementation guide for replacing the Story 3.5 color stub with a fixed-palette Flyout picker, persisting canonical color keys, and recording manual color edits in gcal_event_version.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/stories/3-5-implement-event-editing-panel-phase-2.md</path>
+        <title>Story 3.5</title>
+        <section>Color picker stub, edit save path</section>
+        <snippet>Critical prerequisite and extension point for 3.7. Story 3.5 created the edit-mode slot, save orchestration, and expected EventUpdatedMessage refresh path that this story must extend rather than replace.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/stories/3-2-display-events-with-color-coded-visual-system.md</path>
+        <title>Story 3.2</title>
+        <section>Category mapping to implement</section>
+        <snippet>Defines the nine-color taxonomy, concrete hex values, Azure fallback, and the recommendation to centralize color mapping in IColorMappingService instead of duplicating dictionaries in views.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/stories/2-3-implement-version-history-on-calendar-sync.md</path>
+        <title>Story 2.3</title>
+        <section>Version-history contract</section>
+        <snippet>Shows the working gcal_event_version snapshot contract and insert-before-overwrite rule already used by SyncManager. 3.7 should mirror this behavior for manual color edits.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-2/stories/2-3a-harden-version-history-schema-and-sync-semantics.md</path>
+        <title>Story 2.3A</title>
+        <section>Snapshot semantics</section>
+        <snippet>Confirms the current fielded snapshot shape for gcal_event_version and that history rows are intended to remain usable operational audit records rather than JSON blobs.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>Services/IColorMappingService.cs</path>
+        <kind>interface</kind>
+        <symbol>IColorMappingService</symbol>
+        <reason>Current repo only exposes GetHexColor(...). Extend the shared interface so the picker can consume ordered color metadata, display names, and canonical-key normalization from one place.</reason>
+      </file>
+      <file>
+        <path>Services/ColorMappingService.cs</path>
+        <kind>service</kind>
+        <symbol>ColorMappingService</symbol>
+        <reason>Current implementation is Azure-only. Replace or extend it with the fixed nine-color taxonomy while preserving Azure fallback and acceptance of legacy numeric Google color IDs.</reason>
+      </file>
+      <file>
+        <path>Models/CalendarEventDisplayModel.cs</path>
+        <kind>model</kind>
+        <symbol>CalendarEventDisplayModel</symbol>
+        <reason>Currently exposes ColorHex only. The edit panel needs the canonical color key and display name to highlight the current selection and save through the shared contract.</reason>
+      </file>
+      <file>
+        <path>Services/CalendarQueryService.cs</path>
+        <kind>service</kind>
+        <symbol>CalendarQueryService</symbol>
+        <reason>Keep color-metadata projection centralized here. Resolve ColorHex and any additional ColorId/ColorName display fields through IColorMappingService rather than duplicating lookup logic in the panel.</reason>
+      </file>
+      <file>
+        <path>ViewModels/EventDetailsPanelViewModel.cs</path>
+        <kind>viewmodel</kind>
+        <symbol>EventDetailsPanelViewModel</symbol>
+        <reason>Extend the Story 3.5 edit view model with EditColorId, AvailableColors, and an immediate swatch-selection save path. Do not create a second editing state machine.</reason>
+      </file>
+      <file>
+        <path>Views/EventDetailsPanelControl.xaml</path>
+        <kind>view</kind>
+        <symbol>EventDetailsPanelControl</symbol>
+        <reason>Replace the disabled color stub with an anchored Flyout containing a 3x3 swatch grid. This is the main UI surface for the story.</reason>
+      </file>
+      <file>
+        <path>Services/GcalEventRepository.cs</path>
+        <kind>service</kind>
+        <symbol>GcalEventRepository</symbol>
+        <reason>Persist canonical ColorId updates and, when the color actually changed, create a gcal_event_version snapshot in the same persistence flow before overwrite.</reason>
+      </file>
+      <file>
+        <path>Services/SyncManager.cs</path>
+        <kind>service</kind>
+        <symbol>SyncManager</symbol>
+        <reason>Reference implementation for gcal_event_version snapshot creation. Manual-edit history should mirror this schema and insert-before-overwrite behavior.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="Microsoft.WindowsAppSDK" version="1.8.3" use="Flyout, Button, Grid or UniformGrid-like swatch layout, keyboard and focus behavior in the edit panel" />
+          <package name="CommunityToolkit.Mvvm" version="8.x" use="ObservableObject, ObservableProperty, RelayCommand, WeakReferenceMessenger-based event refresh" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" use="Persist gcal_event color changes and insert gcal_event_version snapshots in SQLite" />
+          <package name="Serilog" version="4.x" use="Logging save success, failure, and warning cases" />
+          <package name="xUnit" version="existing" use="Unit and integration tests" />
+          <package name="FluentAssertions" version="existing" use="Assertion style for picker and persistence tests" />
+        </existing>
+        <newPackagesNeeded>None. This story should use the existing WinUI 3, MVVM Toolkit, EF Core, and test dependencies already in the solution.</newPackagesNeeded>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="project-structure">The repository is flat at the project root. New files belong under Views/, ViewModels/, Services/, Models/, Messages/, and Data/ at the root. Do not create Core/, src/, or a second UI assembly.</constraint>
+    <constraint id="C2" category="dependency-order">Story 3.7 depends on Story 3.5's edit panel infrastructure. If EventDetailsPanelViewModel or EventDetailsPanelControl are not on the branch yet, implement or merge Story 3.5 first and then apply 3.7 as an additive extension.</constraint>
+    <constraint id="C3" category="shared-color-source">Do not duplicate the nine-color taxonomy in XAML, code-behind, and services. The picker must bind to a shared color-mapping contract exposed by IColorMappingService or an equivalent shared model.</constraint>
+    <constraint id="C4" category="storage-contract">Persist canonical semantic keys such as azure, purple, and grey to gcal_event.color_id for app-authored edits. Do not store raw hex strings. Continue accepting legacy numeric Google color IDs as aliases in the shared mapping service.</constraint>
+    <constraint id="C5" category="edit-pipeline">Reuse the Story 3.5 edit-save pipeline. Do not create a panel-only direct DB write path just for colors, and do not bypass validation or save orchestration already established by the edit panel.</constraint>
+    <constraint id="C6" category="immediate-save">Color selection is a discrete action and must save immediately rather than waiting for the 500 ms text-edit debounce. Update editable state, close the picker, and invoke the shared immediate save path.</constraint>
+    <constraint id="C7" category="history-location">Manual color-change snapshots belong in the persistence layer, not in the view model or code-behind. Use the existing gcal_event_version schema with ChangedBy = manual_edit and ChangeReason = color_changed.</constraint>
+    <constraint id="C8" category="no-new-table">Do not add pending_event or any new history or color table for this story. Existing gcal_event and gcal_event_version tables are sufficient.</constraint>
+    <constraint id="C9" category="event-id-type">The repo uses string GcalEventId, not integer IDs. Do not introduce int event identifiers anywhere in this story.</constraint>
+    <constraint id="C10" category="ui-pattern">Use an anchored Flyout with a fixed swatch grid for the picker. Do not use the unrestricted spectrum ColorPicker control for this fixed-taxonomy scenario.</constraint>
+    <constraint id="C11" category="refresh-path">After save, refresh visible Month, Week, and Day surfaces through the shared event-update message or list refresh path. Do not force a whole-window navigation or app restart just to repaint color.</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit plus FluentAssertions for all automated coverage. Persistence and history behavior should be verified with SQLite-backed integration tests, mirroring GoogleCalendarSyncTests rather than relying only on mocks.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs
+      GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelEditTests.cs
+      GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs
+      GoogleCalendarManagement.Tests/Integration/GcalEventRepositoryUpdateTests.cs
+    </locations>
+    <ideas>
+      <test name="ColorMappingService_ExposesNineOrderedPickerOptions">
+        Instantiate ColorMappingService and assert PickerColors has count 9 in the exact UX order expected by the picker, with the correct DisplayName and Hex for each option.
+      </test>
+      <test name="NormalizeColorKey_MapsLegacyNumericIdsToCanonicalKeys">
+        Assert inputs such as 1, 9, 8, 5, 2, 10, 4, 6, and 3 normalize to azure, purple, grey, yellow, navy, sage, flamingo, orange, and lavender respectively.
+      </test>
+      <test name="SelectColorCommand_UpdatesEditableState_AndCallsImmediateSave">
+        Seed the edit view model with a selected event, enter edit mode, execute the swatch-selection command, and assert EditColorId and EditColorHex update immediately and the save path is invoked without waiting for the debounce timer.
+      </test>
+      <test name="DismissPickerWithoutSelection_DoesNotPersist">
+        Open the picker, dismiss it without choosing a new swatch, and assert the repository save path is not called.
+      </test>
+      <test name="SelectSameColor_DoesNotWriteDuplicateHistory">
+        Start from an event already using purple, select purple again, and assert no new DB update or gcal_event_version snapshot is produced.
+      </test>
+      <test name="ManualColorChange_PersistsCanonicalKey_AndSnapshotsPreviousState">
+        Seed a GcalEvent with one ColorId, perform the repository update to a different canonical key, reload from SQLite, and assert gcal_event.color_id changed while gcal_event_version captured the prior color and other snapshot fields with ChangedBy = manual_edit and ChangeReason = color_changed.
+      </test>
+    </ideas>
+  </tests>
+</story-context>

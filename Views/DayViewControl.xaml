@@ -7,15 +7,21 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Pinned all-day event strip above the scrollable hourly timeline -->
         <StackPanel
-            x:Name="DayRoot"
-            Padding="12"
-            Spacing="12">
-            <StackPanel
-                x:Name="AllDayPanel"
-                Spacing="4" />
-            <Grid x:Name="DayGrid" />
-        </StackPanel>
-    </ScrollViewer>
+            x:Name="AllDayPanel"
+            Grid.Row="0"
+            Padding="12,12,12,4"
+            Spacing="4" />
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <Grid x:Name="DayGrid" Margin="12,0,12,12" />
+        </ScrollViewer>
+    </Grid>
 </Page>

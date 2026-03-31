@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-03-31T20:48:09Z
+last_updated: 2026-03-31T22:44:00Z
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
@@ -56,13 +56,14 @@ development_status:
   epic-2-retrospective: optional
 
   epic-3: in-progress
-  3-1-build-year-month-week-day-calendar-views: in-progress
+  3-1-build-year-month-week-day-calendar-views: done
   3-2-display-events-with-color-coded-visual-system: ready-for-dev
   3-3-implement-event-selection-with-visual-feedback: ready-for-dev
   3-4-create-event-details-panel-read-only-for-phase-1: ready-for-dev
   3-5-implement-event-editing-panel-phase-2: ready-for-dev
-  3-6-implement-event-creation-drag-to-create-and-button: backlog
-  3-7-implement-color-picker-for-event-colors: backlog
-  3-8-add-date-navigation-and-jump-to-date-features: backlog
+  3-6-implement-event-creation-drag-to-create-and-button: ready-for-dev
+  3-7-implement-color-picker-for-event-colors: ready-for-dev
+  3-8-add-date-navigation-and-jump-to-date-features: ready-for-dev
   3-9-enhance-year-view-with-event-indicators-and-all-day-previews: ready-for-dev
+  3-10-virtualize-week-view-event-rendering: backlog
   epic-3-retrospective: optional

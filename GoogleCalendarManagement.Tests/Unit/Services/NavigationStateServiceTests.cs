@@ -54,6 +54,16 @@ public sealed class NavigationStateServiceTests
             _values[key] = value;
             return Task.CompletedTask;
         }
+
+        public Task SetManyAsync(IReadOnlyDictionary<string, string> pairs, CancellationToken ct = default)
+        {
+            foreach (var (key, value) in pairs)
+            {
+                _values[key] = value;
+            }
+
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FixedTimeProvider : TimeProvider

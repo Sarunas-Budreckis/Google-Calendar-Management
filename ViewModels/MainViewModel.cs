@@ -14,6 +14,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly ILogger<MainViewModel> _logger;
     private readonly TimeProvider _timeProvider;
     private Task? _initializationTask;
+    private CancellationTokenSource _refreshCts = new();
     private ViewMode _currentViewMode;
     private DateOnly _currentDate;
     private string _breadcrumbLabel = string.Empty;
@@ -101,6 +102,14 @@ public sealed class MainViewModel : ObservableObject
         return _initializationTask ??= InitializeCoreAsync();
     }
 
+    /// <summary>Navigates to a specific date and view mode in a single operation, triggering only one data refresh.</summary>
+    public async Task NavigateToAsync(DateOnly date, ViewMode mode)
+    {
+        CurrentDate = date;
+        CurrentViewMode = mode;
+        await RefreshAsync();
+    }
+
     private async Task SwitchViewModeAsync(ViewMode mode)
     {
         CurrentViewMode = mode;
@@ -155,8 +164,14 @@ public sealed class MainViewModel : ObservableObject
         await RefreshAsync();
     }
 
-    private async Task RefreshAsync(CancellationToken ct = default)
+    private async Task RefreshAsync()
     {
+        // Cancel any in-flight refresh; start a fresh token for this run.
+        _refreshCts.Cancel();
+        _refreshCts.Dispose();
+        _refreshCts = new CancellationTokenSource();
+        var ct = _refreshCts.Token;
+
         IsLoading = true;
 
         try
@@ -166,6 +181,11 @@ public sealed class MainViewModel : ObservableObject
             BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
             await _navigationStateService.SaveAsync(new NavigationState(CurrentViewMode, CurrentDate), ct);
         }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer navigation — discard silently.
+            return;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unable to refresh the calendar view for {ViewMode} on {Date}.", CurrentViewMode, CurrentDate);
@@ -174,7 +194,10 @@ public sealed class MainViewModel : ObservableObject
         }
         finally
         {
-            IsLoading = false;
+            if (!ct.IsCancellationRequested)
+            {
+                IsLoading = false;
+            }
         }
     }
 
@@ -220,14 +243,14 @@ public sealed class MainViewModel : ObservableObject
 
         if (from.Year != to.Year)
         {
-            return $"{fromDate.ToString("MMM d, yyyy", culture)}-{toDate.ToString("MMM d, yyyy", culture)}";
+            return $"{fromDate.ToString("MMM d, yyyy", culture)}\u2013{toDate.ToString("MMM d, yyyy", culture)}";
         }
 
         if (from.Month != to.Month)
         {
-            return $"{fromDate.ToString("MMM d", culture)}-{toDate.ToString("MMM d", culture)}, {to.Year.ToString(culture)}";
+            return $"{fromDate.ToString("MMM d", culture)}\u2013{toDate.ToString("MMM d", culture)}, {to.Year.ToString(culture)}";
         }
 
-        return $"{fromDate.ToString("MMM d", culture)}-{to.Day.ToString(culture)}, {to.Year.ToString(culture)}";
+        return $"{fromDate.ToString("MMM d", culture)}\u2013{to.Day.ToString(culture)}, {to.Year.ToString(culture)}";
     }
 }
