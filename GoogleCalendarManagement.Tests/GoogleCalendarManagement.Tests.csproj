@@ -21,9 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Force Platform=x64 so the main project builds to the x64 output path on ARM64 machines.
-         Without this, dotnet sets Platform=ARM64 (machine native) and VSTest (x64) can't load the ARM64 DLL. -->
-    <ProjectReference Include="..\GoogleCalendarManagement.csproj" AdditionalProperties="Platform=x64;RuntimeIdentifier=win-x64" />
+    <ProjectReference Include="..\GoogleCalendarManagement.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,203 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>5</storyId>
+    <title>Implement Event Editing Panel (Tier 2)</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-03-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-3/stories/3-5-implement-event-editing-panel-phase-2.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to edit event details directly in the application</iWant>
+    <soThat>I can modify events before publishing to Google Calendar</soThat>
+    <tasks>
+      - Add UpdateAsync method to IGcalEventRepository and GcalEventRepository; add EventUpdatedMessage
+      - Create DateOnlyToDateTimeOffsetConverter and TimeOnlyToTimeSpanConverter in Views/Converters/
+      - Extend EventDetailsPanelViewModel: add IsEditMode, editable properties, validation, DispatcherTimer debounce, SaveNowAsync, UndoLastChange, and EventUpdatedMessage publish
+      - Extend EventDetailsPanelControl.xaml: VisualStateManager (ReadOnly/EditMode), enable Edit button, add TextBox fields, DatePicker+TimePicker pairs, color stub, inline validation labels, save status, Ctrl+Z and Esc handling
+      - Subscribe MainViewModel to EventUpdatedMessage; refresh only the affected CalendarEventDisplayModel in CurrentEvents
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-3.5.1">Given the event details panel is open, when the user clicks the Edit button (enabled in Story 3.5), the panel transitions to edit mode within 100 ms with all fields editable in-place.</ac>
+    <ac id="AC-3.5.2">Given edit mode is active, the title renders as a TextBox pre-filled with the current title; an inline error appears if the user clears it; save is blocked while the title is empty.</ac>
+    <ac id="AC-3.5.3">Given edit mode is active, start and end date/time each render as a DatePicker + TimePicker pair with MinuteIncrement=15, pre-filled with current values converted from UTC to local time.</ac>
+    <ac id="AC-3.5.4">Given edit mode is active, the description renders as a multi-line scrollable TextBox pre-filled with the current description.</ac>
+    <ac id="AC-3.5.5">Given edit mode is active, a color swatch and label are visible but a "Coming soon" tooltip disables editing; the layout slot is reserved for Story 3.7.</ac>
+    <ac id="AC-3.5.6">Given the user modifies any field and no validation errors exist, changes are auto-saved to gcal_event after 500 ms of inactivity (DispatcherTimer debounce).</ac>
+    <ac id="AC-3.5.7">Given the user is actively typing, a "Saving…" indicator is visible; once save completes the indicator shows "Saved" or disappears within 300 ms.</ac>
+    <ac id="AC-3.5.8">Given auto-save fires, the following gcal_event columns are updated: summary, description, start_datetime, end_datetime (UTC), updated_at, app_last_modified_at. app_published remains false. gcal_event_id is never changed.</ac>
+    <ac id="AC-3.5.9">Given the user sets end time before start time, an inline validation message appears immediately and auto-save is blocked until corrected.</ac>
+    <ac id="AC-3.5.10">Given the user presses Ctrl+Z in edit mode, the last field change is reverted to its pre-edit snapshot value.</ac>
+    <ac id="AC-3.5.11">Given edit mode is active and the debounce timer is pending, pressing Esc triggers an immediate SaveNowAsync before the panel closes.</ac>
+    <ac id="AC-3.5.12">Given any edit is saved, app_published = 0 in the database; the event is local-only and not pushed to Google Calendar.</ac>
+    <ac id="AC-3.5.13">Given auto-save completes, the calendar view refreshes the affected event's display (title, time) without a full reload via EventUpdatedMessage.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-3/stories/3-5-implement-event-editing-panel-phase-2.md</path>
+        <title>Story 3.5 (primary reference)</title>
+        <section>Dev Notes — all sections</section>
+        <snippet>Contains full implementation spec: GcalEvent fields to update, UpdateAsync pattern, EventDetailsPanelViewModel extension, DispatcherTimer debounce, VisualStateManager XAML pattern, DatePicker/TimePicker converters, UTC conversion formula, Ctrl+Z code-behind, and EventUpdatedMessage refresh flow.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/tech-spec.md</path>
+        <title>Epic 3 Technical Specification</title>
+        <section>Out of Scope (Tier 2+), Services and Modules, Data Models</section>
+        <snippet>Story 3.5 is explicitly Tier 2 (out of scope for the Tier 1 spec). References EventDetailsPanelControl and EventDetailsPanelViewModel as the base to extend. CalendarEventDisplayModel record definition.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 3.5 requirements and technical notes</section>
+        <snippet>User story statement, acceptance criteria, and technical notes: auto-save debounced, EF Core for updates, validation prevents invalid states, Esc closes with changes already saved, changes only local (not pushed to GCal — Epic 7 owns that).</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schemas</title>
+        <section>Tier 2 — pending_event table note</section>
+        <snippet>CRITICAL: The pending_event table (Tier 2) is for future push-to-GCal tracking (Epic 7). Story 3.5 writes edits DIRECTLY to gcal_event. No new table or migration is needed for this story.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_color-definitions.md</path>
+        <title>Color Definitions</title>
+        <section>Active Color Definitions</section>
+        <snippet>All 9 colour names needed for the color stub display label. Use IColorMappingService.AllColors (Story 3.2) to map ColorId to colour name for the read-only swatch in edit mode.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epic-3/stories/3-1-build-year-month-week-day-calendar-views.md</path>
+        <title>Story 3.1 (established patterns)</title>
+        <section>Dev Notes — Core Services, DI Registration, Previous Story Learnings</section>
+        <snippet>Critical learnings carried forward: IDbContextFactory pattern, GcalEventId is string PK, UTC timestamps, IsDeleted filter, build command (dotnet build -p:Platform=x64), test command.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>Services/IGcalEventRepository.cs</path>
+        <kind>interface</kind>
+        <symbol>IGcalEventRepository</symbol>
+        <reason>Add new method: Task UpdateAsync(GcalEvent updatedEvent, CancellationToken ct = default). Do not change existing GetByDateRangeAsync or GetByGcalEventIdAsync signatures.</reason>
+      </file>
+      <file>
+        <path>Services/GcalEventRepository.cs</path>
+        <kind>service</kind>
+        <symbol>GcalEventRepository</symbol>
+        <reason>Implement UpdateAsync using IDbContextFactory pattern: await using var db = await _dbFactory.CreateDbContextAsync(ct); db.GcalEvents.Update(updatedEvent); await db.SaveChangesAsync(ct);</reason>
+      </file>
+      <file>
+        <path>ViewModels/EventDetailsPanelViewModel.cs</path>
+        <kind>viewmodel</kind>
+        <symbol>EventDetailsPanelViewModel</symbol>
+        <reason>EXTEND (do not replace) the view model built in Story 3.4. Add: IsEditMode, editable field properties, TitleError/DateTimeError, SaveStatusText, DispatcherTimer debounce, EnterEditMode(), SaveNowAsync(), UndoLastChange(), ValidateFields(). Subscribe to EventSelectedMessage to handle panel switching while in edit mode.</reason>
+      </file>
+      <file>
+        <path>Views/EventDetailsPanelControl.xaml</path>
+        <kind>view</kind>
+        <symbol>EventDetailsPanelControl</symbol>
+        <reason>EXTEND (do not replace) the panel built in Story 3.4. Add VisualStateManager with ReadOnly and EditMode states. Enable Edit button. Add edit-mode controls: TitleTextBox, DatePicker+TimePicker pairs, description TextBox, color stub, validation TextBlocks, SaveStatusText label.</reason>
+      </file>
+      <file>
+        <path>Views/EventDetailsPanelControl.xaml.cs</path>
+        <kind>code-behind</kind>
+        <symbol>EventDetailsPanelControl</symbol>
+        <reason>Add OnKeyDown override for Ctrl+Z (calls ViewModel.UndoLastChange()) and Esc handling (if IsEditMode and timer pending, call await ViewModel.SaveNowAsync() before close). Trigger VisualStateManager.GoToState on ViewModel.IsEditMode change.</reason>
+      </file>
+      <file>
+        <path>ViewModels/MainViewModel.cs</path>
+        <kind>viewmodel</kind>
+        <symbol>MainViewModel</symbol>
+        <reason>Subscribe to EventUpdatedMessage (new in 3.5). On receipt, call ICalendarQueryService.GetEventByGcalIdAsync(id) and replace the matching CalendarEventDisplayModel in CurrentEvents list to refresh the calendar view without full reload.</reason>
+      </file>
+      <file>
+        <path>Messages/AuthenticationSucceededMessage.cs</path>
+        <kind>message</kind>
+        <symbol>AuthenticationSucceededMessage</symbol>
+        <reason>Template for new EventUpdatedMessage. Create Messages/EventUpdatedMessage.cs as: public record EventUpdatedMessage(string GcalEventId); Same namespace: GoogleCalendarManagement.Messages.</reason>
+      </file>
+      <file>
+        <path>Data/Entities/GcalEvent.cs</path>
+        <kind>entity</kind>
+        <symbol>GcalEvent</symbol>
+        <reason>Fields written by UpdateAsync: Summary, Description, StartDatetime, EndDatetime, AppLastModifiedAt, UpdatedAt. Fields that must NOT change: GcalEventId, AppPublished (stays false), IsDeleted, CalendarId.</reason>
+      </file>
+      <file>
+        <path>Data/Configurations/GcalEventConfiguration.cs</path>
+        <kind>configuration</kind>
+        <symbol>GcalEventConfiguration</symbol>
+        <reason>VERIFY that app_last_modified_at is mapped before writing to AppLastModifiedAt in UpdateAsync. If not mapped, EF Core will silently ignore it or throw. Do not assume — read the file first.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs</path>
+        <kind>integration-test</kind>
+        <symbol>GoogleCalendarSyncTests</symbol>
+        <reason>Reference for integration test pattern: IDbContextFactory fixture, seeded SQLite in-memory DB, FluentAssertions. Mirror this for GcalEventRepositoryUpdateTests.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="Microsoft.WindowsAppSDK" version="1.8.3" use="DatePicker, TimePicker (MinuteIncrement=15), VisualStateManager, DispatcherTimer (Microsoft.UI.Dispatching), VirtualKey, CoreVirtualKeyStates for Ctrl+Z detection" />
+          <package name="CommunityToolkit.Mvvm" version="8.x" use="ObservableObject, [ObservableProperty], [RelayCommand], WeakReferenceMessenger.Default for EventUpdatedMessage" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" use="IDbContextFactory in UpdateAsync; db.GcalEvents.Update(); SaveChangesAsync()" />
+          <package name="Serilog" version="4.x" use="ILogger&lt;T&gt; for save success/failure logging" />
+          <package name="xUnit" version="existing" use="Unit and integration tests" />
+          <package name="FluentAssertions" version="existing" use="Test assertion style" />
+        </existing>
+        <newPackagesNeeded>None — all required packages are already present from Epics 1–3.</newPackagesNeeded>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="project-structure">Project is FLAT — Views/, ViewModels/, Services/, Models/, Data/, Messages/ are all at project root. Place new converters in Views/Converters/. Do NOT create a Core/ folder.</constraint>
+    <constraint id="C2" category="extend-not-replace">Story 3.5 EXTENDS EventDetailsPanelControl and EventDetailsPanelViewModel built in Story 3.4. Do NOT recreate them from scratch. Add edit mode on top of the existing read-only panel.</constraint>
+    <constraint id="C3" category="no-pending-event-table">Do NOT create a pending_event table or migration. Story 3.5 writes edits directly to gcal_event. The pending_event table is for Epic 7 (push-to-GCal).</constraint>
+    <constraint id="C4" category="color-picker-stub">The color picker is Story 3.7. Story 3.5 must include the layout slot (color swatch + name label + disabled button with "Coming soon" tooltip) but must NOT implement any color-change logic.</constraint>
+    <constraint id="C5" category="threading">Use DispatcherTimer (not Task.Delay) for the 500 ms debounce — it runs on the UI thread and is safe for updating ObservableProperties from its Tick handler.</constraint>
+    <constraint id="C6" category="utc-conversion">UI DatePicker/TimePicker displays LOCAL time. Before saving to DB: DateTime.SpecifyKind(localDate + localTime, DateTimeKind.Local).ToUniversalTime(). Store UTC in StartDatetime/EndDatetime.</constraint>
+    <constraint id="C7" category="pk-type">GcalEvent.GcalEventId is a string (Google event ID). EventUpdatedMessage carries string GcalEventId. Never use int for event identity.</constraint>
+    <constraint id="C8" category="app-published">app_published must remain false after any edit. Story 3.5 does not push to Google Calendar. Do not set AppPublished = true anywhere in this story.</constraint>
+    <constraint id="C9" category="factory-pattern">All repository methods use IDbContextFactory&lt;CalendarDbContext&gt; — never the scoped CalendarDbContext. UpdateAsync must follow: await using var db = await _dbFactory.CreateDbContextAsync(ct);</constraint>
+    <constraint id="C10" category="dependencies">Stories 3.2 (ColorMappingService with AllColors), 3.3 (CalendarSelectionService, EventSelectedMessage), and 3.4 (EventDetailsPanelControl, EventDetailsPanelViewModel) must be complete before implementing Story 3.5.</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit + FluentAssertions for all tests. Integration tests use IDbContextFactory with in-memory SQLite (same pattern as GoogleCalendarSyncTests.cs). No mocking of EF Core — seed real SQLite.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelEditTests.cs
+      GoogleCalendarManagement.Tests/Unit/Services/GcalEventRepositoryUpdateTests.cs
+    </locations>
+    <ideas>
+      <test name="EnterEditMode_CopiesSelectedEventFields">
+        Set SelectedEvent with known Title/Description/StartUtc/EndUtc; call EnterEditMode(); assert EditTitle, EditDescription, EditStartDate, EditStartTime, EditEndDate, EditEndTime all match the converted values.
+      </test>
+      <test name="ValidateFields_EmptyTitle_SetsTitleError">
+        Set EditTitle = ""; call ValidateFields(); assert TitleError is not empty and return value is false.
+      </test>
+      <test name="ValidateFields_EndBeforeStart_SetsDateTimeError">
+        Set EditStartTime = 14:00, EditEndTime = 13:00 same day; call ValidateFields(); assert DateTimeError is not empty and return value is false.
+      </test>
+      <test name="ValidateFields_ValidInput_ReturnsTrue">
+        Set valid title and end after start; call ValidateFields(); assert TitleError = "", DateTimeError = "", return value is true.
+      </test>
+      <test name="UndoLastChange_RestoresPreEditSnapshot">
+        Call EnterEditMode(); change EditTitle to "New Title"; call UndoLastChange(); assert EditTitle equals the original title from SelectedEvent.
+      </test>
+      <test name="UpdateAsync_PersistsAllFields_PreservesGcalEventId">
+        Seed a GcalEvent; call UpdateAsync with modified Summary/Description/StartDatetime/EndDatetime/AppLastModifiedAt; reload from DB; assert all changed fields updated, GcalEventId unchanged, AppPublished = false.
+      </test>
+      <test name="UpdateAsync_DoesNotChangeAppPublished">
+        Seed a GcalEvent with AppPublished = false; call UpdateAsync; reload; assert AppPublished is still false.
+      </test>
+    </ideas>
+  </tests>
+</story-context>

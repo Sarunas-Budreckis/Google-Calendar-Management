@@ -19,6 +19,16 @@ namespace GoogleCalendarManagement
         private Window? window;
         private IServiceProvider? serviceProvider;
 
+        public static T GetRequiredService<T>() where T : notnull
+        {
+            if (Current is not App app || app.serviceProvider is null)
+            {
+                throw new InvalidOperationException("Application services are not available.");
+            }
+
+            return app.serviceProvider.GetRequiredService<T>();
+        }
+
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code
         /// executed, and as such is the logical equivalent of main() or WinMain().
@@ -127,8 +137,9 @@ namespace GoogleCalendarManagement
                     googleCalendarOptions.ClientSecretPath);
             }
 
-            var settingsPage = serviceProvider.GetRequiredService<SettingsPage>();
-            window.Content = settingsPage;
+            var mainPage = serviceProvider.GetRequiredService<MainPage>();
+            window.Content = mainPage;
+            await mainPage.ViewModel.InitializeAsync();
 
             logger?.LogInformation("Application started successfully.");
         }
@@ -170,8 +181,21 @@ namespace GoogleCalendarManagement
             services.AddSingleton<IGoogleAuthorizationBroker, GoogleAuthorizationBrokerAdapter>();
             services.AddSingleton<IGoogleCalendarService, GoogleCalendarService>();
             services.AddSingleton<ISyncManager, SyncManager>();
+            services.AddSingleton(TimeProvider.System);
+            services.AddSingleton<IGcalEventRepository, GcalEventRepository>();
+            services.AddSingleton<ISystemStateRepository, SystemStateRepository>();
+            services.AddSingleton<IColorMappingService, ColorMappingService>();
+            services.AddSingleton<ICalendarQueryService, CalendarQueryService>();
+            services.AddSingleton<INavigationStateService, NavigationStateService>();
+            services.AddSingleton<ICalendarSelectionService, CalendarSelectionService>();
             services.AddSingleton<SettingsViewModel>();
+            services.AddSingleton<MainViewModel>();
             services.AddTransient<SettingsPage>();
+            services.AddTransient<MainPage>();
+            services.AddTransient<YearViewControl>();
+            services.AddTransient<MonthViewControl>();
+            services.AddTransient<WeekViewControl>();
+            services.AddTransient<DayViewControl>();
         }
     }
 }
