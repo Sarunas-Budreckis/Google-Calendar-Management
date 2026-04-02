@@ -9,9 +9,21 @@ namespace GoogleCalendarManagement.Views;
 
 public sealed partial class WeekViewControl : Page
 {
+    private static CornerRadius ElementCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusElement"];
+
     private const double TimeColumnWidth = 72;
     private const double MinimumDayColumnWidth = 100;
     private const double HorizontalChromeAllowance = 48;
+    private const double RowHeight = 72.0;
+    private const double EventBottomGap = 3.0;
+    private const double EventSideMargin = 4.0;
+    private const double OverlapIndent = 10.0;
+    private const double MinimumEventHeight = 15.0;
+    private const double StandardTopPadding = 6.0;
+    private const double ShortEventContentHeightEstimate = 16.0;
+
+    private static readonly Brush GridLineBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4A, 0x4A, 0x4A));
+    private static readonly Brush OverlapOutlineBrush = new SolidColorBrush(Colors.Black);
 
     private DispatcherTimer? _resizeDebounceTimer;
 
@@ -88,7 +100,7 @@ public sealed partial class WeekViewControl : Page
         WeekGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         for (var hour = 0; hour < 24; hour++)
         {
-            WeekGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(72) });
+            WeekGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RowHeight) });
         }
 
         var culture = CultureInfo.CurrentCulture;
@@ -109,6 +121,8 @@ public sealed partial class WeekViewControl : Page
         for (var offset = 0; offset < 7; offset++)
         {
             var currentDay = weekStart.AddDays(offset);
+            var dayStart = currentDay.ToDateTime(TimeOnly.MinValue);
+            var dayEnd = dayStart.AddDays(1);
             var column = offset + 1;
 
             var header = new TextBlock
@@ -127,7 +141,7 @@ public sealed partial class WeekViewControl : Page
                 Margin = new Thickness(4)
             };
             foreach (var item in ViewModel.CurrentEvents
-                         .Where(evt => DateOnly.FromDateTime(evt.StartLocal.Date) == currentDay && evt.IsAllDay)
+                         .Where(evt => evt.IsAllDay && DateOnly.FromDateTime(evt.StartLocal.Date) == currentDay)
                          .OrderBy(evt => evt.StartLocal))
             {
                 allDayPanel.Children.Add(CreateEventChip(item.Title, item.ColorHex));
@@ -141,41 +155,42 @@ public sealed partial class WeekViewControl : Page
             {
                 var slotBorder = new Border
                 {
-                    BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
-                    BorderThickness = new Thickness(0, 0, 0, 1)
+                    BorderBrush = GridLineBrush,
+                    BorderThickness = new Thickness(1, 1, column == 7 ? 1 : 0, hour == 23 ? 1 : 0)
                 };
                 Grid.SetRow(slotBorder, hour + 2);
                 Grid.SetColumn(slotBorder, column);
                 WeekGrid.Children.Add(slotBorder);
             }
 
-            foreach (var item in ViewModel.CurrentEvents
-                         .Where(evt => !evt.IsAllDay &&
-                                       DateOnly.FromDateTime(evt.StartLocal.Date) <= currentDay &&
-                                       DateOnly.FromDateTime(evt.EndLocal.Date) >= currentDay)
-                         .OrderBy(evt => evt.StartLocal))
+            var timedSegments = BuildTimedEventSegments(
+                ViewModel.CurrentEvents
+                    .Where(evt => !evt.IsAllDay && evt.StartLocal < dayEnd && evt.EndLocal > dayStart)
+                    .OrderBy(evt => evt.StartLocal)
+                    .ThenBy(evt => evt.EndLocal));
+
+            foreach (var segment in timedSegments)
             {
-                var eventBlock = CreateTimedEventBlock(item, culture);
-                var startRow = item.StartLocal.Hour + 2;
-                var span = (int)Math.Ceiling((item.EndLocal - item.StartLocal).TotalHours);
+                var eventBlock = CreateTimedEventBlock(segment, culture);
+                var startHour = segment.VisibleStart.Hour;
+                var startRow = startHour + 2;
+                var totalMinutesFromStartHour = segment.VisibleStart.Minute + (segment.VisibleEnd - segment.VisibleStart).TotalMinutes;
+                var span = (int)Math.Ceiling(totalMinutesFromStartHour / 60.0);
+
                 Grid.SetRow(eventBlock, startRow);
                 Grid.SetColumn(eventBlock, column);
-                Grid.SetRowSpan(eventBlock, Math.Max(1, Math.Min(span, 24 - item.StartLocal.Hour)));
-                // TODO Story 3.x (WeekView virtualization): replace this imperative Grid + Children.Add approach
-                // with ItemsRepeater + RecyclingElementFactory as specified. The current approach rebuilds all
-                // event blocks synchronously on every Rebuild() call (including SizeChanged), which will be slow
-                // at 200+ events. See review finding F21 in story 3-1.
+                Grid.SetRowSpan(eventBlock, Math.Max(1, Math.Min(span, 24 - startHour)));
                 WeekGrid.Children.Add(eventBlock);
             }
         }
     }
 
-    private static Border CreateEventChip(string title, string hexColor)
+    private Border CreateEventChip(string title, string hexColor)
     {
         return new Border
         {
             Padding = new Thickness(4),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = ElementCornerRadius,
             Background = ToBrush(hexColor),
             Child = new TextBlock
             {
@@ -187,37 +202,98 @@ public sealed partial class WeekViewControl : Page
         };
     }
 
-    private static Border CreateTimedEventBlock(CalendarEventDisplayModel item, CultureInfo culture)
+    private Border CreateTimedEventBlock(TimedEventSegment segment, CultureInfo culture)
     {
-        return new Border
+        var durationMinutes = (segment.VisibleEnd - segment.VisibleStart).TotalMinutes;
+        var topOffset = segment.VisibleStart.Minute / 60.0 * RowHeight;
+        var pixelHeight = durationMinutes / 60.0 * RowHeight;
+        var eventHeight = Math.Max(MinimumEventHeight, pixelHeight - EventBottomGap);
+        var foreground = new SolidColorBrush(Colors.White);
+        var leftOffset = EventSideMargin + (segment.OverlapDepth * OverlapIndent);
+
+        UIElement content;
+        Thickness padding;
+
+        if (durationMinutes < 45)
         {
-            Margin = new Thickness(4, 1, 4, 1),
-            Padding = new Thickness(6),
-            CornerRadius = new CornerRadius(10),
-            Background = ToBrush(item.ColorHex),
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Child = new StackPanel
+            var centeredTopPadding = Math.Max(0, (eventHeight - ShortEventContentHeightEstimate) / 2);
+            padding = new Thickness(4, Math.Min(StandardTopPadding, centeredTopPadding), 4, 0);
+            content = new TextBlock
+            {
+                Text = $"{segment.Item.Title}, {segment.VisibleStart.ToString("t", culture)}",
+                Foreground = foreground,
+                FontSize = 11,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+        }
+        else
+        {
+            padding = new Thickness(6);
+            var durationInt = (int)durationMinutes;
+            var summaryLineCount = 1 + Math.Max(0, (durationInt - 60) / 30);
+
+            content = new StackPanel
             {
                 Spacing = 2,
                 Children =
                 {
                     new TextBlock
                     {
-                        Text = item.Title,
-                        Foreground = new SolidColorBrush(Colors.White),
+                        Text = segment.Item.Title,
+                        Foreground = foreground,
                         FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                         FontSize = 12,
-                        TextTrimming = TextTrimming.CharacterEllipsis
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        TextWrapping = TextWrapping.Wrap,
+                        MaxLines = summaryLineCount
                     },
                     new TextBlock
                     {
-                        Text = $"{item.StartLocal.ToString("t", culture)} - {item.EndLocal.ToString("t", culture)}",
-                        Foreground = new SolidColorBrush(Colors.White),
+                        Text = $"{segment.VisibleStart.ToString("t", culture)} - {segment.VisibleEnd.ToString("t", culture)}",
+                        Foreground = foreground,
                         FontSize = 11
                     }
                 }
-            }
+            };
+        }
+
+        return new Border
+        {
+            Margin = new Thickness(leftOffset, topOffset, EventSideMargin, 0),
+            Height = eventHeight,
+            VerticalAlignment = VerticalAlignment.Top,
+            Padding = padding,
+            CornerRadius = ElementCornerRadius,
+            Background = ToBrush(segment.Item.ColorHex),
+            BorderBrush = segment.OverlapDepth > 0 ? OverlapOutlineBrush : null,
+            BorderThickness = segment.OverlapDepth > 0 ? new Thickness(1) : new Thickness(0),
+            Child = content
         };
+    }
+
+    private static List<TimedEventSegment> BuildTimedEventSegments(
+        IEnumerable<CalendarEventDisplayModel> events)
+    {
+        var segments = new List<TimedEventSegment>();
+        var activeSegments = new List<DateTime>();
+
+        foreach (var item in events)
+        {
+            if (item.EndLocal <= item.StartLocal)
+            {
+                continue;
+            }
+
+            var visibleStart = item.StartLocal;
+            var visibleEnd = item.EndLocal;
+            activeSegments.RemoveAll(end => end <= visibleStart);
+            var overlapDepth = activeSegments.Count;
+            activeSegments.Add(visibleEnd);
+            segments.Add(new TimedEventSegment(item, visibleStart, visibleEnd, overlapDepth));
+        }
+
+        return segments;
     }
 
     private static SolidColorBrush ToBrush(string hex)
@@ -241,4 +317,10 @@ public sealed partial class WeekViewControl : Page
         var monday = date.AddDays(-daysFromMonday);
         return (monday, monday.AddDays(6));
     }
+
+    private sealed record TimedEventSegment(
+        CalendarEventDisplayModel Item,
+        DateTime VisibleStart,
+        DateTime VisibleEnd,
+        int OverlapDepth);
 }

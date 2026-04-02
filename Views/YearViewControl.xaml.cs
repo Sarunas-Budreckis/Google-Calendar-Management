@@ -10,6 +10,8 @@ namespace GoogleCalendarManagement.Views;
 
 public sealed partial class YearViewControl : Page
 {
+    private static CornerRadius LargeCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusLarge"];
+
     public YearViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
@@ -133,7 +135,7 @@ public sealed partial class YearViewControl : Page
             Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
             BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(16),
+            CornerRadius = LargeCornerRadius,
             Child = panel
         };
     }

@@ -9,6 +9,9 @@ namespace GoogleCalendarManagement.Views;
 
 public sealed partial class MonthViewControl : Page
 {
+    private static CornerRadius ElementCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusElement"];
+    private static CornerRadius MediumCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusMedium"];
+
     public MonthViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
@@ -101,7 +104,7 @@ public sealed partial class MonthViewControl : Page
         }
     }
 
-    private static Border BuildDayCell(
+    private Border BuildDayCell(
         DateOnly date,
         int activeMonth,
         IReadOnlyList<CalendarEventDisplayModel> dayEvents,
@@ -119,7 +122,7 @@ public sealed partial class MonthViewControl : Page
             stackPanel.Children.Add(new Border
             {
                 Padding = new Thickness(4),
-                CornerRadius = new CornerRadius(8),
+                CornerRadius = ElementCornerRadius,
                 Background = ToBrush(item.ColorHex),
                 Child = new TextBlock
                 {
@@ -146,7 +149,7 @@ public sealed partial class MonthViewControl : Page
         {
             Margin = new Thickness(4),
             Padding = new Thickness(8),
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = MediumCornerRadius,
             Opacity = date.Month == activeMonth ? 1.0 : 0.35,
             Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
             BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],

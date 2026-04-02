@@ -19,7 +19,7 @@
 
                 <Border
                     Padding="24"
-                    CornerRadius="16"
+                    CornerRadius="{StaticResource AppCornerRadiusLarge}"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <StackPanel Spacing="16">
                         <TextBlock

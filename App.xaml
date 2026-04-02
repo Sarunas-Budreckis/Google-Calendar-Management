@@ -29,6 +29,9 @@
             <SolidColorBrush x:Key="BlackBrush" Color="Black" />
 
             <x:Double x:Key="AppFontSize">14</x:Double>
+            <CornerRadius x:Key="AppCornerRadiusElement">8</CornerRadius>
+            <CornerRadius x:Key="AppCornerRadiusMedium">12</CornerRadius>
+            <CornerRadius x:Key="AppCornerRadiusLarge">16</CornerRadius>
 
             <Style x:Key="MyLabel" TargetType="TextBlock">
                 <Setter Property="Foreground"
@@ -48,7 +51,7 @@
                 <Setter Property="Background"
                         Value="{StaticResource PrimaryBrush}" />
                 <Setter Property="CornerRadius"
-                        Value="8" />
+                        Value="{StaticResource AppCornerRadiusElement}" />
                 <Setter Property="Foreground"
                         Value="{StaticResource WhiteBrush}" />
             </Style>

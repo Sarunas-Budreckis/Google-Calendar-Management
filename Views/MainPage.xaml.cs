@@ -13,6 +13,8 @@ namespace GoogleCalendarManagement.Views;
 
 public sealed partial class MainPage : Page
 {
+    private static CornerRadius MediumCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusMedium"];
+
     private readonly Dictionary<ViewMode, Button> _viewModeButtons;
     private readonly Brush _selectorBackground = new SolidColorBrush(Colors.Transparent);
     private readonly Brush _selectorBorderBrush = new SolidColorBrush(Colors.Transparent);
@@ -48,7 +50,7 @@ public sealed partial class MainPage : Page
 
         Loaded += MainPage_Loaded;
         Unloaded += MainPage_Unloaded;
-        InitializeKeyboardAccelerators();
+        KeyDown += MainPage_KeyDown;
     }
 
     public MainViewModel ViewModel { get; }
@@ -109,37 +111,70 @@ public sealed partial class MainPage : Page
         UpdateSelectionIndicator(GetDisplayedViewMode(), animate: false);
     }
 
-    private void InitializeKeyboardAccelerators()
+    private async void MainPage_KeyDown(object sender, KeyRoutedEventArgs e)
     {
-        AddKeyboardAccelerator(VirtualKey.P, () => ViewModel.NavigatePreviousCommand.ExecuteAsync(null));
-        AddKeyboardAccelerator(VirtualKey.K, () => ViewModel.NavigatePreviousCommand.ExecuteAsync(null));
-        AddKeyboardAccelerator(VirtualKey.N, () => ViewModel.NavigateNextCommand.ExecuteAsync(null));
-        AddKeyboardAccelerator(VirtualKey.J, () => ViewModel.NavigateNextCommand.ExecuteAsync(null));
-        AddKeyboardAccelerator(VirtualKey.T, () => ViewModel.NavigateTodayCommand.ExecuteAsync(null));
-        AddKeyboardAccelerator(VirtualKey.G, OpenJumpToDatePicker);
-        AddKeyboardAccelerator(VirtualKey.Number1, () => SwitchViewModeAsync(ViewMode.Year));
-        AddKeyboardAccelerator(VirtualKey.Y, () => SwitchViewModeAsync(ViewMode.Year));
-        AddKeyboardAccelerator(VirtualKey.Number2, () => SwitchViewModeAsync(ViewMode.Month));
-        AddKeyboardAccelerator(VirtualKey.M, () => SwitchViewModeAsync(ViewMode.Month));
-        AddKeyboardAccelerator(VirtualKey.Number3, () => SwitchViewModeAsync(ViewMode.Week));
-        AddKeyboardAccelerator(VirtualKey.W, () => SwitchViewModeAsync(ViewMode.Week));
-        AddKeyboardAccelerator(VirtualKey.Number4, () => SwitchViewModeAsync(ViewMode.Day));
-        AddKeyboardAccelerator(VirtualKey.D, () => SwitchViewModeAsync(ViewMode.Day));
+        switch (e.Key)
+        {
+            case VirtualKey.P:
+            case VirtualKey.K:
+            case VirtualKey.Left:
+                e.Handled = true;
+                await ViewModel.NavigatePreviousCommand.ExecuteAsync(null);
+                break;
+            case VirtualKey.N:
+            case VirtualKey.J:
+            case VirtualKey.Right:
+                e.Handled = true;
+                await ViewModel.NavigateNextCommand.ExecuteAsync(null);
+                break;
+            case VirtualKey.T:
+                e.Handled = true;
+                await ViewModel.NavigateTodayCommand.ExecuteAsync(null);
+                break;
+            case VirtualKey.G:
+                e.Handled = true;
+                _ = OpenJumpToDatePicker();
+                break;
+            case VirtualKey.Number1:
+            case VirtualKey.Y:
+                e.Handled = true;
+                await SwitchViewModeAsync(ViewMode.Year);
+                break;
+            case VirtualKey.Number2:
+            case VirtualKey.M:
+                e.Handled = true;
+                await SwitchViewModeAsync(ViewMode.Month);
+                break;
+            case VirtualKey.Number3:
+            case VirtualKey.W:
+                e.Handled = true;
+                await SwitchViewModeAsync(ViewMode.Week);
+                break;
+            case VirtualKey.Number4:
+            case VirtualKey.D:
+                e.Handled = true;
+                await SwitchViewModeAsync(ViewMode.Day);
+                break;
+            case VirtualKey.Up:
+                e.Handled = true;
+                await CycleViewModeAsync(up: true);
+                break;
+            case VirtualKey.Down:
+                e.Handled = true;
+                await CycleViewModeAsync(up: false);
+                break;
+        }
     }
 
-    private void AddKeyboardAccelerator(VirtualKey key, Func<Task> action)
+    private Task CycleViewModeAsync(bool up)
     {
-        var accelerator = new KeyboardAccelerator
-        {
-            Key = key
-        };
-        accelerator.Invoked += (sender, e) =>
-        {
-            e.Handled = true;
-            _ = action();
-        };
-
-        KeyboardAccelerators.Add(accelerator);
+        // Up = increase period length (Day → Week → Month → Year), no wrap
+        ViewMode[] order = [ViewMode.Day, ViewMode.Week, ViewMode.Month, ViewMode.Year];
+        var currentIndex = Array.IndexOf(order, GetDisplayedViewMode());
+        var newIndex = up ? currentIndex + 1 : currentIndex - 1;
+        if (newIndex < 0 || newIndex >= order.Length)
+            return Task.CompletedTask;
+        return SwitchViewModeAsync(order[newIndex]);
     }
 
     private async void PreviousButton_Click(object sender, RoutedEventArgs e)
@@ -213,7 +248,7 @@ public sealed partial class MainPage : Page
             button.Background = _selectorBackground;
             button.Foreground = isSelected ? _selectorSelectedForeground : _selectorUnselectedForeground;
             button.BorderThickness = new Thickness(0);
-            button.CornerRadius = new CornerRadius(12);
+            button.CornerRadius = MediumCornerRadius;
             button.FontWeight = isSelected
                 ? Microsoft.UI.Text.FontWeights.SemiBold
                 : Microsoft.UI.Text.FontWeights.Normal;

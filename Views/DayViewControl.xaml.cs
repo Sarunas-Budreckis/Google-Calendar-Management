@@ -8,6 +8,14 @@ namespace GoogleCalendarManagement.Views;
 
 public sealed partial class DayViewControl : Page
 {
+    private static CornerRadius ElementCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusElement"];
+
+    private const double RowHeight = 72.0;
+    private const double EventBottomGap = 3.0;
+    private const double MinimumEventHeight = 15.0;
+    private const double StandardTopPadding = 6.0;
+    private const double ShortEventContentHeightEstimate = 16.0;
+
     public DayViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
@@ -66,7 +74,7 @@ public sealed partial class DayViewControl : Page
             AllDayPanel.Children.Add(new Border
             {
                 Padding = new Thickness(8),
-                CornerRadius = new CornerRadius(10),
+                CornerRadius = ElementCornerRadius,
                 Background = ToBrush(item.ColorHex),
                 Child = new TextBlock
                 {
@@ -99,34 +107,75 @@ public sealed partial class DayViewControl : Page
 
         foreach (var item in dayEvents.Where(evt => !evt.IsAllDay))
         {
-            var eventBlock = new Border
+            var topOffset = item.StartLocal.Minute / 60.0 * RowHeight;
+            var pixelHeight = (item.EndLocal - item.StartLocal).TotalMinutes / 60.0 * RowHeight;
+            var eventHeight = Math.Max(MinimumEventHeight, pixelHeight - EventBottomGap);
+            var durationMinutes = (item.EndLocal - item.StartLocal).TotalMinutes;
+            var white = new SolidColorBrush(Colors.White);
+
+            UIElement content;
+            Thickness padding;
+
+            if (durationMinutes < 45)
             {
-                Margin = new Thickness(4, 1, 4, 1),
-                Padding = new Thickness(8),
-                CornerRadius = new CornerRadius(12),
-                Background = ToBrush(item.ColorHex),
-                Child = new StackPanel
+                var centeredTopPadding = Math.Max(0, (eventHeight - ShortEventContentHeightEstimate) / 2);
+                padding = new Thickness(4, Math.Min(StandardTopPadding, centeredTopPadding), 4, 0);
+                content = new TextBlock
                 {
-                    Spacing = 4,
+                    Text = $"{item.Title}, {item.StartLocal.ToString("t", culture)}",
+                    Foreground = white,
+                    FontSize = 11,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+            }
+            else
+            {
+                padding = new Thickness(6);
+                var durationInt = (int)durationMinutes;
+                var summaryLineCount = 1 + Math.Max(0, (durationInt - 60) / 30);
+
+                content = new StackPanel
+                {
+                    Spacing = 2,
                     Children =
                     {
                         new TextBlock
                         {
                             Text = item.Title,
-                            Foreground = new SolidColorBrush(Colors.White),
-                            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                            Foreground = white,
+                            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                            FontSize = 12,
+                            TextTrimming = TextTrimming.CharacterEllipsis,
+                            TextWrapping = TextWrapping.Wrap,
+                            MaxLines = summaryLineCount
                         },
                         new TextBlock
                         {
                             Text = $"{item.StartLocal.ToString("t", culture)} - {item.EndLocal.ToString("t", culture)}",
-                            Foreground = new SolidColorBrush(Colors.White)
+                            Foreground = white,
+                            FontSize = 11
                         }
                     }
-                }
+                };
+            }
+
+            var eventBlock = new Border
+            {
+                // Top margin encodes the sub-hour start offset so the block begins at the correct pixel.
+                Margin = new Thickness(4, topOffset, 4, 0),
+                Height = eventHeight,
+                VerticalAlignment = VerticalAlignment.Top,
+                Padding = padding,
+                CornerRadius = ElementCornerRadius,
+                Background = ToBrush(item.ColorHex),
+                Child = content
             };
 
             var startRow = item.StartLocal.Hour;
-            var span = (int)Math.Ceiling((item.EndLocal - item.StartLocal).TotalHours);
+            // Span = number of hour-rows the event occupies, accounting for start-minute offset.
+            var totalMinutesFromStartHour = item.StartLocal.Minute + (item.EndLocal - item.StartLocal).TotalMinutes;
+            var span = (int)Math.Ceiling(totalMinutesFromStartHour / 60.0);
             Grid.SetRow(eventBlock, startRow);
             Grid.SetColumn(eventBlock, 1);
             Grid.SetRowSpan(eventBlock, Math.Max(1, Math.Min(span, 24 - startRow)));
