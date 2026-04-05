@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using GoogleCalendarManagement.Models;
+using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
@@ -22,6 +23,7 @@ public sealed partial class MainPage : Page
     private readonly Brush _selectorSelectedIndicatorBackground;
     private readonly Brush _selectorSelectedForeground;
     private readonly Brush _selectorUnselectedForeground;
+    private readonly ICalendarSelectionService _selectionService;
     private readonly TranslateTransform _selectionIndicatorTransform = new();
     private Storyboard? _selectionIndicatorStoryboard;
     private bool _isLoaded;
@@ -30,9 +32,10 @@ public sealed partial class MainPage : Page
     private ViewMode? _pendingViewMode;
     private ViewMode _selectionIndicatorMode;
 
-    public MainPage(MainViewModel viewModel)
+    public MainPage(MainViewModel viewModel, ICalendarSelectionService selectionService)
     {
         ViewModel = viewModel;
+        _selectionService = selectionService;
         InitializeComponent();
         _selectorHoverBackground = (Brush)Application.Current.Resources["CalendarSelectorHoverBrush"];
         _selectorSelectedIndicatorBackground = (Brush)Application.Current.Resources["CalendarSelectionHoverBrush"];
@@ -130,6 +133,10 @@ public sealed partial class MainPage : Page
             case VirtualKey.T:
                 e.Handled = true;
                 await ViewModel.NavigateTodayCommand.ExecuteAsync(null);
+                break;
+            case VirtualKey.Escape:
+                e.Handled = true;
+                _selectionService.ClearSelection();
                 break;
             case VirtualKey.G:
                 e.Handled = true;

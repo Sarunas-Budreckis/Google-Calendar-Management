@@ -1,7 +1,12 @@
 using System.ComponentModel;
 using System.Globalization;
+using CommunityToolkit.Mvvm.Messaging;
+using GoogleCalendarManagement.Messages;
+using GoogleCalendarManagement.Models;
+using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
 namespace GoogleCalendarManagement.Views;
@@ -15,11 +20,21 @@ public sealed partial class DayViewControl : Page
     private const double MinimumEventHeight = 15.0;
     private const double StandardTopPadding = 6.0;
     private const double ShortEventContentHeightEstimate = 16.0;
+    private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
+    private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
+
+    private readonly ICalendarSelectionService _selectionService;
+    private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
 
     public DayViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
+        _selectionService = App.GetRequiredService<ICalendarSelectionService>();
         InitializeComponent();
+        AllDayPanel.Background = TransparentPanelBrush;
+        AllDayPanel.Tapped += CalendarSurface_Tapped;
+        DayGrid.Background = TransparentPanelBrush;
+        DayGrid.Tapped += CalendarSurface_Tapped;
         Loaded += DayViewControl_Loaded;
         Unloaded += DayViewControl_Unloaded;
     }
@@ -29,12 +44,15 @@ public sealed partial class DayViewControl : Page
     private void DayViewControl_Loaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        WeakReferenceMessenger.Default.Register<DayViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
         Rebuild();
     }
 
     private void DayViewControl_Unloaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        WeakReferenceMessenger.Default.UnregisterAll(this);
+        _eventBorders.Clear();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -51,6 +69,7 @@ public sealed partial class DayViewControl : Page
         DayGrid.Children.Clear();
         DayGrid.RowDefinitions.Clear();
         DayGrid.ColumnDefinitions.Clear();
+        _eventBorders.Clear();
 
         DayGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
         DayGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -71,17 +90,29 @@ public sealed partial class DayViewControl : Page
 
         foreach (var item in dayEvents.Where(evt => evt.IsAllDay))
         {
-            AllDayPanel.Children.Add(new Border
+            var eventBorder = new Border
             {
                 Padding = new Thickness(8),
                 CornerRadius = ElementCornerRadius,
                 Background = ToBrush(item.ColorHex),
+                BorderBrush = TransparentPanelBrush,
+                BorderThickness = new Thickness(0),
                 Child = new TextBlock
                 {
                     Text = item.Title,
                     Foreground = new SolidColorBrush(Colors.White)
                 }
-            });
+            };
+
+            ToolTipService.SetToolTip(eventBorder, BuildTooltipText(item, culture));
+            eventBorder.Tapped += (sender, e) =>
+            {
+                _selectionService.Select(item.GcalEventId);
+                e.Handled = true;
+            };
+
+            RegisterEventBorder(item.GcalEventId, eventBorder);
+            AllDayPanel.Children.Add(eventBorder);
         }
 
         for (var hour = 0; hour < 24; hour++)
@@ -169,8 +200,19 @@ public sealed partial class DayViewControl : Page
                 Padding = padding,
                 CornerRadius = ElementCornerRadius,
                 Background = ToBrush(item.ColorHex),
+                BorderBrush = TransparentPanelBrush,
+                BorderThickness = new Thickness(0),
                 Child = content
             };
+
+            ToolTipService.SetToolTip(eventBlock, BuildTooltipText(item, culture));
+            eventBlock.Tapped += (sender, e) =>
+            {
+                _selectionService.Select(item.GcalEventId);
+                e.Handled = true;
+            };
+
+            RegisterEventBorder(item.GcalEventId, eventBlock);
 
             var startRow = item.StartLocal.Hour;
             // Span = number of hour-rows the event occupies, accounting for start-minute offset.
@@ -183,6 +225,50 @@ public sealed partial class DayViewControl : Page
         }
 
         AllDayPanel.Visibility = AllDayPanel.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
+    }
+
+    private void CalendarSurface_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        _selectionService.ClearSelection();
+    }
+
+    private void OnEventSelected(EventSelectedMessage message)
+    {
+        _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.GcalEventId));
+    }
+
+    private void ApplySelectionVisualState(string? selectedGcalEventId)
+    {
+        foreach (var (gcalEventId, registrations) in _eventBorders)
+        {
+            var isSelected = selectedGcalEventId is not null &&
+                string.Equals(gcalEventId, selectedGcalEventId, StringComparison.Ordinal);
+
+            foreach (var registration in registrations)
+            {
+                registration.Border.BorderBrush = isSelected ? SelectedBorderBrush : registration.DefaultBorderBrush;
+                registration.Border.BorderThickness = isSelected ? new Thickness(2) : registration.DefaultBorderThickness;
+            }
+        }
+    }
+
+    private void RegisterEventBorder(string gcalEventId, Border border)
+    {
+        if (!_eventBorders.TryGetValue(gcalEventId, out var registrations))
+        {
+            registrations = [];
+            _eventBorders[gcalEventId] = registrations;
+        }
+
+        registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness));
+    }
+
+    private static string BuildTooltipText(CalendarEventDisplayModel item, CultureInfo culture)
+    {
+        return item.IsAllDay
+            ? $"{item.Title}\nAll day"
+            : $"{item.Title}\n{item.StartLocal.ToString("g", culture)} - {item.EndLocal.ToString("g", culture)}";
     }
 
     private static SolidColorBrush ToBrush(string hex)
@@ -198,4 +284,9 @@ public sealed partial class DayViewControl : Page
 
         return new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x00, 0x88, 0xCC));
     }
+
+    private sealed record EventBorderRegistration(
+        Border Border,
+        Brush? DefaultBorderBrush,
+        Thickness DefaultBorderThickness);
 }

@@ -1,8 +1,12 @@
 using System.ComponentModel;
 using System.Globalization;
+using CommunityToolkit.Mvvm.Messaging;
+using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
+using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
 namespace GoogleCalendarManagement.Views;
@@ -11,11 +15,19 @@ public sealed partial class MonthViewControl : Page
 {
     private static CornerRadius ElementCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusElement"];
     private static CornerRadius MediumCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusMedium"];
+    private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
+    private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
+
+    private readonly ICalendarSelectionService _selectionService;
+    private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
 
     public MonthViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
+        _selectionService = App.GetRequiredService<ICalendarSelectionService>();
         InitializeComponent();
+        MonthGrid.Background = TransparentPanelBrush;
+        MonthGrid.Tapped += MonthGrid_Tapped;
         Loaded += MonthViewControl_Loaded;
         Unloaded += MonthViewControl_Unloaded;
     }
@@ -25,12 +37,15 @@ public sealed partial class MonthViewControl : Page
     private void MonthViewControl_Loaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        WeakReferenceMessenger.Default.Register<MonthViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
         Rebuild();
     }
 
     private void MonthViewControl_Unloaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        WeakReferenceMessenger.Default.UnregisterAll(this);
+        _eventBorders.Clear();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -46,6 +61,7 @@ public sealed partial class MonthViewControl : Page
         MonthGrid.Children.Clear();
         MonthGrid.RowDefinitions.Clear();
         MonthGrid.ColumnDefinitions.Clear();
+        _eventBorders.Clear();
 
         for (var column = 0; column < 7; column++)
         {
@@ -102,6 +118,8 @@ public sealed partial class MonthViewControl : Page
                 currentDay = currentDay.AddDays(1);
             }
         }
+
+        ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
     }
 
     private Border BuildDayCell(
@@ -119,11 +137,13 @@ public sealed partial class MonthViewControl : Page
 
         foreach (var item in dayEvents.Take(3))
         {
-            stackPanel.Children.Add(new Border
+            var eventBorder = new Border
             {
                 Padding = new Thickness(4),
                 CornerRadius = ElementCornerRadius,
                 Background = ToBrush(item.ColorHex),
+                BorderBrush = TransparentPanelBrush,
+                BorderThickness = new Thickness(0),
                 Child = new TextBlock
                 {
                     Text = item.Title,
@@ -131,7 +151,17 @@ public sealed partial class MonthViewControl : Page
                     FontSize = 12,
                     TextTrimming = TextTrimming.CharacterEllipsis
                 }
-            });
+            };
+
+            ToolTipService.SetToolTip(eventBorder, BuildTooltipText(item, culture));
+            eventBorder.Tapped += (sender, e) =>
+            {
+                _selectionService.Select(item.GcalEventId);
+                e.Handled = true;
+            };
+
+            RegisterEventBorder(item.GcalEventId, eventBorder);
+            stackPanel.Children.Add(eventBorder);
         }
 
         var overflowCount = Math.Max(0, dayEvents.Count - 3);
@@ -156,6 +186,49 @@ public sealed partial class MonthViewControl : Page
             BorderThickness = new Thickness(1),
             Child = stackPanel
         };
+    }
+
+    private void MonthGrid_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        _selectionService.ClearSelection();
+    }
+
+    private void OnEventSelected(EventSelectedMessage message)
+    {
+        _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.GcalEventId));
+    }
+
+    private void ApplySelectionVisualState(string? selectedGcalEventId)
+    {
+        foreach (var (gcalEventId, registrations) in _eventBorders)
+        {
+            var isSelected = selectedGcalEventId is not null &&
+                string.Equals(gcalEventId, selectedGcalEventId, StringComparison.Ordinal);
+
+            foreach (var registration in registrations)
+            {
+                registration.Border.BorderBrush = isSelected ? SelectedBorderBrush : registration.DefaultBorderBrush;
+                registration.Border.BorderThickness = isSelected ? new Thickness(2) : registration.DefaultBorderThickness;
+            }
+        }
+    }
+
+    private void RegisterEventBorder(string gcalEventId, Border border)
+    {
+        if (!_eventBorders.TryGetValue(gcalEventId, out var registrations))
+        {
+            registrations = [];
+            _eventBorders[gcalEventId] = registrations;
+        }
+
+        registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness));
+    }
+
+    private static string BuildTooltipText(CalendarEventDisplayModel item, CultureInfo culture)
+    {
+        return item.IsAllDay
+            ? $"{item.Title}\nAll day"
+            : $"{item.Title}\n{item.StartLocal.ToString("g", culture)} - {item.EndLocal.ToString("g", culture)}";
     }
 
     private static SolidColorBrush ToBrush(string hex)
@@ -183,4 +256,9 @@ public sealed partial class MonthViewControl : Page
     {
         return StartOfWeek(date).AddDays(6);
     }
+
+    private sealed record EventBorderRegistration(
+        Border Border,
+        Brush? DefaultBorderBrush,
+        Thickness DefaultBorderThickness);
 }

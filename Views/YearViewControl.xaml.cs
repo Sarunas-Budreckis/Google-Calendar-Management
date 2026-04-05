@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using System.Globalization;
 using GoogleCalendarManagement.Models;
+using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 
@@ -11,11 +13,17 @@ namespace GoogleCalendarManagement.Views;
 public sealed partial class YearViewControl : Page
 {
     private static CornerRadius LargeCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusLarge"];
+    private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
+
+    private readonly ICalendarSelectionService _selectionService;
 
     public YearViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
+        _selectionService = App.GetRequiredService<ICalendarSelectionService>();
         InitializeComponent();
+        MonthsGrid.Background = TransparentPanelBrush;
+        MonthsGrid.Tapped += MonthsGrid_Tapped;
         Loaded += YearViewControl_Loaded;
         Unloaded += YearViewControl_Unloaded;
     }
@@ -49,6 +57,16 @@ public sealed partial class YearViewControl : Page
         }
 
         await ViewModel.NavigateToAsync(date, ViewMode.Month);
+    }
+
+    private void MonthsGrid_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject source && FindAncestor<Button>(source) is not null)
+        {
+            return;
+        }
+
+        _selectionService.ClearSelection();
     }
 
     private void Rebuild()
@@ -176,5 +194,21 @@ public sealed partial class YearViewControl : Page
     private static DateOnly EndOfWeek(DateOnly date)
     {
         return StartOfWeek(date).AddDays(6);
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? source)
+        where T : DependencyObject
+    {
+        while (source is not null)
+        {
+            if (source is T match)
+            {
+                return match;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return null;
     }
 }

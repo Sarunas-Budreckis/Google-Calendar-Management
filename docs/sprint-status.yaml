@@ -58,7 +58,7 @@ development_status:
   epic-3: in-progress
   3-1-build-year-month-week-day-calendar-views: done
   3-2-display-events-with-color-coded-visual-system: review
-  3-3-implement-event-selection-with-visual-feedback: ready-for-dev
+  3-3-implement-event-selection-with-visual-feedback: in-progress
   3-4-create-event-details-panel-read-only-for-phase-1: ready-for-dev
   3-5-implement-event-editing-panel-phase-2: ready-for-dev
   3-6-implement-event-creation-drag-to-create-and-button: ready-for-dev

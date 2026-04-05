@@ -15,7 +15,7 @@
     <soThat>I can always tell which event is active before moving into the details flow</soThat>
     <tasks>
       - Reuse the already-created ICalendarSelectionService, CalendarSelectionService, and EventSelectedMessage rather than recreating selection contracts
-      - Extend MonthViewControl, WeekViewControl, and DayViewControl to keep a GcalEventId-to-Border map, attach Tapped handlers, register for EventSelectedMessage, apply the red outline, and add hover tooltips
+      - Extend MonthViewControl, WeekViewControl, and DayViewControl to keep a GcalEventId-to-Border map, attach Tapped handlers, register for EventSelectedMessage, apply the silvery-white outline, add hover tooltips, and reapply selection after rebuilds
       - Extend YearViewControl only with a background clear-selection tap target; do not add event selection there because year view does not render event chips
       - Add Escape handling in MainPage using the existing keyboard accelerator pattern so selection clears regardless of the active calendar view
       - Add CalendarSelectionService unit tests and validate build, test, and manual selection flows
@@ -23,11 +23,12 @@
   </story>
 
   <acceptanceCriteria>
-    <ac id="AC-3.3.1">Given the user clicks an event in any view, the event gains a 2 px solid red outline within 50 ms of the click.</ac>
-    <ac id="AC-3.3.2">Given an event is already selected, when the user clicks a different event, the red outline moves to the newly clicked event and the previously selected event returns to its normal appearance.</ac>
+    <ac id="AC-3.3.1">Given the user clicks an event in any view, the event gains a 2 px solid silvery-white outline within 50 ms of the click.</ac>
+    <ac id="AC-3.3.2">Given an event is already selected, when the user clicks a different event, the silvery-white outline moves to the newly clicked event and the previously selected event returns to its normal appearance.</ac>
     <ac id="AC-3.3.3">Given an event is selected, when the user presses Escape, the selection is cleared and all event outlines are removed.</ac>
-    <ac id="AC-3.3.4">Given an event is selected, when the user clicks any empty calendar area, the selection is cleared.</ac>
+    <ac id="AC-3.3.4">Given an event is selected, when the user clicks any blank area inside the calendar surface, the selection is cleared, but blank space in the control panels does not clear it.</ac>
     <ac id="AC-3.3.5">Given the user hovers over any event without clicking it, a tooltip appears showing the event title and formatted start/end time.</ac>
+    <ac id="AC-3.3.6">Given an event is selected, when the user switches calendar views or navigates to a previous or next period, the selection remains active until the user presses Escape, clicks blank calendar space, or uses the close button that Story 3.4 will wire to ClearSelection(). If the selected event is visible in the resulting view or period, its silvery-white outline remains applied without reselection.</ac>
   </acceptanceCriteria>
 
   <artifacts>
@@ -36,13 +37,13 @@
         <path>docs/epic-3/stories/3-3-implement-event-selection-with-visual-feedback.md</path>
         <title>Story 3.3 draft</title>
         <section>Tasks / Subtasks, Dev Notes, File Changes Summary</section>
-        <snippet>Primary implementation guide. It already corrects older planning assumptions: string GcalEventId, inline Border-based event rendering, no separate event UserControls, and MainPage-owned Escape handling.</snippet>
+        <snippet>Primary implementation guide. It already corrects older planning assumptions: string GcalEventId, inline Border-based event rendering, no separate event UserControls, MainPage-owned Escape handling, and persistent selection across view and period changes.</snippet>
       </doc>
       <doc>
         <path>docs/epic-3/tech-spec.md</path>
         <title>Epic 3 technical specification</title>
         <section>Overview, Workflows 3 and 4, Acceptance Criteria 13-17, Performance</section>
-        <snippet>Authoritative product behaviour for Story 3.3: single-select, red 2 px outline, Escape clear, empty-area clear, tooltip on hover, and under-50 ms feedback. This doc still shows int-based examples in places; the repo uses string GcalEventId.</snippet>
+        <snippet>Authoritative product behaviour for Story 3.3: single-select, 2 px silvery-white outline, Escape clear, empty-area clear, tooltip on hover, persistent selection across navigation, and under-50 ms feedback. This doc still shows int-based examples in places; the repo uses string GcalEventId.</snippet>
       </doc>
       <doc>
         <path>docs/epics.md</path>
@@ -54,7 +55,7 @@
         <path>docs/ux-design-specification.md</path>
         <title>UX design specification</title>
         <section>2.1 Core UX Principles, 5.2 Tier 2 edit and sync journey, 7.5 Navigation Patterns</section>
-        <snippet>Defines the visible interaction language: selected events use a red 2 px outline, hover reveals context without modal interruption, and Escape clears selection/closing state.</snippet>
+        <snippet>Defines the visible interaction language: selected events use a 2 px light outline, hover reveals context without modal interruption, and Escape clears selection or closing state.</snippet>
       </doc>
       <doc>
         <path>docs/epic-3/stories/3-1-build-year-month-week-day-calendar-views.context.xml</path>
@@ -99,25 +100,25 @@
         <path>Views/MonthViewControl.xaml.cs</path>
         <kind>view</kind>
         <symbol>MonthViewControl</symbol>
-        <reason>Month view currently builds event Borders inline in BuildDayCell() and places them inside MonthGrid. This is the first target for adding event tap selection, tooltip wiring, and background tap clearing.</reason>
+        <reason>Month view currently builds event Borders inline in BuildDayCell() and places them inside MonthGrid. This is the first target for adding event tap selection, tooltip wiring, background tap clearing, and selection reapplication after rebuilds.</reason>
       </file>
       <file>
         <path>Views/WeekViewControl.xaml.cs</path>
         <kind>view</kind>
         <symbol>WeekViewControl</symbol>
-        <reason>Week view builds all-day chips and timed blocks inline via CreateEventChip() and CreateTimedEventBlock(). Selection wiring must cover both render paths and use WeekGrid as the empty-area clear target.</reason>
+        <reason>Week view builds all-day chips and timed blocks inline via CreateEventChip() and CreateTimedEventBlock(). Selection wiring must cover both render paths, reapply current selection after rebuilds, and use WeekGrid as the empty-area clear target.</reason>
       </file>
       <file>
         <path>Views/DayViewControl.xaml.cs</path>
         <kind>view</kind>
         <symbol>DayViewControl</symbol>
-        <reason>Day view renders all-day and timed event Borders inline during Rebuild(). Selection wiring must cover both sets of Borders and use DayGrid as the empty-area clear target.</reason>
+        <reason>Day view renders all-day and timed event Borders inline during Rebuild(). Selection wiring must cover both sets of Borders, reapply current selection after rebuilds, and use DayGrid as the empty-area clear target.</reason>
       </file>
       <file>
         <path>Views/YearViewControl.xaml.cs</path>
         <kind>view</kind>
         <symbol>YearViewControl</symbol>
-        <reason>Year view shows month panels with day buttons and placeholder sync dots, not event chips. Preserve DayButton_Click navigation and only add background selection clearing on MonthsGrid.</reason>
+        <reason>Year view shows month panels with day buttons and placeholder sync dots, not event chips. Preserve DayButton_Click navigation without clearing selection and only add background selection clearing on blank MonthsGrid space.</reason>
       </file>
       <file>
         <path>Views/MainPage.xaml.cs</path>
@@ -164,8 +165,9 @@
     <constraint id="C8" category="ui-thread">Apply outline updates through DispatcherQueue.TryEnqueue() inside messenger callbacks. WeakReferenceMessenger recipients should not assume they are already on the UI thread.</constraint>
     <constraint id="C9" category="tooltip-api">Because event visuals are created in code-behind, use ToolTipService.SetToolTip(element, content) on the created Border instances. Do not rely on XAML-only attached-property markup for these dynamic elements.</constraint>
     <constraint id="C10" category="keyboard-location">Escape clearing belongs at MainPage level using the existing keyboard accelerator pattern so it works no matter which calendar Page is active inside CalendarFrame.</constraint>
-    <constraint id="C11" category="scope-boundary">Story 3.3 stops at selection feedback and clear behaviour. Do not add details-panel logic here; Story 3.4 consumes the selected event state next.</constraint>
+    <constraint id="C11" category="scope-boundary">Story 3.3 stops at selection feedback and clear behaviour. Do not add details-panel logic here; Story 3.4 consumes the selected event state next and wires the close button into ClearSelection().</constraint>
     <constraint id="C12" category="selection-visuals">Keep the selection change additive to the existing colour rendering by updating BorderBrush and BorderThickness only. Do not couple Story 3.3 to the unfinished Story 3.2 colour-contrast work.</constraint>
+    <constraint id="C13" category="selection-persistence">Selection must survive view-mode changes, previous or next navigation, and other shell-control interactions. Because CalendarSelectionService suppresses duplicate same-ID messages, each view must explicitly reapply SelectedGcalEventId after loading and after every rebuild.</constraint>
   </constraints>
 
   <tests>
@@ -189,11 +191,11 @@
       <test name="ClearSelection_WhenAlreadyClear_DoesNotRepublish">
         Register a counter recipient against a fresh CalendarSelectionService, call ClearSelection(), and assert no message is sent.
       </test>
-      <test name="Select_Whitespace_ClearsSelection">
-        Select("evt-1"), register a recipient, call Select("   "), and assert the service clears selection and publishes a null EventSelectedMessage.
+      <test name="Select_Whitespace_ThrowsArgumentException">
+        Call Select("   ") on a fresh CalendarSelectionService and assert it throws ArgumentException rather than silently clearing selection.
       </test>
       <test name="Manual_MonthWeekDaySelectionAndTooltip_FollowsStoryBehaviour">
-        Launch the app with synced events, click an event in Month view, click a second event, press Escape, click empty calendar area, and hover an event in Month, Week, and Day views. Verify the red outline moves correctly, clears correctly, and the tooltip shows title plus time.
+        Launch the app with synced events, click an event in Month view, click a second event, switch views, navigate previous or next, press Escape, click blank calendar area, and hover an event in Month, Week, and Day views. Verify the silvery-white outline moves correctly, persists correctly, clears only on explicit clear actions, and the tooltip shows title plus time.
       </test>
     </ideas>
   </tests>

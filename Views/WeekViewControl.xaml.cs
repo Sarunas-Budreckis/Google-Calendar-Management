@@ -1,8 +1,12 @@
 using System.ComponentModel;
 using System.Globalization;
+using CommunityToolkit.Mvvm.Messaging;
+using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
+using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
 namespace GoogleCalendarManagement.Views;
@@ -24,13 +28,20 @@ public sealed partial class WeekViewControl : Page
 
     private static readonly Brush GridLineBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4A, 0x4A, 0x4A));
     private static readonly Brush OverlapOutlineBrush = new SolidColorBrush(Colors.Black);
+    private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
+    private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
 
+    private readonly ICalendarSelectionService _selectionService;
+    private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
     private DispatcherTimer? _resizeDebounceTimer;
 
     public WeekViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
+        _selectionService = App.GetRequiredService<ICalendarSelectionService>();
         InitializeComponent();
+        WeekGrid.Background = TransparentPanelBrush;
+        WeekGrid.Tapped += WeekGrid_Tapped;
         Loaded += WeekViewControl_Loaded;
         Unloaded += WeekViewControl_Unloaded;
         SizeChanged += WeekViewControl_SizeChanged;
@@ -41,6 +52,7 @@ public sealed partial class WeekViewControl : Page
     private void WeekViewControl_Loaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        WeakReferenceMessenger.Default.Register<WeekViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
         _resizeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         _resizeDebounceTimer.Tick += (_, _) =>
         {
@@ -55,6 +67,8 @@ public sealed partial class WeekViewControl : Page
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
         _resizeDebounceTimer?.Stop();
         _resizeDebounceTimer = null;
+        WeakReferenceMessenger.Default.UnregisterAll(this);
+        _eventBorders.Clear();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -82,6 +96,7 @@ public sealed partial class WeekViewControl : Page
         WeekGrid.Children.Clear();
         WeekGrid.RowDefinitions.Clear();
         WeekGrid.ColumnDefinitions.Clear();
+        _eventBorders.Clear();
 
         var viewportWidth = Math.Max(0d, ActualWidth - HorizontalChromeAllowance);
         var minimumContentWidth = TimeColumnWidth + (MinimumDayColumnWidth * 7);
@@ -144,7 +159,7 @@ public sealed partial class WeekViewControl : Page
                          .Where(evt => evt.IsAllDay && DateOnly.FromDateTime(evt.StartLocal.Date) == currentDay)
                          .OrderBy(evt => evt.StartLocal))
             {
-                allDayPanel.Children.Add(CreateEventChip(item.Title, item.ColorHex));
+                allDayPanel.Children.Add(CreateEventChip(item, culture));
             }
 
             Grid.SetRow(allDayPanel, 1);
@@ -183,23 +198,37 @@ public sealed partial class WeekViewControl : Page
                 WeekGrid.Children.Add(eventBlock);
             }
         }
+
+        ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
     }
 
-    private Border CreateEventChip(string title, string hexColor)
+    private Border CreateEventChip(CalendarEventDisplayModel item, CultureInfo culture)
     {
-        return new Border
+        var border = new Border
         {
             Padding = new Thickness(4),
             CornerRadius = ElementCornerRadius,
-            Background = ToBrush(hexColor),
+            Background = ToBrush(item.ColorHex),
+            BorderBrush = TransparentPanelBrush,
+            BorderThickness = new Thickness(0),
             Child = new TextBlock
             {
-                Text = title,
+                Text = item.Title,
                 Foreground = new SolidColorBrush(Colors.White),
                 FontSize = 12,
                 TextTrimming = TextTrimming.CharacterEllipsis
             }
         };
+
+        ToolTipService.SetToolTip(border, BuildTooltipText(item, culture));
+        border.Tapped += (sender, e) =>
+        {
+            _selectionService.Select(item.GcalEventId);
+            e.Handled = true;
+        };
+
+        RegisterEventBorder(item.GcalEventId, border);
+        return border;
     }
 
     private Border CreateTimedEventBlock(TimedEventSegment segment, CultureInfo culture)
@@ -258,7 +287,7 @@ public sealed partial class WeekViewControl : Page
             };
         }
 
-        return new Border
+        var border = new Border
         {
             Margin = new Thickness(leftOffset, topOffset, EventSideMargin, 0),
             Height = eventHeight,
@@ -270,6 +299,59 @@ public sealed partial class WeekViewControl : Page
             BorderThickness = segment.OverlapDepth > 0 ? new Thickness(1) : new Thickness(0),
             Child = content
         };
+
+        ToolTipService.SetToolTip(border, BuildTooltipText(segment.Item, culture));
+        border.Tapped += (sender, e) =>
+        {
+            _selectionService.Select(segment.Item.GcalEventId);
+            e.Handled = true;
+        };
+
+        RegisterEventBorder(segment.Item.GcalEventId, border);
+        return border;
+    }
+
+    private void WeekGrid_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        _selectionService.ClearSelection();
+    }
+
+    private void OnEventSelected(EventSelectedMessage message)
+    {
+        _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.GcalEventId));
+    }
+
+    private void ApplySelectionVisualState(string? selectedGcalEventId)
+    {
+        foreach (var (gcalEventId, registrations) in _eventBorders)
+        {
+            var isSelected = selectedGcalEventId is not null &&
+                string.Equals(gcalEventId, selectedGcalEventId, StringComparison.Ordinal);
+
+            foreach (var registration in registrations)
+            {
+                registration.Border.BorderBrush = isSelected ? SelectedBorderBrush : registration.DefaultBorderBrush;
+                registration.Border.BorderThickness = isSelected ? new Thickness(2) : registration.DefaultBorderThickness;
+            }
+        }
+    }
+
+    private void RegisterEventBorder(string gcalEventId, Border border)
+    {
+        if (!_eventBorders.TryGetValue(gcalEventId, out var registrations))
+        {
+            registrations = [];
+            _eventBorders[gcalEventId] = registrations;
+        }
+
+        registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness));
+    }
+
+    private static string BuildTooltipText(CalendarEventDisplayModel item, CultureInfo culture)
+    {
+        return item.IsAllDay
+            ? $"{item.Title}\nAll day"
+            : $"{item.Title}\n{item.StartLocal.ToString("g", culture)} - {item.EndLocal.ToString("g", culture)}";
     }
 
     private static List<TimedEventSegment> BuildTimedEventSegments(
@@ -323,4 +405,9 @@ public sealed partial class WeekViewControl : Page
         DateTime VisibleStart,
         DateTime VisibleEnd,
         int OverlapDepth);
+
+    private sealed record EventBorderRegistration(
+        Border Border,
+        Brush? DefaultBorderBrush,
+        Thickness DefaultBorderThickness);
 }
