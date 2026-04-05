@@ -205,6 +205,7 @@ public sealed class SettingsViewModel : ObservableObject
                 SyncStatusText =
                     $"Sync complete. Added {result.EventsAdded}, updated {result.EventsUpdated}, deleted {result.EventsDeleted}.";
                 await RefreshLastSyncTextAsync();
+                WeakReferenceMessenger.Default.Send(new SyncCompletedMessage());
                 return;
             }
 

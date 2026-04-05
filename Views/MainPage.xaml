@@ -154,9 +154,15 @@
         </Border>
 
         <Grid Grid.Row="1">
-            <Frame x:Name="CalendarFrame" />
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Frame x:Name="CalendarFrame" Grid.Column="0" />
 
             <Border
+                Grid.Column="0"
                 Padding="24"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
@@ -172,11 +178,19 @@
             </Border>
 
             <ProgressRing
+                Grid.Column="0"
                 Width="48"
                 Height="48"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
+
+            <ContentControl
+                x:Name="EventDetailsPanel"
+                Grid.Column="1"
+                VerticalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch" />
         </Grid>
     </Grid>
 </Page>

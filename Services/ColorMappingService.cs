@@ -3,6 +3,7 @@ namespace GoogleCalendarManagement.Services;
 public sealed class ColorMappingService : IColorMappingService
 {
     private const string FallbackHex = "#0088CC";
+    private const string FallbackName = "Azure";
 
     private static readonly IReadOnlyDictionary<string, string> ColorMap =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -29,6 +30,29 @@ public sealed class ColorMappingService : IColorMappingService
             { "3",        "#8E24AA" },
         };
 
+    private static readonly IReadOnlyDictionary<string, string> NameMap =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "1",        "Lavender" },
+            { "lavender", "Lavender" },
+            { "2",        "Navy" },
+            { "navy",     "Navy" },
+            { "3",        "Grape" },
+            { "4",        "Flamingo" },
+            { "flamingo", "Flamingo" },
+            { "5",        "Yellow" },
+            { "yellow",   "Yellow" },
+            { "6",        "Orange" },
+            { "orange",   "Orange" },
+            { "8",        "Grey" },
+            { "grey",     "Grey" },
+            { "9",        "Purple" },
+            { "purple",   "Purple" },
+            { "10",       "Sage" },
+            { "sage",     "Sage" },
+            { "azure",    "Azure" },
+        };
+
     public IReadOnlyDictionary<string, string> AllColors => ColorMap;
 
     public string GetHexColor(string? colorId)
@@ -37,5 +61,13 @@ public sealed class ColorMappingService : IColorMappingService
             return FallbackHex;
 
         return ColorMap.TryGetValue(colorId, out var hex) ? hex : FallbackHex;
+    }
+
+    public string GetColorName(string? colorId)
+    {
+        if (string.IsNullOrEmpty(colorId))
+            return FallbackName;
+
+        return NameMap.TryGetValue(colorId, out var name) ? name : FallbackName;
     }
 }

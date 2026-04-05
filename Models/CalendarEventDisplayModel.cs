@@ -9,6 +9,7 @@ public sealed record CalendarEventDisplayModel(
     DateTime EndLocal,
     bool IsAllDay,
     string ColorHex,
+    string ColorName,
     bool IsRecurringInstance,
     string? Description,
     DateTime? LastSyncedAt);

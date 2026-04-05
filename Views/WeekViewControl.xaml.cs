@@ -17,7 +17,8 @@ public sealed partial class WeekViewControl : Page
 
     private const double TimeColumnWidth = 72;
     private const double MinimumDayColumnWidth = 100;
-    private const double HorizontalChromeAllowance = 48;
+    private const double HorizontalChromeAllowance = 20;
+    private const double WeekGridHorizontalPadding = 24.0; // Padding="12" in XAML → left(12) + right(12)
     private const double RowHeight = 72.0;
     private const double EventBottomGap = 3.0;
     private const double EventSideMargin = 4.0;
@@ -99,9 +100,11 @@ public sealed partial class WeekViewControl : Page
         _eventBorders.Clear();
 
         var viewportWidth = Math.Max(0d, ActualWidth - HorizontalChromeAllowance);
-        var minimumContentWidth = TimeColumnWidth + (MinimumDayColumnWidth * 7);
+        var minimumContentWidth = TimeColumnWidth + (MinimumDayColumnWidth * 7) + WeekGridHorizontalPadding;
         var contentWidth = Math.Max(minimumContentWidth, viewportWidth);
-        var availableDayWidth = (contentWidth - TimeColumnWidth) / 7d;
+        // Subtract the WeekGrid's XAML Padding="12" (left+right=24px) so columns
+        // exactly fill the content area and Sunday's right border isn't clipped.
+        var availableDayWidth = (contentWidth - WeekGridHorizontalPadding - TimeColumnWidth) / 7d;
 
         WeekGrid.Width = contentWidth;
 

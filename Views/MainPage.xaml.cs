@@ -32,11 +32,12 @@ public sealed partial class MainPage : Page
     private ViewMode? _pendingViewMode;
     private ViewMode _selectionIndicatorMode;
 
-    public MainPage(MainViewModel viewModel, ICalendarSelectionService selectionService)
+    public MainPage(MainViewModel viewModel, ICalendarSelectionService selectionService, EventDetailsPanelControl eventDetailsPanel)
     {
         ViewModel = viewModel;
         _selectionService = selectionService;
         InitializeComponent();
+        EventDetailsPanel.Content = eventDetailsPanel;
         _selectorHoverBackground = (Brush)Application.Current.Resources["CalendarSelectorHoverBrush"];
         _selectorSelectedIndicatorBackground = (Brush)Application.Current.Resources["CalendarSelectionHoverBrush"];
         _selectorSelectedForeground = (Brush)Application.Current.Resources["WhiteBrush"];
@@ -346,6 +347,21 @@ public sealed partial class MainPage : Page
         UpdateViewModeButtons();
         UpdateSelectionIndicator(mode);
         await Task.Yield();
+
+        // When switching to week or day view, navigate to the selected event's date
+        // so the user lands on the period containing the event they just tapped.
+        var selectedId = _selectionService.SelectedGcalEventId;
+        if (selectedId is not null && mode is ViewMode.Week or ViewMode.Day)
+        {
+            var selectedEvent = ViewModel.CurrentEvents
+                .FirstOrDefault(e => string.Equals(e.GcalEventId, selectedId, StringComparison.Ordinal));
+            if (selectedEvent is not null)
+            {
+                await ViewModel.NavigateToAsync(DateOnly.FromDateTime(selectedEvent.StartLocal.Date), mode);
+                return;
+            }
+        }
+
         await ViewModel.SwitchViewModeCommand.ExecuteAsync(mode);
     }
 }

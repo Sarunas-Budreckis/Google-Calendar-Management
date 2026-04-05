@@ -79,6 +79,7 @@ public sealed class CalendarQueryService : ICalendarQueryService
             endLocal,
             isAllDay,
             _colorMappingService.GetHexColor(gcalEvent.ColorId),
+            _colorMappingService.GetColorName(gcalEvent.ColorId),
             gcalEvent.IsRecurringInstance,
             gcalEvent.Description,
             gcalEvent.LastSyncedAt);

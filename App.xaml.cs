@@ -190,8 +190,10 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ICalendarSelectionService, CalendarSelectionService>();
             services.AddSingleton<SettingsViewModel>();
             services.AddSingleton<MainViewModel>();
+            services.AddSingleton<EventDetailsPanelViewModel>();
             services.AddTransient<SettingsPage>();
             services.AddTransient<MainPage>();
+            services.AddTransient<EventDetailsPanelControl>();
             services.AddTransient<YearViewControl>();
             services.AddTransient<MonthViewControl>();
             services.AddTransient<WeekViewControl>();

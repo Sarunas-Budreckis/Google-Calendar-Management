@@ -10,6 +10,6 @@
     <ScrollViewer>
         <Grid
             x:Name="MonthGrid"
-            Padding="12" />
+            Padding="12,12,20,12" />
     </ScrollViewer>
 </Page>

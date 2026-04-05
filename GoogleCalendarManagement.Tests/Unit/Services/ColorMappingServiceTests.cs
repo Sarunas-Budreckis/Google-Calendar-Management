@@ -58,6 +58,43 @@ public sealed class ColorMappingServiceTests
         _sut.GetHexColor(id).Should().Be(expectedHex);
     }
 
+    // ── GetColorName ─────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("unknown")]
+    [InlineData("99")]
+    public void GetColorName_UnknownOrEmpty_ReturnsFallbackAzure(string? colorId)
+    {
+        _sut.GetColorName(colorId).Should().Be("Azure");
+    }
+
+    [Theory]
+    [InlineData("1",        "Lavender")]
+    [InlineData("lavender", "Lavender")]
+    [InlineData("LAVENDER", "Lavender")]
+    [InlineData("2",        "Navy")]
+    [InlineData("navy",     "Navy")]
+    [InlineData("3",        "Grape")]
+    [InlineData("4",        "Flamingo")]
+    [InlineData("flamingo", "Flamingo")]
+    [InlineData("5",        "Yellow")]
+    [InlineData("yellow",   "Yellow")]
+    [InlineData("6",        "Orange")]
+    [InlineData("orange",   "Orange")]
+    [InlineData("8",        "Grey")]
+    [InlineData("grey",     "Grey")]
+    [InlineData("9",        "Purple")]
+    [InlineData("purple",   "Purple")]
+    [InlineData("10",       "Sage")]
+    [InlineData("sage",     "Sage")]
+    [InlineData("azure",    "Azure")]
+    public void GetColorName_KnownId_ReturnsMappedName(string colorId, string expectedName)
+    {
+        _sut.GetColorName(colorId).Should().Be(expectedName);
+    }
+
     // ── AllColors ─────────────────────────────────────────────────────────────
 
     [Fact]

@@ -1,6 +1,8 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using Microsoft.Extensions.Logging;
@@ -37,6 +39,10 @@ public sealed class MainViewModel : ObservableObject
         NavigateNextCommand = new AsyncRelayCommand(NavigateNextAsync);
         NavigateTodayCommand = new AsyncRelayCommand(NavigateTodayAsync);
         JumpToDateCommand = new AsyncRelayCommand<DateOnly>(JumpToDateAsync);
+
+        WeakReferenceMessenger.Default.Register<MainViewModel, SyncCompletedMessage>(
+            this,
+            static (recipient, _) => recipient.OnSyncCompleted());
     }
 
     public ViewMode CurrentViewMode
@@ -108,6 +114,11 @@ public sealed class MainViewModel : ObservableObject
         CurrentDate = date;
         CurrentViewMode = mode;
         await RefreshAsync();
+    }
+
+    private void OnSyncCompleted()
+    {
+        _ = RefreshAsync();
     }
 
     private async Task SwitchViewModeAsync(ViewMode mode)
