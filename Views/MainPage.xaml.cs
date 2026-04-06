@@ -3,13 +3,15 @@ using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.System;
+using Windows.Storage.Pickers;
 using Windows.Foundation;
+using WinRT.Interop;
+using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace GoogleCalendarManagement.Views;
 
@@ -27,7 +29,8 @@ public sealed partial class MainPage : Page
     private readonly ICalendarSelectionService _selectionService;
     private readonly TranslateTransform _selectionIndicatorTransform = new();
     private Storyboard? _selectionIndicatorStoryboard;
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _lastSyncRefreshTimer;
+    private DispatcherQueueTimer? _lastSyncRefreshTimer;
+    private DispatcherQueueTimer? _notificationAutoDismissTimer;
     private bool _isLoaded;
     private bool _hasSelectionIndicatorPosition;
     private bool _isUpdatingPicker;
@@ -81,6 +84,7 @@ public sealed partial class MainPage : Page
         _isLoaded = false;
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
         StopLastSyncRefreshTimer();
+        StopNotificationAutoDismissTimer();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -106,6 +110,11 @@ public sealed partial class MainPage : Page
         if (e.PropertyName == nameof(MainViewModel.SyncFlyoutOpenRequestId))
         {
             ShowSyncFlyout();
+        }
+
+        if (e.PropertyName is nameof(MainViewModel.IsNotificationOpen) or nameof(MainViewModel.NotificationSeverity))
+        {
+            UpdateNotificationAutoDismissTimer();
         }
     }
 
@@ -239,6 +248,51 @@ public sealed partial class MainPage : Page
         };
 
         await dialog.ShowAsync();
+    }
+
+    private async void ExportToIcsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.IsExporting)
+        {
+            return;
+        }
+
+        var selection = await ShowExportDateRangeDialogAsync();
+        if (selection is null)
+        {
+            return;
+        }
+
+        await ViewModel.ExportToIcsAsync(selection.Value.From, selection.Value.To);
+    }
+
+    private async void ImportFromIcsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.IsImporting)
+        {
+            return;
+        }
+
+        var window = App.GetRequiredService<IWindowService>().GetWindow();
+        if (window is null)
+        {
+            return;
+        }
+
+        var picker = new FileOpenPicker
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary
+        };
+        picker.FileTypeFilter.Add(".ics");
+
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
+        var file = await picker.PickSingleFileAsync();
+        if (file is null)
+        {
+            return;
+        }
+
+        await ViewModel.ImportFromIcsAsync(file);
     }
 
     private void SyncButton_Click(object sender, RoutedEventArgs e)
@@ -423,9 +477,47 @@ public sealed partial class MainPage : Page
         _lastSyncRefreshTimer = null;
     }
 
-    private void LastSyncRefreshTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    private void LastSyncRefreshTimer_Tick(DispatcherQueueTimer sender, object args)
     {
         ViewModel.RefreshRelativeSyncPresentation();
+    }
+
+    private void NotificationInfoBar_CloseButtonClick(InfoBar sender, object args)
+    {
+        ViewModel.DismissNotification();
+    }
+
+    private void UpdateNotificationAutoDismissTimer()
+    {
+        if (!ViewModel.IsNotificationOpen ||
+            ViewModel.NotificationSeverity is InfoBarSeverity.Error or InfoBarSeverity.Warning)
+        {
+            StopNotificationAutoDismissTimer();
+            return;
+        }
+
+        _notificationAutoDismissTimer ??= CreateNotificationTimer();
+        _notificationAutoDismissTimer.Stop();
+        _notificationAutoDismissTimer.Start();
+    }
+
+    private void StopNotificationAutoDismissTimer()
+    {
+        _notificationAutoDismissTimer?.Stop();
+    }
+
+    private DispatcherQueueTimer CreateNotificationTimer()
+    {
+        var timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(4);
+        timer.Tick += NotificationAutoDismissTimer_Tick;
+        return timer;
+    }
+
+    private void NotificationAutoDismissTimer_Tick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        ViewModel.DismissNotification();
     }
 
     private void ShowSyncFlyout()
@@ -443,6 +535,76 @@ public sealed partial class MainPage : Page
     private Flyout GetSyncFlyout()
     {
         return (Flyout)SyncButton.Flyout;
+    }
+
+    private async Task<(DateOnly From, DateOnly To)?> ShowExportDateRangeDialogAsync()
+    {
+        var (defaultFrom, defaultTo) = await ViewModel.GetExportDateRangeDefaultsAsync();
+        var fromPicker = new DatePicker
+        {
+            Header = "Export from",
+            Date = ToDateTimeOffset(defaultFrom)
+        };
+        var toPicker = new DatePicker
+        {
+            Header = "Export to",
+            Date = ToDateTimeOffset(defaultTo)
+        };
+        var validationText = new TextBlock
+        {
+            Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+            Text = "Start date must be before end date.",
+            Visibility = Visibility.Collapsed
+        };
+
+        var content = new StackPanel
+        {
+            Spacing = 12,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "Choose the inclusive date range to export.",
+                    TextWrapping = TextWrapping.WrapWholeWords
+                },
+                fromPicker,
+                toPicker,
+                validationText
+            }
+        };
+
+        var dialog = new ContentDialog
+        {
+            Title = "Export to ICS",
+            PrimaryButtonText = "Continue",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            Content = content,
+            XamlRoot = XamlRoot
+        };
+
+        void UpdateValidation()
+        {
+            var from = DateOnly.FromDateTime(fromPicker.Date.Date);
+            var to = DateOnly.FromDateTime(toPicker.Date.Date);
+            var isValid = from <= to;
+            validationText.Visibility = isValid ? Visibility.Collapsed : Visibility.Visible;
+            dialog.IsPrimaryButtonEnabled = isValid;
+        }
+
+        fromPicker.DateChanged += (_, _) => UpdateValidation();
+        toPicker.DateChanged += (_, _) => UpdateValidation();
+        UpdateValidation();
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            return null;
+        }
+
+        return (
+            DateOnly.FromDateTime(fromPicker.Date.Date),
+            DateOnly.FromDateTime(toPicker.Date.Date));
     }
 
     private bool ShouldSuppressShellArrowNavigation()
@@ -480,5 +642,11 @@ public sealed partial class MainPage : Page
         }
 
         return null;
+    }
+
+    private static DateTimeOffset ToDateTimeOffset(DateOnly date)
+    {
+        var localDateTime = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local);
+        return new DateTimeOffset(localDateTime);
     }
 }

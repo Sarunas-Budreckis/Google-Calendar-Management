@@ -177,6 +177,7 @@ namespace GoogleCalendarManagement
             services.AddScoped<IMigrationService, MigrationService>();
             services.AddSingleton<IWindowService, WindowService>();
             services.AddSingleton<IContentDialogService, ContentDialogService>();
+            services.AddSingleton<IIcsFileSavePickerService, IcsFileSavePickerService>();
             services.AddSingleton<ITokenStorageService, DpapiTokenStorageService>();
             services.AddSingleton<IGoogleAuthorizationBroker, GoogleAuthorizationBrokerAdapter>();
             services.AddSingleton<IGoogleCalendarService, GoogleCalendarService>();
@@ -186,6 +187,8 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ISystemStateRepository, SystemStateRepository>();
             services.AddSingleton<IColorMappingService, ColorMappingService>();
             services.AddSingleton<ICalendarQueryService, CalendarQueryService>();
+            services.AddTransient<IIcsExportService, IcsExportService>();
+            services.AddTransient<IIcsImportService, IcsImportService>();
             services.AddSingleton<ISyncStatusService, SyncStatusService>();
             services.AddSingleton<INavigationStateService, NavigationStateService>();
             services.AddSingleton<ICalendarSelectionService, CalendarSelectionService>();

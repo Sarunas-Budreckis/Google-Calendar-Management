@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-04-05T00:00:00Z
+last_updated: 2026-04-05T22:55:00Z
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
@@ -62,11 +62,11 @@ development_status:
   3-3-implement-event-selection-with-visual-feedback: done
   3-4-create-event-details-panel-read-only-for-phase-1: done
   # 3-5, 3-6, 3-7 moved to Epic 4 (Tier 2 — event editing)
-  3-8-add-date-navigation-and-jump-to-date-features: ready-for-dev
-  3-9-enhance-year-view-with-event-indicators-and-all-day-previews: ready-for-dev
-  3-10-virtualize-week-view-event-rendering: drafted
-  3-11-export-events-to-ics: drafted
-  3-12-import-events-from-ics: drafted
+  3-8-add-date-navigation-and-jump-to-date-features: review
+  3-9-enhance-year-view-with-event-indicators-and-all-day-previews: review
+  3-10-virtualize-week-view-event-rendering: review
+  3-11-export-events-to-ics: review
+  3-12-import-events-from-ics: review
   3-13-month-view-event-rendering-overhaul: drafted
   3-14-calendar-view-polish-and-bug-fixes: drafted
   epic-3-retrospective: optional

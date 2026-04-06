@@ -40,4 +40,66 @@ public sealed class GcalEventRepository : IGcalEventRepository
                 gcalEvent => !gcalEvent.IsDeleted && gcalEvent.GcalEventId == gcalEventId,
                 ct);
     }
+
+    public async Task<(DateOnly From, DateOnly To)?> GetStoredDateRangeAsync(CancellationToken ct = default)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
+
+        var earliestEvent = await context.GcalEvents
+            .AsNoTracking()
+            .Where(gcalEvent => !gcalEvent.IsDeleted && gcalEvent.StartDatetime.HasValue)
+            .OrderBy(gcalEvent => gcalEvent.StartDatetime)
+            .Select(gcalEvent => new
+            {
+                Start = gcalEvent.StartDatetime,
+                gcalEvent.EndDatetime,
+                gcalEvent.IsAllDay
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (earliestEvent is null || !earliestEvent.Start.HasValue)
+        {
+            return null;
+        }
+
+        var latestEvent = await context.GcalEvents
+            .AsNoTracking()
+            .Where(gcalEvent => !gcalEvent.IsDeleted && gcalEvent.StartDatetime.HasValue)
+            .OrderByDescending(gcalEvent => gcalEvent.EndDatetime ?? gcalEvent.StartDatetime)
+            .Select(gcalEvent => new
+            {
+                Start = gcalEvent.StartDatetime,
+                gcalEvent.EndDatetime,
+                gcalEvent.IsAllDay
+            })
+            .FirstAsync(ct);
+
+        var from = DateOnly.FromDateTime(NormalizeUtc(earliestEvent.Start.Value).Date);
+        var to = GetInclusiveEndDate(latestEvent.Start!.Value, latestEvent.EndDatetime, latestEvent.IsAllDay);
+        return (from, to);
+    }
+
+    private static DateOnly GetInclusiveEndDate(DateTime startUtc, DateTime? endUtc, bool? isAllDay)
+    {
+        var normalizedStartUtc = NormalizeUtc(startUtc);
+        var normalizedEndUtc = NormalizeUtc(endUtc ?? startUtc);
+        var endDate = DateOnly.FromDateTime(normalizedEndUtc.Date);
+
+        if (isAllDay == true && normalizedEndUtc > normalizedStartUtc)
+        {
+            return endDate.AddDays(-1);
+        }
+
+        return endDate;
+    }
+
+    private static DateTime NormalizeUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+    }
 }

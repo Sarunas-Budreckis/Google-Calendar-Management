@@ -6,5 +6,7 @@ public interface IWindowService
 {
     void SetWindow(Window window);
 
+    Window? GetWindow();
+
     XamlRoot? GetXamlRoot();
 }

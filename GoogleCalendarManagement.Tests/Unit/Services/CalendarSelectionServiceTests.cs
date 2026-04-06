@@ -5,6 +5,7 @@ using GoogleCalendarManagement.Services;
 
 namespace GoogleCalendarManagement.Tests.Unit.Services;
 
+[Collection("Messenger")]
 public sealed class CalendarSelectionServiceTests : IDisposable
 {
     private readonly List<object> _recipients = [];

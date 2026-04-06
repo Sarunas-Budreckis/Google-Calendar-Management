@@ -1,6 +1,7 @@
 using FluentAssertions;
 using GoogleCalendarManagement.Data;
 using GoogleCalendarManagement.Data.Entities;
+using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -87,6 +88,39 @@ public sealed class CalendarQueryServiceTests : IDisposable
         events.Should().ContainSingle();
         events[0].Title.Should().BeEmpty();
         events[0].ColorHex.Should().Be("#0088CC");
+    }
+
+    [Fact]
+    public async Task GetEventsForRangeAsync_DeletedAllDayEvent_DoesNotCreateYearViewBars()
+    {
+        var date = new DateOnly(2026, 01, 18);
+
+        await using (var context = await _contextFactory.CreateDbContextAsync())
+        {
+            context.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "deleted-all-day",
+                CalendarId = "primary",
+                Summary = "Deleted All Day",
+                StartDatetime = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                EndDatetime = date.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                IsAllDay = true,
+                IsDeleted = true,
+                CreatedAt = new DateTime(2026, 01, 18, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 18, 8, 0, 0, DateTimeKind.Utc)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var repository = new GcalEventRepository(_contextFactory);
+        var service = new CalendarQueryService(repository, new ColorMappingService());
+
+        var events = await service.GetEventsForRangeAsync(date, date);
+        var projection = YearViewDayProjectionBuilder.Build([date], events, new Dictionary<DateOnly, SyncStatus>());
+
+        events.Should().BeEmpty();
+        projection.DayLookup[date].SingleDayAllDayBar.HasContent.Should().BeFalse();
+        projection.DayLookup[date].MultiDayAllDayBar.HasContent.Should().BeFalse();
     }
 
     public void Dispose()

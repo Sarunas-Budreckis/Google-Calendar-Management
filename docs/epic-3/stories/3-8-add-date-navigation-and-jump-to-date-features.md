@@ -1,6 +1,6 @@
 # Story 3.8: Add Date Navigation and Jump-to-Date Features
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -42,45 +42,45 @@ so that **I can move through time quickly without guessing which keys work or ac
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Keep the existing 3.1 navigation plumbing and extend it instead of replacing it** (AC: 3.8.1, 3.8.6)
-  - [ ] Reuse [ViewModels/MainViewModel.cs](../../../ViewModels/MainViewModel.cs) commands: `NavigatePreviousCommand`, `NavigateNextCommand`, `NavigateTodayCommand`, `JumpToDateCommand`, and `SwitchViewModeCommand`
-  - [ ] Reuse the existing persisted-navigation path in [Services/NavigationStateService.cs](../../../Services/NavigationStateService.cs)
-  - [ ] Do not create a second navigation state machine in code-behind
+- [x] **Task 1: Keep the existing 3.1 navigation plumbing and extend it instead of replacing it** (AC: 3.8.1, 3.8.6)
+  - [x] Reuse [ViewModels/MainViewModel.cs](../../../ViewModels/MainViewModel.cs) commands: `NavigatePreviousCommand`, `NavigateNextCommand`, `NavigateTodayCommand`, `JumpToDateCommand`, and `SwitchViewModeCommand`
+  - [x] Reuse the existing persisted-navigation path in [Services/NavigationStateService.cs](../../../Services/NavigationStateService.cs)
+  - [x] Do not create a second navigation state machine in code-behind
 
-- [ ] **Task 2: Add shell-level Left/Right keyboard accelerators** (AC: 3.8.2, 3.8.7)
-  - [ ] Update [Views/MainPage.xaml.cs](../../../Views/MainPage.xaml.cs) so `VirtualKey.Left` triggers previous navigation and `VirtualKey.Right` triggers next navigation
-  - [ ] Guard those accelerators so they do not fire when focus is inside:
-    - [ ] a text-entry or editable field
-    - [ ] an open `CalendarDatePicker`
-    - [ ] any future details-panel edit control that should own the arrow keys
-  - [ ] Preserve the existing P/K/N/J shortcuts unless there is a compelling conflict discovered during implementation
+- [x] **Task 2: Add shell-level Left/Right keyboard accelerators** (AC: 3.8.2, 3.8.7)
+  - [x] Update [Views/MainPage.xaml.cs](../../../Views/MainPage.xaml.cs) so `VirtualKey.Left` triggers previous navigation and `VirtualKey.Right` triggers next navigation
+  - [x] Guard those accelerators so they do not fire when focus is inside:
+    - [x] a text-entry or editable field
+    - [x] an open `CalendarDatePicker`
+    - [x] any future details-panel edit control that should own the arrow keys
+  - [x] Preserve the existing P/K/N/J shortcuts unless there is a compelling conflict discovered during implementation
 
-- [ ] **Task 3: Make shortcut hints discoverable in the UI** (AC: 3.8.3, 3.8.4)
-  - [ ] Add tooltip text or equivalent hints to the existing controls in [Views/MainPage.xaml](../../../Views/MainPage.xaml):
-    - [ ] Previous: include `Left`
-    - [ ] Next: include `Right`
-    - [ ] Today: include `T`
-    - [ ] Jump to date: include `G`
-    - [ ] Year/Month/Week/Day buttons: include `1-4` and/or `Y/M/W/D`
-  - [ ] Ensure tooltip content stays consistent with the actual registered shortcuts in code
-  - [ ] Add `AutomationProperties.Name` updates if needed so keyboard hints are not only mouse-hover discoverable
+- [x] **Task 3: Make shortcut hints discoverable in the UI** (AC: 3.8.3, 3.8.4)
+  - [x] Add tooltip text or equivalent hints to the existing controls in [Views/MainPage.xaml](../../../Views/MainPage.xaml):
+    - [x] Previous: include `Left`
+    - [x] Next: include `Right`
+    - [x] Today: include `T`
+    - [x] Jump to date: include `G`
+    - [x] Year/Month/Week/Day buttons: include `1-4` and/or `Y/M/W/D`
+  - [x] Ensure tooltip content stays consistent with the actual registered shortcuts in code
+  - [x] Add `AutomationProperties.Name` updates if needed so keyboard hints are not only mouse-hover discoverable
 
-- [ ] **Task 4: Polish jump-to-date behavior without reintroducing duplicate refreshes** (AC: 3.8.5, 3.8.6, 3.8.7)
-  - [ ] Reuse the existing `_isUpdatingPicker` guard in [Views/MainPage.xaml.cs](../../../Views/MainPage.xaml.cs)
-  - [ ] Verify that keyboard-open (`G`) and pointer-open behavior both land on the same single navigation path
-  - [ ] If needed, refine focus return after close/selection so the shell remains keyboard-usable after jump-to-date interaction
+- [x] **Task 4: Polish jump-to-date behavior without reintroducing duplicate refreshes** (AC: 3.8.5, 3.8.6, 3.8.7)
+  - [x] Reuse the existing `_isUpdatingPicker` guard in [Views/MainPage.xaml.cs](../../../Views/MainPage.xaml.cs)
+  - [x] Verify that keyboard-open (`G`) and pointer-open behavior both land on the same single navigation path
+  - [x] If needed, refine focus return after close/selection so the shell remains keyboard-usable after jump-to-date interaction
 
-- [ ] **Task 5: Add targeted automated coverage for navigation behavior** (AC: 3.8.1-3.8.6)
-  - [ ] Extend [GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs](../../../GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs) to cover:
-    - [ ] `NavigateNextCommand` in Year, Week, and Day views
-    - [ ] breadcrumb formatting remains correct after navigation
-    - [ ] Today navigation preserves active view while changing date
-  - [ ] Extend [GoogleCalendarManagement.Tests/Unit/Services/NavigationStateServiceTests.cs](../../../GoogleCalendarManagement.Tests/Unit/Services/NavigationStateServiceTests.cs) or [GoogleCalendarManagement.Tests/Integration/NavigationStateRoundTripTests.cs](../../../GoogleCalendarManagement.Tests/Integration/NavigationStateRoundTripTests.cs) if any navigation-persistence edge case changes are made
-  - [ ] Manual verification:
-    - [ ] `Left` / `Right` navigate correctly in all four views
-    - [ ] `G` opens jump-to-date
-    - [ ] selecting a date triggers one navigation only
-    - [ ] tooltip shortcut hints match actual behavior
+- [x] **Task 5: Add targeted automated coverage for navigation behavior** (AC: 3.8.1-3.8.6)
+  - [x] Extend [GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs](../../../GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs) to cover:
+    - [x] `NavigateNextCommand` in Year, Week, and Day views
+    - [x] breadcrumb formatting remains correct after navigation
+    - [x] Today navigation preserves active view while changing date
+  - [x] Extend [GoogleCalendarManagement.Tests/Unit/Services/NavigationStateServiceTests.cs](../../../GoogleCalendarManagement.Tests/Unit/Services/NavigationStateServiceTests.cs) or [GoogleCalendarManagement.Tests/Integration/NavigationStateRoundTripTests.cs](../../../GoogleCalendarManagement.Tests/Integration/NavigationStateRoundTripTests.cs) if any navigation-persistence edge case changes are made
+  - [x] Manual verification:
+    - [x] `Left` / `Right` navigate correctly in all four views
+    - [x] `G` opens jump-to-date
+    - [x] selecting a date triggers one navigation only
+    - [x] tooltip shortcut hints match actual behavior
 
 ## Dev Notes
 
@@ -239,14 +239,28 @@ GPT-5 (Codex)
 ### Debug Log References
 
 - 2026-03-31: Story context generated from the Epic 3 planning artifacts, current `MainViewModel` / `MainPage` implementation, existing navigation tests, and current official Microsoft keyboard/calendar control docs.
+- 2026-04-05: Added focus-safe shell arrow-key guards, shortcut-hint tooltips/accessibility names, and targeted `MainViewModel` navigation tests.
+- 2026-04-05: `dotnet build GoogleCalendarManagement.csproj -p:Platform=x64 --no-restore` succeeded.
+- 2026-04-05: `dotnet test GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj --no-restore` passed (`158/158`).
+- 2026-04-05: User confirmed manual UI verification is complete for shell arrows, jump-to-date, and shortcut hint parity.
 
 ### Completion Notes List
 
 - Reframed 3.8 around the actual repo state: baseline navigation is already implemented in 3.1, so this story closes the remaining UX and shortcut gaps.
 - Preserved the existing `_isUpdatingPicker` and refresh-cancellation design as non-negotiable guardrails.
 - Added focus-safety constraints so shell-level arrow shortcuts do not break future text-editing and date-picker interactions.
+- Added tooltip discoverability and `AutomationProperties.Name` metadata for the top-bar navigation and view-mode controls.
+- Extended the existing navigation unit suite for `NavigateNextCommand` coverage and Today-view preservation without changing the persistence implementation.
+- User confirmed manual verification for arrow-key behavior, jump-to-date single-fire behavior, and tooltip/shortcut parity. Story is ready for review.
 
 ### File List
 
 - `docs/epic-3/stories/3-8-add-date-navigation-and-jump-to-date-features.md`
 - `docs/epic-3/stories/3-8-add-date-navigation-and-jump-to-date-features.context.xml`
+- `Views/MainPage.xaml`
+- `Views/MainPage.xaml.cs`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs`
+
+### Change Log
+
+- 2026-04-05: Implemented the remaining Story 3.8 navigation polish items confirmed by the user: focus-safe Left/Right shell navigation, shortcut discoverability in the UI, targeted automated coverage, and completed manual verification. Story moved to review.

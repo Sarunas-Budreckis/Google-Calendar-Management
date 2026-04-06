@@ -1,6 +1,6 @@
 # Story 3.12: Import Events from ICS File
 
-Status: drafted
+Status: review
 
 ## Story
 
@@ -149,54 +149,77 @@ Add `IIcsImportService` / `IcsImportService` to `Services/`. Register as transie
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Add `IcsParser` static utility** (AC: 3.12.3, 3.12.5)
-  - [ ] Parse `VEVENT` blocks; extract `UID`, `SUMMARY`, `DESCRIPTION`, `DTSTART`, `DTEND`
-  - [ ] Handle `DATE` vs `DATETIME`, `TZID`, `Z` suffix, line unfolding, text unescaping
-  - [ ] Skip `RRULE` events (count as skipped-recurring)
-  - [ ] Skip events with missing required fields (count as invalid)
+- [x] **Task 1: Add `IcsParser` static utility** (AC: 3.12.3, 3.12.5)
+  - [x] Parse `VEVENT` blocks; extract `UID`, `SUMMARY`, `DESCRIPTION`, `DTSTART`, `DTEND`
+  - [x] Handle `DATE` vs `DATETIME`, `TZID`, `Z` suffix, line unfolding, text unescaping
+  - [x] Skip `RRULE` events (count as skipped-recurring)
+  - [x] Skip events with missing required fields (count as invalid)
 
-- [ ] **Task 2: Add `IIcsImportService` and implementation** (AC: 3.12.4, 3.12.5, 3.12.6, 3.12.9)
-  - [ ] `Task<ImportResult> ImportFromFileAsync(StorageFile file, CancellationToken ct = default)`
-  - [ ] Parse ICS, upsert to `gcal_event`, write version history on updates, return summary counts
+- [x] **Task 2: Add `IIcsImportService` and implementation** (AC: 3.12.4, 3.12.5, 3.12.6, 3.12.9)
+  - [x] `Task<ImportResult> ImportFromFileAsync(StorageFile file, CancellationToken ct = default)`
+  - [x] Parse ICS, upsert to `gcal_event`, write version history on updates, return summary counts
 
-- [ ] **Task 3: Add import trigger and file picker to `MainPage`** (AC: 3.12.1, 3.12.2)
-  - [ ] Add "Import from ICS…" to the same menu/overflow as Export
-  - [ ] Open Windows file open picker filtered to `.ics`
+- [x] **Task 3: Add import trigger and file picker to `MainPage`** (AC: 3.12.1, 3.12.2)
+  - [x] Add "Import from ICS…" to the same menu/overflow as Export
+  - [x] Open Windows file open picker filtered to `.ics`
 
-- [ ] **Task 4: Show import summary notification** (AC: 3.12.7, 3.12.8)
-  - [ ] "Imported N events (X new, Y updated, Z skipped)" on success
-  - [ ] Error message on unreadable/invalid file
+- [x] **Task 4: Show import summary notification** (AC: 3.12.7, 3.12.8)
+  - [x] "Imported N events (X new, Y updated, Z skipped)" on success
+  - [x] Error message on unreadable/invalid file
 
-- [ ] **Task 5: Refresh calendar view after import** (AC: 3.12.7)
-  - [ ] Trigger visible-range refresh via existing message infrastructure
+- [x] **Task 5: Refresh calendar view after import** (AC: 3.12.7)
+  - [x] Trigger visible-range refresh via existing message infrastructure
 
-- [ ] **Task 6: Register `IcsImportService` in DI**
-  - [ ] `services.AddTransient<IIcsImportService, IcsImportService>()` in `App.xaml.cs`
+- [x] **Task 6: Register `IcsImportService` in DI**
+  - [x] `services.AddTransient<IIcsImportService, IcsImportService>()` in `App.xaml.cs`
 
-- [ ] **Task 7: Unit and integration tests** (AC: 3.12.3, 3.12.5, 3.12.6, 3.12.8, 3.12.9)
-  - [ ] Parser tests: timed, all-day, RRULE skip, invalid fields, line unfolding
-  - [ ] Upsert tests: new insert, existing update with version history
-  - [ ] Invalid file test: no database changes on parse failure
+- [x] **Task 7: Unit and integration tests** (AC: 3.12.3, 3.12.5, 3.12.6, 3.12.8, 3.12.9)
+  - [x] Parser tests: timed, all-day, RRULE skip, invalid fields, line unfolding
+  - [x] Upsert tests: new insert, existing update with version history
+  - [x] Invalid file test: no database changes on parse failure
 
-- [ ] **Task 8: Build verification**
-  - [ ] `dotnet build -p:Platform=x64`
-  - [ ] `dotnet test GoogleCalendarManagement.Tests/`
-  - [ ] Manual: export then re-import → verify summary counts and no data loss
+- [x] **Task 8: Build verification**
+  - [x] `dotnet build -p:Platform=x64`
+  - [x] `dotnet test GoogleCalendarManagement.Tests/`
+  - [x] Manual: export then re-import → verify summary counts and no data loss
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-<!-- to be filled by dev agent -->
+GPT-5 Codex
 
 ### Debug Log References
 
-<!-- to be filled by dev agent -->
+- `dotnet test .\GoogleCalendarManagement.Tests\GoogleCalendarManagement.Tests.csproj -p:Platform=x64 --filter "FullyQualifiedName~IcsParserTests|FullyQualifiedName~IcsImportServiceTests|FullyQualifiedName~MainViewModelTests"`
+- `dotnet build -p:Platform=x64`
+- `dotnet test .\GoogleCalendarManagement.Tests\GoogleCalendarManagement.Tests.csproj -p:Platform=x64`
 
 ### Completion Notes List
 
-<!-- to be filled by dev agent -->
+- Added `IcsParser` with RFC 5545 line unfolding, text unescaping, `DATE`/`DATETIME` parsing, `TZID` handling, invalid-event counting, and RRULE skipping.
+- Added `IIcsImportService` / `IcsImportService` to read `.ics` files, upsert `gcal_event` rows by UID, snapshot version history on updates, and preserve non-imported fields on update.
+- Added the MainPage import action beside export, wired the Windows file open picker, and reused `SyncCompletedMessage` plus the existing InfoBar notification path to refresh the visible range after import.
+- Added parser, integration, and ViewModel coverage for import flows; also isolated messenger-based unit tests into a non-parallel collection to prevent cross-test interference in the full suite.
+- Automated validation passed, and manual export-then-reimport verification was completed successfully with no observed data loss.
 
 ### File List
 
-<!-- to be filled by dev agent -->
+- App.xaml.cs
+- Services/IIcsImportService.cs
+- Services/ImportResult.cs
+- Services/IcsImportService.cs
+- Services/IcsParser.cs
+- ViewModels/MainViewModel.cs
+- Views/MainPage.xaml
+- Views/MainPage.xaml.cs
+- GoogleCalendarManagement.Tests/Integration/IcsImportServiceTests.cs
+- GoogleCalendarManagement.Tests/Unit/MessengerTestCollection.cs
+- GoogleCalendarManagement.Tests/Unit/Services/CalendarSelectionServiceTests.cs
+- GoogleCalendarManagement.Tests/Unit/Services/IcsParserTests.cs
+- GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs
+- GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs
+
+### Change Log
+
+- 2026-04-05: Implemented ICS import parsing, upsert/version-history persistence, UI trigger/notification wiring, and automated plus manual verification. Story is ready for review.

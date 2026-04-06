@@ -6,6 +6,8 @@ using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml.Controls;
+using Windows.Storage;
 
 namespace GoogleCalendarManagement.ViewModels;
 
@@ -16,6 +18,8 @@ public sealed class MainViewModel : ObservableObject
     private readonly ISyncStatusService _syncStatusService;
     private readonly ISyncManager _syncManager;
     private readonly IContentDialogService _dialogService;
+    private readonly IIcsExportService _icsExportService;
+    private readonly IIcsImportService _icsImportService;
     private readonly ILogger<MainViewModel> _logger;
     private readonly TimeProvider _timeProvider;
     private Task? _initializationTask;
@@ -31,7 +35,12 @@ public sealed class MainViewModel : ObservableObject
     private DateTimeOffset _selectedSyncToDate;
     private string _syncValidationText = string.Empty;
     private bool _isSyncing;
+    private bool _isExporting;
+    private bool _isImporting;
     private int _syncFlyoutOpenRequestId;
+    private string _notificationMessage = string.Empty;
+    private InfoBarSeverity _notificationSeverity = InfoBarSeverity.Informational;
+    private bool _isNotificationOpen;
 
     public MainViewModel(
         ICalendarQueryService calendarQueryService,
@@ -39,6 +48,8 @@ public sealed class MainViewModel : ObservableObject
         ISyncStatusService syncStatusService,
         ISyncManager syncManager,
         IContentDialogService dialogService,
+        IIcsExportService icsExportService,
+        IIcsImportService icsImportService,
         ILogger<MainViewModel> logger,
         TimeProvider? timeProvider = null)
     {
@@ -47,6 +58,8 @@ public sealed class MainViewModel : ObservableObject
         _syncStatusService = syncStatusService;
         _syncManager = syncManager;
         _dialogService = dialogService;
+        _icsExportService = icsExportService;
+        _icsImportService = icsImportService;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -187,6 +200,36 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _syncFlyoutOpenRequestId, value);
     }
 
+    public bool IsExporting
+    {
+        get => _isExporting;
+        private set => SetProperty(ref _isExporting, value);
+    }
+
+    public bool IsImporting
+    {
+        get => _isImporting;
+        private set => SetProperty(ref _isImporting, value);
+    }
+
+    public string NotificationMessage
+    {
+        get => _notificationMessage;
+        private set => SetProperty(ref _notificationMessage, value);
+    }
+
+    public InfoBarSeverity NotificationSeverity
+    {
+        get => _notificationSeverity;
+        private set => SetProperty(ref _notificationSeverity, value);
+    }
+
+    public bool IsNotificationOpen
+    {
+        get => _isNotificationOpen;
+        private set => SetProperty(ref _isNotificationOpen, value);
+    }
+
     public IAsyncRelayCommand<ViewMode> SwitchViewModeCommand { get; }
 
     public IAsyncRelayCommand NavigatePreviousCommand { get; }
@@ -202,6 +245,17 @@ public sealed class MainViewModel : ObservableObject
     public Task InitializeAsync()
     {
         return _initializationTask ??= InitializeCoreAsync();
+    }
+
+    public (DateOnly From, DateOnly To) GetVisibleDateRange()
+    {
+        return GetDateRange(CurrentViewMode, CurrentDate);
+    }
+
+    public async Task<(DateOnly From, DateOnly To)> GetExportDateRangeDefaultsAsync(CancellationToken ct = default)
+    {
+        var storedRange = await _icsExportService.GetStoredEventRangeAsync(ct);
+        return storedRange ?? GetVisibleDateRange();
     }
 
     /// <summary>Navigates to a specific date and view mode in a single operation, triggering only one data refresh.</summary>
@@ -232,6 +286,11 @@ public sealed class MainViewModel : ObservableObject
     public void RefreshRelativeSyncPresentation()
     {
         OnPropertyChanged(nameof(LastSyncLabel));
+    }
+
+    public void DismissNotification()
+    {
+        IsNotificationOpen = false;
     }
 
     public async Task ConfirmSyncAsync()
@@ -279,6 +338,98 @@ public sealed class MainViewModel : ObservableObject
         finally
         {
             IsSyncing = false;
+        }
+    }
+
+    public async Task ExportToIcsAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        if (IsExporting)
+        {
+            return;
+        }
+
+        IsExporting = true;
+
+        try
+        {
+            var result = await _icsExportService.ExportToFileAsync(from, to, ct);
+            if (result.WasCancelled)
+            {
+                return;
+            }
+
+            if (result.Success)
+            {
+                if (result.ExportedEventCount == 0)
+                {
+                    ShowNotification("No events were found in the selected range. No file was written.", InfoBarSeverity.Informational);
+                }
+                else
+                {
+                    ShowNotification($"Exported {result.ExportedEventCount} events to {result.FileName}.", InfoBarSeverity.Success);
+                }
+
+                return;
+            }
+
+            ShowNotification(
+                result.ErrorMessage ?? "Unable to export the ICS file. Check the log for details and try again.",
+                InfoBarSeverity.Error);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while exporting calendar events to ICS.");
+            ShowNotification(
+                "Unable to export the ICS file. Check the log for details and try again.",
+                InfoBarSeverity.Error);
+        }
+        finally
+        {
+            IsExporting = false;
+        }
+    }
+
+    public async Task ImportFromIcsAsync(StorageFile file, CancellationToken ct = default)
+    {
+        if (IsImporting)
+        {
+            return;
+        }
+
+        IsImporting = true;
+
+        try
+        {
+            var result = await _icsImportService.ImportFromFileAsync(file, ct);
+            if (result.Success)
+            {
+                var notificationMessage =
+                    $"Imported {result.ImportedEventCount} events ({result.NewEventCount} new, {result.UpdatedEventCount} updated, {result.SkippedEventCount} skipped as invalid).";
+
+                if (result.SkippedRecurringEventCount > 0)
+                {
+                    notificationMessage += $" {result.SkippedRecurringEventCount} recurring event(s) were skipped because recurrence import is not supported.";
+                }
+
+                ShowNotification(notificationMessage, InfoBarSeverity.Success);
+                WeakReferenceMessenger.Default.Send(new SyncCompletedMessage());
+                return;
+            }
+
+            ShowNotification(
+                result.ErrorMessage ?? "Unable to import the ICS file. Check the log for details and try again.",
+                InfoBarSeverity.Error);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while importing calendar events from ICS.");
+            ShowNotification(
+                "Unable to import the ICS file. Check the log for details and try again.",
+                InfoBarSeverity.Error);
+        }
+        finally
+        {
+            IsImporting = false;
         }
     }
 
@@ -415,6 +566,14 @@ public sealed class MainViewModel : ObservableObject
     {
         SelectedSyncFromDate = ToLocalDateOffset(from);
         SelectedSyncToDate = ToLocalDateOffset(to);
+    }
+
+    private void ShowNotification(string message, InfoBarSeverity severity)
+    {
+        IsNotificationOpen = false;
+        NotificationMessage = message;
+        NotificationSeverity = severity;
+        IsNotificationOpen = true;
     }
 
     private (DateOnly From, DateOnly To) GetDefaultSyncRange()

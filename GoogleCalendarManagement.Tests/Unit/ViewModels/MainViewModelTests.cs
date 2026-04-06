@@ -7,9 +7,11 @@ using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Windows.Storage;
 
 namespace GoogleCalendarManagement.Tests.Unit.ViewModels;
 
+[Collection("Messenger")]
 public sealed class MainViewModelTests : IDisposable
 {
     public MainViewModelTests()
@@ -273,6 +275,50 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task GetExportDateRangeDefaultsAsync_UsesStoredEventBoundsWhenAvailable()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var exportService = new Mock<IIcsExportService>();
+        exportService
+            .Setup(service => service.GetStoredEventRangeAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((new DateOnly(2026, 02, 10), new DateOnly(2026, 08, 22)));
+
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            exportService: exportService.Object);
+
+        await viewModel.InitializeAsync();
+        var range = await viewModel.GetExportDateRangeDefaultsAsync();
+
+        range.Should().Be((new DateOnly(2026, 02, 10), new DateOnly(2026, 08, 22)));
+    }
+
+    [Fact]
+    public async Task GetExportDateRangeDefaultsAsync_FallsBackToVisibleRangeWhenNoStoredEventsExist()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Week, new DateOnly(2026, 04, 09)));
+        var exportService = new Mock<IIcsExportService>();
+        exportService
+            .Setup(service => service.GetStoredEventRangeAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(((DateOnly From, DateOnly To)?)null);
+
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            exportService: exportService.Object);
+
+        await viewModel.InitializeAsync();
+        var range = await viewModel.GetExportDateRangeDefaultsAsync();
+
+        range.Should().Be((new DateOnly(2026, 04, 06), new DateOnly(2026, 04, 12)));
+    }
+
+    [Fact]
     public async Task SelectedSyncDates_InvalidRange_ShowsValidationAndDisablesConfirm()
     {
         var queryService = new RecordingCalendarQueryService();
@@ -353,6 +399,75 @@ public sealed class MainViewModelTests : IDisposable
         queryService.CallCount.Should().BeGreaterThanOrEqualTo(2);
     }
 
+    [Fact]
+    public async Task ImportFromIcsAsync_Success_ShowsSummaryNotification_AndRefreshesVisibleRange()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var importService = new Mock<IIcsImportService>();
+        importService
+            .Setup(service => service.ImportFromFileAsync(It.IsAny<StorageFile>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ImportResult(
+                Success: true,
+                ImportedEventCount: 3,
+                NewEventCount: 2,
+                UpdatedEventCount: 1,
+                SkippedInvalidEventCount: 1,
+                SkippedRecurringEventCount: 0,
+                ErrorMessage: null));
+
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            importService: importService.Object);
+
+        await viewModel.InitializeAsync();
+        var file = await CreateTempStorageFileAsync("import-success.ics");
+
+        await viewModel.ImportFromIcsAsync(file);
+        await queryService.WaitForCallsAsync(2);
+
+        viewModel.NotificationSeverity.Should().Be(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success);
+        viewModel.NotificationMessage.Should().Be("Imported 3 events (2 new, 1 updated, 1 skipped as invalid).");
+        viewModel.IsNotificationOpen.Should().BeTrue();
+        queryService.CallCount.Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task ImportFromIcsAsync_Failure_ShowsErrorNotification_WithoutRefresh()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var importService = new Mock<IIcsImportService>();
+        importService
+            .Setup(service => service.ImportFromFileAsync(It.IsAny<StorageFile>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ImportResult(
+                Success: false,
+                ImportedEventCount: 0,
+                NewEventCount: 0,
+                UpdatedEventCount: 0,
+                SkippedInvalidEventCount: 0,
+                SkippedRecurringEventCount: 0,
+                ErrorMessage: "The selected file is not a valid ICS calendar."));
+
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            importService: importService.Object);
+
+        await viewModel.InitializeAsync();
+        var initialCallCount = queryService.CallCount;
+        var file = await CreateTempStorageFileAsync("import-failure.ics");
+
+        await viewModel.ImportFromIcsAsync(file);
+
+        viewModel.NotificationSeverity.Should().Be(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Error);
+        viewModel.NotificationMessage.Should().Be("The selected file is not a valid ICS calendar.");
+        queryService.CallCount.Should().Be(initialCallCount);
+    }
+
     public void Dispose()
     {
         WeakReferenceMessenger.Default.Reset();
@@ -364,6 +479,8 @@ public sealed class MainViewModelTests : IDisposable
         StubSyncStatusService? syncStatusService = null,
         ISyncManager? syncManager = null,
         IContentDialogService? dialogService = null,
+        IIcsExportService? exportService = null,
+        IIcsImportService? importService = null,
         TimeProvider? timeProvider = null)
     {
         return new MainViewModel(
@@ -372,8 +489,19 @@ public sealed class MainViewModelTests : IDisposable
             syncStatusService ?? new StubSyncStatusService(),
             syncManager ?? Mock.Of<ISyncManager>(),
             dialogService ?? Mock.Of<IContentDialogService>(),
+            exportService ?? Mock.Of<IIcsExportService>(),
+            importService ?? Mock.Of<IIcsImportService>(),
             NullLogger<MainViewModel>.Instance,
             timeProvider ?? new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 0, 0, TimeSpan.Zero)));
+    }
+
+    private static async Task<StorageFile> CreateTempStorageFileAsync(string fileName)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "gcm-mainvm-tests");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, fileName);
+        await File.WriteAllTextAsync(path, "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n");
+        return await StorageFile.GetFileFromPathAsync(path);
     }
 
     private sealed class StubSyncStatusService : ISyncStatusService

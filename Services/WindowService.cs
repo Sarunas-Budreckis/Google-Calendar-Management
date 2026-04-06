@@ -11,6 +11,11 @@ public sealed class WindowService : IWindowService
         _window = window;
     }
 
+    public Window? GetWindow()
+    {
+        return _window;
+    }
+
     public XamlRoot? GetXamlRoot()
     {
         return _window?.Content?.XamlRoot;

@@ -1,6 +1,6 @@
 # Story 3.11: Export Events to ICS File
 
-Status: drafted
+Status: review
 
 ## Story
 
@@ -144,50 +144,87 @@ Wrap file write in try/catch. On exception:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Add `IcsExporter` static utility** (AC: 3.11.4, 3.11.5, 3.11.8)
-  - [ ] Create `Services/IcsExporter.cs` with `GenerateIcs(IEnumerable<GcalEvent> events)` method
-  - [ ] Handle timed events (UTC `Z` suffix), all-day events (`DATE` format), null description, ICS text escaping
+- [x] **Task 1: Add `IcsExporter` static utility** (AC: 3.11.4, 3.11.5, 3.11.8)
+  - [x] Create `Services/IcsExporter.cs` with `GenerateIcs(IEnumerable<GcalEvent> events)` method
+  - [x] Handle timed events (UTC `Z` suffix), all-day events (`DATE` format), null description, ICS text escaping
 
-- [ ] **Task 2: Add `IIcsExportService` and implementation** (AC: 3.11.2, 3.11.4, 3.11.6, 3.11.7)
-  - [ ] `Task<ExportResult> ExportToFileAsync(DateOnly from, DateOnly to, CancellationToken ct = default)`
-  - [ ] Query `IGcalEventRepository` for date range, call `IcsExporter`, write to file
-  - [ ] Return count and filename; handle and surface errors
+- [x] **Task 2: Add `IIcsExportService` and implementation** (AC: 3.11.2, 3.11.4, 3.11.6, 3.11.7)
+  - [x] `Task<ExportResult> ExportToFileAsync(DateOnly from, DateOnly to, CancellationToken ct = default)`
+  - [x] Query `IGcalEventRepository` for date range, call `IcsExporter`, write to file
+  - [x] Return count and filename; handle and surface errors
 
-- [ ] **Task 3: Add export date range dialog and file picker to `MainPage`** (AC: 3.11.1, 3.11.2, 3.11.3)
-  - [ ] Add "Export to ICS…" menu item or toolbar overflow item
-  - [ ] Open date range `ContentDialog` pre-filled with visible range
-  - [ ] Invoke Windows `FileSavePicker` on confirm
+- [x] **Task 3: Add export date range dialog and file picker to `MainPage`** (AC: 3.11.1, 3.11.2, 3.11.3)
+  - [x] Add "Export to ICS…" menu item or toolbar overflow item
+  - [x] Open date range `ContentDialog` pre-filled with visible range
+  - [x] Invoke Windows `FileSavePicker` on confirm
 
-- [ ] **Task 4: Show success/error notification** (AC: 3.11.6, 3.11.7)
-  - [ ] Reuse existing notification pattern in `MainViewModel` / `MainPage`
-  - [ ] "Exported N events to filename" on success; error message on failure; "No events found" if count = 0
+- [x] **Task 4: Show success/error notification** (AC: 3.11.6, 3.11.7)
+  - [x] Reuse existing notification pattern in `MainViewModel` / `MainPage`
+  - [x] "Exported N events to filename" on success; error message on failure; "No events found" if count = 0
 
-- [ ] **Task 5: Register `IcsExportService` in DI** (AC: all)
-  - [ ] Add `services.AddTransient<IIcsExportService, IcsExportService>()` in `App.xaml.cs`
+- [x] **Task 5: Register `IcsExportService` in DI** (AC: all)
+  - [x] Add `services.AddTransient<IIcsExportService, IcsExportService>()` in `App.xaml.cs`
 
-- [ ] **Task 6: Unit and integration tests** (AC: 3.11.4, 3.11.5, 3.11.8)
-  - [ ] `Unit/Services/IcsExporterTests.cs` — timed, all-day, escaping, null description
-  - [ ] Integration test: export range, verify file content
+- [x] **Task 6: Unit and integration tests** (AC: 3.11.4, 3.11.5, 3.11.8)
+  - [x] `Unit/Services/IcsExporterTests.cs` — timed, all-day, escaping, null description
+  - [x] Integration test: export range, verify file content
 
 - [ ] **Task 7: Build verification**
-  - [ ] `dotnet build -p:Platform=x64`
-  - [ ] `dotnet test GoogleCalendarManagement.Tests/`
-  - [ ] Manual: export visible range → open file in text editor → verify VEVENT blocks match events
+  - [x] `dotnet build -p:Platform=x64`
+  - [x] `dotnet test GoogleCalendarManagement.Tests/`
+  - [x] Manual: export visible range → open file in text editor → verify VEVENT blocks match events
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-<!-- to be filled by dev agent -->
+GPT-5
 
 ### Debug Log References
 
-<!-- to be filled by dev agent -->
+- `dotnet build -p:Platform=x64`
+- `dotnet test GoogleCalendarManagement.Tests/`
+- `dotnet build -p:Platform=x64` (after switching `More` to an explicit dropdown and changing export defaults to stored-event bounds)
+- `dotnet test GoogleCalendarManagement.Tests/`
+- Manual verification completed by user confirmation on 2026-04-05
 
 ### Completion Notes List
 
-<!-- to be filled by dev agent -->
+- Added a direct RFC 5545 ICS generator plus an export service that filters intersecting non-deleted `gcal_event` rows, writes via a temp-file swap, and returns cancel/success/error metadata.
+- Added a shell overflow action on `MainPage`, a date-range `ContentDialog` prefilled from the visible view, and a WinUI file-save picker path with the required default filename and `.ics` filter.
+- Added non-blocking export notifications in the main shell for success, empty-range, and failure cases.
+- Added targeted unit tests for ICS formatting/escaping and integration tests for range filtering, picker cancellation, and final file content.
+- `dotnet build -p:Platform=x64` and `dotnet test GoogleCalendarManagement.Tests/` passed locally.
+- Manual UI verification is still pending; Task 7 remains open until the export flow is exercised in the running app.
+- Switched the `More` action to an explicit `DropDownButton` so the shell action is presented as a dropdown menu rather than a plain button with an attached flyout.
+- Changed export date defaults to use the earliest stored non-deleted event start and latest stored event end (inclusive for all-day events), with the visible range retained only as the fallback when no events exist.
+- Added coverage for the stored export-range lookup and the view-model fallback path; full suite now passes at 181 tests total.
+- Manual export verification is complete; the story is ready for review.
 
 ### File List
 
-<!-- to be filled by dev agent -->
+- App.xaml.cs
+- Services/IWindowService.cs
+- Services/WindowService.cs
+- Services/ExportResult.cs
+- Services/IIcsExportService.cs
+- Services/IIcsFileSavePickerService.cs
+- Services/IcsExportService.cs
+- Services/IcsExporter.cs
+- Services/IcsFileSavePickerService.cs
+- Services/IGcalEventRepository.cs
+- Services/GcalEventRepository.cs
+- ViewModels/MainViewModel.cs
+- Views/MainPage.xaml
+- Views/MainPage.xaml.cs
+- GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs
+- GoogleCalendarManagement.Tests/Unit/Services/IcsExporterTests.cs
+- GoogleCalendarManagement.Tests/Integration/IcsExportServiceTests.cs
+- docs/epic-3/stories/3-11-export-events-to-ics.md
+- docs/sprint-status.yaml
+
+### Change Log
+
+- 2026-04-05: Implemented the ICS export pipeline, added shell export UI and non-blocking notifications, registered the new services in DI, and added unit/integration coverage for export formatting and range filtering.
+- 2026-04-05: Changed the `More` shell action to an explicit dropdown menu and updated export-range defaults to use earliest/latest stored event bounds with automated regression coverage.
+- 2026-04-05: Completed manual verification and moved the story to review.

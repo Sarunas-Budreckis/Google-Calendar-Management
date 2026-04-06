@@ -8,12 +8,18 @@ using Moq;
 
 namespace GoogleCalendarManagement.Tests.Unit.ViewModels;
 
+[Collection("Messenger")]
 public sealed class EventDetailsPanelViewModelTests : IDisposable
 {
     private static readonly DateTime UtcBase = new DateTime(2026, 4, 4, 9, 0, 0, DateTimeKind.Utc);
 
     private readonly Mock<ICalendarQueryService> _queryServiceMock = new();
     private readonly Mock<ICalendarSelectionService> _selectionServiceMock = new();
+
+    public EventDetailsPanelViewModelTests()
+    {
+        WeakReferenceMessenger.Default.Reset();
+    }
 
     public void Dispose()
     {
@@ -35,9 +41,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         var sut = CreateSut();
 
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
-
-        // Allow async load to complete
-        await Task.Delay(50);
+        await WaitUntilAsync(() => sut.IsPanelVisible);
 
         sut.IsPanelVisible.Should().BeTrue();
         sut.Title.Should().Be("Team Meeting");
@@ -59,11 +63,11 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         var sut = CreateSut();
 
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
-        await Task.Delay(50);
+        await WaitUntilAsync(() => sut.IsPanelVisible);
         sut.IsPanelVisible.Should().BeTrue();
 
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage(null));
-        await Task.Delay(10);
+        await WaitUntilAsync(() => !sut.IsPanelVisible);
 
         sut.IsPanelVisible.Should().BeFalse();
         sut.Title.Should().BeEmpty();
@@ -94,7 +98,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         var sut = CreateSut();
 
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
-        await Task.Delay(50);
+        await WaitUntilAsync(() => sut.IsPanelVisible);
 
         sut.DescriptionDisplay.Should().Be("No description provided.");
     }
@@ -110,7 +114,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         var sut = CreateSut();
 
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
-        await Task.Delay(50);
+        await WaitUntilAsync(() => sut.IsPanelVisible);
 
         sut.DescriptionDisplay.Should().Be("No description provided.");
     }
@@ -168,7 +172,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         var act = async () =>
         {
             WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-missing"));
-            await Task.Delay(50);
+            await WaitUntilAsync(() => !sut.IsPanelVisible);
         };
 
         await act.Should().NotThrowAsync();
@@ -206,5 +210,19 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
             IsRecurringInstance: false,
             Description: description,
             LastSyncedAt: lastSyncedAt);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> predicate, int timeoutMs = 500)
+    {
+        var startedAt = Environment.TickCount64;
+        while (!predicate())
+        {
+            if (Environment.TickCount64 - startedAt > timeoutMs)
+            {
+                break;
+            }
+
+            await Task.Delay(10);
+        }
     }
 }
