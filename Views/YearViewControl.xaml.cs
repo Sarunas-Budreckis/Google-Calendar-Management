@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
+using CommunityToolkit.Mvvm.Messaging;
+using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
@@ -7,6 +9,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using Windows.UI;
 
 namespace GoogleCalendarManagement.Views;
 
@@ -14,6 +17,8 @@ public sealed partial class YearViewControl : Page
 {
     private static CornerRadius LargeCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusLarge"];
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
+    private static readonly Color SyncedColor = Color.FromArgb(0xFF, 0x4C, 0xAF, 0x50);
+    private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
 
@@ -33,17 +38,21 @@ public sealed partial class YearViewControl : Page
     private void YearViewControl_Loaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        WeakReferenceMessenger.Default.Register<YearViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
         Rebuild();
     }
 
     private void YearViewControl_Unloaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        WeakReferenceMessenger.Default.UnregisterAll(this);
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.CurrentDate) or nameof(MainViewModel.CurrentEvents))
+        if (e.PropertyName is nameof(MainViewModel.CurrentDate)
+                           or nameof(MainViewModel.CurrentEvents)
+                           or nameof(MainViewModel.SyncStatusMap))
         {
             Rebuild();
         }
@@ -67,6 +76,11 @@ public sealed partial class YearViewControl : Page
         }
 
         _selectionService.ClearSelection();
+    }
+
+    private void OnSyncCompleted()
+    {
+        _ = DispatcherQueue.TryEnqueue(Rebuild);
     }
 
     private void Rebuild()
@@ -134,7 +148,7 @@ public sealed partial class YearViewControl : Page
                     BorderThickness = new Thickness(0),
                     HorizontalContentAlignment = HorizontalAlignment.Center,
                     VerticalContentAlignment = VerticalAlignment.Center,
-                    Content = BuildDayButtonContent(currentDay, firstDay.Month, culture)
+                    Content = BuildDayButtonContent(currentDay, firstDay.Month, culture, ViewModel.SyncStatusMap)
                 };
                 button.Click += DayButton_Click;
 
@@ -158,7 +172,11 @@ public sealed partial class YearViewControl : Page
         };
     }
 
-    private static UIElement BuildDayButtonContent(DateOnly date, int activeMonth, CultureInfo culture)
+    private static UIElement BuildDayButtonContent(
+        DateOnly date,
+        int activeMonth,
+        CultureInfo culture,
+        IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap)
     {
         var stackPanel = new StackPanel
         {
@@ -173,13 +191,14 @@ public sealed partial class YearViewControl : Page
             HorizontalAlignment = HorizontalAlignment.Center
         });
 
-        // TODO Story 2.4: wire ISyncStatusService here
-        stackPanel.Children.Add(new Ellipse
+        var isSynced = syncStatusMap.TryGetValue(date, out var status) && status == SyncStatus.Synced;
+        var dot = new Ellipse
         {
             Width = 6,
             Height = 6,
-            Fill = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xA0, 0xA0, 0xA0))
-        });
+            Fill = new SolidColorBrush(isSynced ? SyncedColor : NotSyncedColor)
+        };
+        stackPanel.Children.Add(dot);
 
         return stackPanel;
     }

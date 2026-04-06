@@ -13,6 +13,9 @@ public sealed class MainViewModel : ObservableObject
 {
     private readonly ICalendarQueryService _calendarQueryService;
     private readonly INavigationStateService _navigationStateService;
+    private readonly ISyncStatusService _syncStatusService;
+    private readonly ISyncManager _syncManager;
+    private readonly IContentDialogService _dialogService;
     private readonly ILogger<MainViewModel> _logger;
     private readonly TimeProvider _timeProvider;
     private Task? _initializationTask;
@@ -22,15 +25,28 @@ public sealed class MainViewModel : ObservableObject
     private string _breadcrumbLabel = string.Empty;
     private IList<CalendarEventDisplayModel> _currentEvents = [];
     private bool _isLoading;
+    private IReadOnlyDictionary<DateOnly, SyncStatus> _syncStatusMap = new Dictionary<DateOnly, SyncStatus>();
+    private DateTime? _lastSyncTime;
+    private DateTimeOffset _selectedSyncFromDate;
+    private DateTimeOffset _selectedSyncToDate;
+    private string _syncValidationText = string.Empty;
+    private bool _isSyncing;
+    private int _syncFlyoutOpenRequestId;
 
     public MainViewModel(
         ICalendarQueryService calendarQueryService,
         INavigationStateService navigationStateService,
+        ISyncStatusService syncStatusService,
+        ISyncManager syncManager,
+        IContentDialogService dialogService,
         ILogger<MainViewModel> logger,
         TimeProvider? timeProvider = null)
     {
         _calendarQueryService = calendarQueryService;
         _navigationStateService = navigationStateService;
+        _syncStatusService = syncStatusService;
+        _syncManager = syncManager;
+        _dialogService = dialogService;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -39,6 +55,12 @@ public sealed class MainViewModel : ObservableObject
         NavigateNextCommand = new AsyncRelayCommand(NavigateNextAsync);
         NavigateTodayCommand = new AsyncRelayCommand(NavigateTodayAsync);
         JumpToDateCommand = new AsyncRelayCommand<DateOnly>(JumpToDateAsync);
+        RefreshStatusCommand = new AsyncRelayCommand(RefreshStatusAsync);
+
+        var (defaultFrom, defaultTo) = GetDefaultSyncRange();
+        _selectedSyncFromDate = ToLocalDateOffset(defaultFrom);
+        _selectedSyncToDate = ToLocalDateOffset(defaultTo);
+        UpdateSyncValidation();
 
         WeakReferenceMessenger.Default.Register<MainViewModel, SyncCompletedMessage>(
             this,
@@ -93,6 +115,78 @@ public sealed class MainViewModel : ObservableObject
 
     public Visibility EmptyStateVisibility => ShowEmptyState ? Visibility.Visible : Visibility.Collapsed;
 
+    public IReadOnlyDictionary<DateOnly, SyncStatus> SyncStatusMap => _syncStatusMap;
+
+    public string LastSyncLabel => FormatRelativeLastSyncLabel(_lastSyncTime, _timeProvider.GetLocalNow().DateTime);
+
+    public string LastSyncTooltip => FormatLastSyncTooltip(_lastSyncTime);
+
+    public DateTimeOffset SelectedSyncFromDate
+    {
+        get => _selectedSyncFromDate;
+        set
+        {
+            if (SetProperty(ref _selectedSyncFromDate, value))
+            {
+                UpdateSyncValidation();
+            }
+        }
+    }
+
+    public DateTimeOffset SelectedSyncToDate
+    {
+        get => _selectedSyncToDate;
+        set
+        {
+            if (SetProperty(ref _selectedSyncToDate, value))
+            {
+                UpdateSyncValidation();
+            }
+        }
+    }
+
+    public string SyncValidationText
+    {
+        get => _syncValidationText;
+        private set
+        {
+            if (SetProperty(ref _syncValidationText, value))
+            {
+                OnPropertyChanged(nameof(SyncValidationVisibility));
+                OnPropertyChanged(nameof(CanConfirmSync));
+            }
+        }
+    }
+
+    public Visibility SyncValidationVisibility =>
+        string.IsNullOrWhiteSpace(SyncValidationText) ? Visibility.Collapsed : Visibility.Visible;
+
+    public bool IsSyncing
+    {
+        get => _isSyncing;
+        private set
+        {
+            if (SetProperty(ref _isSyncing, value))
+            {
+                OnPropertyChanged(nameof(SyncButtonText));
+                OnPropertyChanged(nameof(SyncButtonProgressVisibility));
+                OnPropertyChanged(nameof(CanConfirmSync));
+            }
+        }
+    }
+
+    public string SyncButtonText => IsSyncing ? "Syncing..." : "Sync";
+
+    public Visibility SyncButtonProgressVisibility => IsSyncing ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool CanConfirmSync => !IsSyncing && string.IsNullOrWhiteSpace(SyncValidationText);
+
+    public int SyncFlyoutOpenRequestId
+    {
+        get => _syncFlyoutOpenRequestId;
+        private set => SetProperty(ref _syncFlyoutOpenRequestId, value);
+    }
+
     public IAsyncRelayCommand<ViewMode> SwitchViewModeCommand { get; }
 
     public IAsyncRelayCommand NavigatePreviousCommand { get; }
@@ -102,6 +196,8 @@ public sealed class MainViewModel : ObservableObject
     public IAsyncRelayCommand NavigateTodayCommand { get; }
 
     public IAsyncRelayCommand<DateOnly> JumpToDateCommand { get; }
+
+    public IAsyncRelayCommand RefreshStatusCommand { get; }
 
     public Task InitializeAsync()
     {
@@ -116,9 +212,95 @@ public sealed class MainViewModel : ObservableObject
         await RefreshAsync();
     }
 
+    public void RequestSyncFlyout()
+    {
+        if (IsSyncing)
+        {
+            return;
+        }
+
+        var (from, to) = GetVisibleSyncRange();
+        ApplySyncRange(from, to);
+        SyncFlyoutOpenRequestId++;
+    }
+
+    public void RequestSyncFlyoutForVisibleRange()
+    {
+        RequestSyncFlyout();
+    }
+
+    public void RefreshRelativeSyncPresentation()
+    {
+        OnPropertyChanged(nameof(LastSyncLabel));
+    }
+
+    public async Task ConfirmSyncAsync()
+    {
+        if (!CanConfirmSync)
+        {
+            return;
+        }
+
+        IsSyncing = true;
+
+        try
+        {
+            var startDate = DateOnly.FromDateTime(SelectedSyncFromDate.Date).ToDateTime(TimeOnly.MinValue);
+            var endDateExclusive = DateOnly.FromDateTime(SelectedSyncToDate.Date).AddDays(1).ToDateTime(TimeOnly.MinValue);
+
+            var result = await _syncManager.SyncAsync(
+                rangeStart: startDate,
+                rangeEnd: endDateExclusive,
+                ct: CancellationToken.None);
+
+            if (result.WasCancelled)
+            {
+                return;
+            }
+
+            if (result.Success)
+            {
+                await RefreshAsync();
+                WeakReferenceMessenger.Default.Send(new SyncCompletedMessage());
+                return;
+            }
+
+            await _dialogService.ShowErrorAsync(
+                "Google Calendar Sync",
+                result.ErrorMessage ?? "Unable to sync Google Calendar.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while syncing Google Calendar from the main shell.");
+            await _dialogService.ShowErrorAsync(
+                "Google Calendar Sync",
+                "Unable to sync Google Calendar. Check the log for details and try again.");
+        }
+        finally
+        {
+            IsSyncing = false;
+        }
+    }
+
     private void OnSyncCompleted()
     {
+        if (IsSyncing)
+        {
+            return;
+        }
+
         _ = RefreshAsync();
+    }
+
+    private async Task RefreshStatusAsync()
+    {
+        var (from, to) = GetDateRange(CurrentViewMode, CurrentDate);
+        var (syncFrom, syncTo) = GetSyncStatusRange(CurrentViewMode, from, to);
+        var syncStatusTask = _syncStatusService.GetSyncStatusAsync(syncFrom, syncTo);
+        var lastSyncTask = _syncStatusService.GetLastSyncTimeAsync();
+        await Task.WhenAll(syncStatusTask, lastSyncTask);
+
+        UpdateSyncPresentation(syncStatusTask.Result, lastSyncTask.Result);
     }
 
     private async Task SwitchViewModeAsync(ViewMode mode)
@@ -188,7 +370,15 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             var (from, to) = GetDateRange(CurrentViewMode, CurrentDate);
-            CurrentEvents = await _calendarQueryService.GetEventsForRangeAsync(from, to, ct);
+            var (syncFrom, syncTo) = GetSyncStatusRange(CurrentViewMode, from, to);
+            var eventsTask = _calendarQueryService.GetEventsForRangeAsync(from, to, ct);
+            var syncStatusTask = _syncStatusService.GetSyncStatusAsync(syncFrom, syncTo, ct);
+            var lastSyncTask = _syncStatusService.GetLastSyncTimeAsync(ct);
+
+            await Task.WhenAll(eventsTask, syncStatusTask, lastSyncTask);
+
+            UpdateSyncPresentation(syncStatusTask.Result, lastSyncTask.Result);
+            CurrentEvents = eventsTask.Result;
             BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
             await _navigationStateService.SaveAsync(new NavigationState(CurrentViewMode, CurrentDate), ct);
         }
@@ -212,6 +402,45 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private void UpdateSyncPresentation(IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap, DateTime? lastSyncTime)
+    {
+        _syncStatusMap = syncStatusMap;
+        _lastSyncTime = lastSyncTime;
+        OnPropertyChanged(nameof(SyncStatusMap));
+        OnPropertyChanged(nameof(LastSyncLabel));
+        OnPropertyChanged(nameof(LastSyncTooltip));
+    }
+
+    private void ApplySyncRange(DateOnly from, DateOnly to)
+    {
+        SelectedSyncFromDate = ToLocalDateOffset(from);
+        SelectedSyncToDate = ToLocalDateOffset(to);
+    }
+
+    private (DateOnly From, DateOnly To) GetDefaultSyncRange()
+    {
+        var today = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
+        return (today.AddMonths(-6), today.AddMonths(1));
+    }
+
+    private (DateOnly From, DateOnly To) GetVisibleSyncRange()
+    {
+        return GetDateRange(CurrentViewMode, CurrentDate);
+    }
+
+    private void UpdateSyncValidation()
+    {
+        var from = DateOnly.FromDateTime(SelectedSyncFromDate.Date);
+        var to = DateOnly.FromDateTime(SelectedSyncToDate.Date);
+        SyncValidationText = from > to ? "Start date must be before end date" : string.Empty;
+    }
+
+    private static DateTimeOffset ToLocalDateOffset(DateOnly date)
+    {
+        var localDateTime = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local);
+        return new DateTimeOffset(localDateTime);
+    }
+
     private static (DateOnly From, DateOnly To) GetDateRange(ViewMode viewMode, DateOnly date)
     {
         return viewMode switch
@@ -222,6 +451,21 @@ public sealed class MainViewModel : ObservableObject
             ViewMode.Day => (date, date),
             _ => (date, date)
         };
+    }
+
+    /// <summary>
+    /// For Month view, expands the sync-status query range to include the padding weeks that
+    /// the month grid renders (Monday of the first displayed week through Sunday of the last).
+    /// Other view modes return the event range unchanged.
+    /// </summary>
+    private static (DateOnly From, DateOnly To) GetSyncStatusRange(ViewMode viewMode, DateOnly from, DateOnly to)
+    {
+        if (viewMode != ViewMode.Month)
+        {
+            return (from, to);
+        }
+
+        return (GetWeekRange(from).From, GetWeekRange(to).To);
     }
 
     private static string BuildBreadcrumb(ViewMode viewMode, DateOnly date)
@@ -263,5 +507,55 @@ public sealed class MainViewModel : ObservableObject
         }
 
         return $"{fromDate.ToString("MMM d", culture)}\u2013{to.Day.ToString(culture)}, {to.Year.ToString(culture)}";
+    }
+
+    public static string FormatRelativeLastSyncLabel(DateTime? lastSyncTime, DateTime now)
+    {
+        if (lastSyncTime is null)
+        {
+            return "Never synced - click to sync";
+        }
+
+        var localSyncTime = lastSyncTime.Value.ToLocalTime();
+        var elapsed = now - localSyncTime;
+
+        if (elapsed < TimeSpan.FromMinutes(1))
+        {
+            return "Last synced just now";
+        }
+
+        if (elapsed < TimeSpan.FromHours(1))
+        {
+            var minutes = Math.Max(1, (int)elapsed.TotalMinutes);
+            return $"Last synced {minutes} minute{(minutes == 1 ? string.Empty : "s")} ago";
+        }
+
+        if (elapsed < TimeSpan.FromDays(1))
+        {
+            var hours = Math.Max(1, (int)elapsed.TotalHours);
+            return $"Last synced {hours} hour{(hours == 1 ? string.Empty : "s")} ago";
+        }
+
+        return $"Last synced on {localSyncTime.ToString("dddd, MMMM d", CultureInfo.CurrentCulture)}";
+    }
+
+    public static string FormatLastSyncTooltip(DateTime? lastSyncTime)
+    {
+        if (lastSyncTime is null)
+        {
+            return "No sync on record";
+        }
+
+        var localSyncTime = lastSyncTime.Value.ToLocalTime();
+        var timeZone = GetLocalTimeZoneDisplayName(localSyncTime);
+        return $"Last synced {localSyncTime:dddd, MMMM d, yyyy h:mm tt} {timeZone}";
+    }
+
+    private static string GetLocalTimeZoneDisplayName(DateTime localSyncTime)
+    {
+        var localTimeZone = TimeZoneInfo.Local;
+        return localTimeZone.IsDaylightSavingTime(localSyncTime)
+            ? localTimeZone.DaylightName
+            : localTimeZone.StandardName;
     }
 }

@@ -2,6 +2,7 @@
 <Page
     x:Class="GoogleCalendarManagement.Views.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:automation="using:Microsoft.UI.Xaml.Automation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -66,6 +67,8 @@
 
                         <Button
                             x:Name="YearViewButton"
+                            ToolTipService.ToolTip="Year view (1, Y)"
+                            automation:AutomationProperties.Name="Year view (1, Y)"
                             Grid.Column="0"
                             MinWidth="76"
                             Click="ViewModeButton_Click"
@@ -75,6 +78,8 @@
 
                         <Button
                             x:Name="MonthViewButton"
+                            ToolTipService.ToolTip="Month view (2, M)"
+                            automation:AutomationProperties.Name="Month view (2, M)"
                             Grid.Column="1"
                             MinWidth="76"
                             Click="ViewModeButton_Click"
@@ -84,6 +89,8 @@
 
                         <Button
                             x:Name="WeekViewButton"
+                            ToolTipService.ToolTip="Week view (3, W)"
+                            automation:AutomationProperties.Name="Week view (3, W)"
                             Grid.Column="2"
                             MinWidth="76"
                             Click="ViewModeButton_Click"
@@ -93,6 +100,8 @@
 
                         <Button
                             x:Name="DayViewButton"
+                            ToolTipService.ToolTip="Day view (4, D)"
+                            automation:AutomationProperties.Name="Day view (4, D)"
                             Grid.Column="3"
                             MinWidth="76"
                             Click="ViewModeButton_Click"
@@ -109,6 +118,8 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <Button
@@ -116,26 +127,34 @@
                         Width="44"
                         Click="PreviousButton_Click"
                         Content="←"
-                        FontSize="18" />
+                        FontSize="18"
+                        ToolTipService.ToolTip="Previous (Left, P, K)"
+                        automation:AutomationProperties.Name="Previous (Left, P, K)" />
 
                     <Button
                         Grid.Column="1"
                         Command="{x:Bind ViewModel.NavigateTodayCommand}"
-                        Content="Today" />
+                        Content="Today"
+                        ToolTipService.ToolTip="Today (T)"
+                        automation:AutomationProperties.Name="Today (T)" />
 
                     <Button
                         Grid.Column="2"
                         Width="44"
                         Click="NextButton_Click"
                         Content="→"
-                        FontSize="18" />
+                        FontSize="18"
+                        ToolTipService.ToolTip="Next (Right, N, J)"
+                        automation:AutomationProperties.Name="Next (Right, N, J)" />
 
                     <CalendarDatePicker
                         x:Name="JumpToDatePicker"
                         Grid.Column="3"
                         Margin="12,0,0,0"
                         Header="Jump to date"
-                        DateChanged="JumpToDatePicker_DateChanged" />
+                        DateChanged="JumpToDatePicker_DateChanged"
+                        ToolTipService.ToolTip="Jump to date (G)"
+                        automation:AutomationProperties.Name="Jump to date (G)" />
 
                     <Border
                         Grid.Column="4"
@@ -149,6 +168,80 @@
                             Style="{StaticResource SubtitleTextBlockStyle}"
                             Text="{x:Bind ViewModel.BreadcrumbLabel, Mode=OneWay}" />
                     </Border>
+
+                    <StackPanel
+                        Grid.Column="6"
+                        Margin="12,0,0,0"
+                        HorizontalAlignment="Right"
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                        <Button
+                            x:Name="SyncButton"
+                            Background="{StaticResource CalendarSelectionBrush}"
+                            Click="SyncButton_Click"
+                            CornerRadius="{StaticResource AppCornerRadiusElement}"
+                            Foreground="{StaticResource WhiteBrush}">
+                            <Button.Flyout>
+                                <Flyout Placement="BottomEdgeAlignedLeft">
+                                    <StackPanel Width="320" Spacing="12">
+                                        <TextBlock
+                                            Style="{StaticResource SubtitleTextBlockStyle}"
+                                            Text="Sync calendar range" />
+
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="Sync from" />
+                                            <DatePicker
+                                                x:Name="SyncFromDatePicker"
+                                                Date="{x:Bind ViewModel.SelectedSyncFromDate, Mode=TwoWay}" />
+                                        </StackPanel>
+
+                                        <StackPanel Spacing="6">
+                                            <TextBlock Text="Sync to" />
+                                            <DatePicker
+                                                x:Name="SyncToDatePicker"
+                                                Date="{x:Bind ViewModel.SelectedSyncToDate, Mode=TwoWay}" />
+                                        </StackPanel>
+
+                                        <TextBlock
+                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                            Text="{x:Bind ViewModel.SyncValidationText, Mode=OneWay}"
+                                            Visibility="{x:Bind ViewModel.SyncValidationVisibility, Mode=OneWay}" />
+
+                                        <Button
+                                            HorizontalAlignment="Left"
+                                            Click="ConfirmSyncButton_Click"
+                                            Content="Confirm Sync"
+                                            IsEnabled="{x:Bind ViewModel.CanConfirmSync, Mode=OneWay}"
+                                            Style="{StaticResource PrimaryAction}" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                            <ToolTipService.ToolTip>
+                                <ToolTip Content="{x:Bind ViewModel.LastSyncTooltip, Mode=OneWay}" />
+                            </ToolTipService.ToolTip>
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <ProgressRing
+                                    Width="14"
+                                    Height="14"
+                                    IsActive="{x:Bind ViewModel.IsSyncing, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.SyncButtonProgressVisibility, Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind ViewModel.SyncButtonText, Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+
+                        <TextBlock
+                            MaxWidth="220"
+                            Text="{x:Bind ViewModel.LastSyncLabel, Mode=OneWay}"
+                            TextWrapping="WrapWholeWords"
+                            VerticalAlignment="Center">
+                            <ToolTipService.ToolTip>
+                                <ToolTip Content="{x:Bind ViewModel.LastSyncTooltip, Mode=OneWay}" />
+                            </ToolTipService.ToolTip>
+                        </TextBlock>
+                    </StackPanel>
                 </Grid>
             </StackPanel>
         </Border>
@@ -170,11 +263,20 @@
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 CornerRadius="{StaticResource AppCornerRadiusLarge}"
                 Visibility="{x:Bind ViewModel.EmptyStateVisibility, Mode=OneWay}">
-                <TextBlock
+                <StackPanel
                     MaxWidth="420"
-                    Text="No events synced yet. Go to Settings → Connect Google Calendar to sync."
-                    TextAlignment="Center"
-                    TextWrapping="WrapWholeWords" />
+                    HorizontalAlignment="Center"
+                    Spacing="12">
+                    <TextBlock
+                        Text="No events synced yet. Use the Sync button in the top bar to load this date range."
+                        TextAlignment="Center"
+                        TextWrapping="WrapWholeWords" />
+
+                    <Button
+                        HorizontalAlignment="Center"
+                        Click="EmptyStateSyncPrompt_Click"
+                        Content="Sync this range" />
+                </StackPanel>
             </Border>
 
             <ProgressRing

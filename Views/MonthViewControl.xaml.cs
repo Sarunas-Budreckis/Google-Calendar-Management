@@ -8,6 +8,8 @@ using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+using Windows.UI;
 
 namespace GoogleCalendarManagement.Views;
 
@@ -17,6 +19,8 @@ public sealed partial class MonthViewControl : Page
     private static CornerRadius MediumCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusMedium"];
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
+    private static readonly Color SyncedColor = Color.FromArgb(0xFF, 0x4C, 0xAF, 0x50);
+    private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     // Maximum number of multi-day spanning event tracks shown per week row.
     private const int MaxSpanTracks = 2;
@@ -43,6 +47,7 @@ public sealed partial class MonthViewControl : Page
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WeakReferenceMessenger.Default.Register<MonthViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
+        WeakReferenceMessenger.Default.Register<MonthViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
         Rebuild();
     }
 
@@ -55,7 +60,9 @@ public sealed partial class MonthViewControl : Page
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.CurrentDate) or nameof(MainViewModel.CurrentEvents))
+        if (e.PropertyName is nameof(MainViewModel.CurrentDate)
+                           or nameof(MainViewModel.CurrentEvents)
+                           or nameof(MainViewModel.SyncStatusMap))
         {
             Rebuild();
         }
@@ -106,7 +113,7 @@ public sealed partial class MonthViewControl : Page
         for (var row = 0; row < totalRows; row++)
         {
             var weekStart = gridStart.AddDays(row * 7);
-            var weekGrid = BuildWeekRowGrid(weekStart, firstDay.Month, eventSpans, culture);
+            var weekGrid = BuildWeekRowGrid(weekStart, firstDay.Month, eventSpans, culture, ViewModel.SyncStatusMap);
             Grid.SetRow(weekGrid, row);
             Grid.SetColumnSpan(weekGrid, 7);
             MonthGrid.Children.Add(weekGrid);
@@ -124,7 +131,8 @@ public sealed partial class MonthViewControl : Page
         DateOnly weekStart,
         int activeMonth,
         List<(CalendarEventDisplayModel evt, DateOnly startDay, DateOnly endDay)> allSpans,
-        CultureInfo culture)
+        CultureInfo culture,
+        IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap)
     {
         var weekEnd = weekStart.AddDays(6);
         var grid = new Grid();
@@ -201,19 +209,39 @@ public sealed partial class MonthViewControl : Page
             grid.Children.Add(bg);
         }
 
-        // Day-number TextBlocks (row 0)
+        // Day-number headers with sync indicator dot (row 0)
         for (var col = 0; col < 7; col++)
         {
             var date = weekStart.AddDays(col);
-            var dayText = new TextBlock
+            var isSynced = syncStatusMap.TryGetValue(date, out var syncStatus) && syncStatus == SyncStatus.Synced;
+            var dot = new Ellipse
             {
-                Text = date.Day.ToString(culture),
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Margin = new Thickness(8, 6, 8, 2),
+                Width = 6,
+                Height = 6,
+                Fill = new SolidColorBrush(isSynced ? SyncedColor : NotSyncedColor),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 4, 0)
             };
-            Grid.SetColumn(dayText, col);
-            Grid.SetRow(dayText, 0);
-            grid.Children.Add(dayText);
+            ToolTipService.SetToolTip(dot, ViewModel.LastSyncTooltip);
+
+            var header = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(8, 6, 8, 2),
+                Spacing = 2,
+                Children =
+                {
+                    dot,
+                    new TextBlock
+                    {
+                        Text = date.Day.ToString(culture),
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                    }
+                }
+            };
+            Grid.SetColumn(header, col);
+            Grid.SetRow(header, 0);
+            grid.Children.Add(header);
         }
 
         // Multi-day spanning event chips (rows 1..tracks.Count)
@@ -352,6 +380,11 @@ public sealed partial class MonthViewControl : Page
     private void OnEventSelected(EventSelectedMessage message)
     {
         _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.GcalEventId));
+    }
+
+    private void OnSyncCompleted()
+    {
+        _ = DispatcherQueue.TryEnqueue(Rebuild);
     }
 
     private void ApplySelectionVisualState(string? selectedGcalEventId)

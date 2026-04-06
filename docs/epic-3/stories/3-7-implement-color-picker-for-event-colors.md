@@ -1,6 +1,9 @@
 # Story 3.7: Implement Color Picker for Event Colors
 
-Status: ready-for-dev
+Status: moved
+
+> **Moved to Epic 4.** This story has been relocated to Epic 4 (Event Editing — Tier 2) as it is only relevant in edit mode.
+> See: [docs/epic-4/stories/4-3-implement-color-picker-for-event-colors.md](../../epic-4/stories/4-3-implement-color-picker-for-event-colors.md)
 
 ## Story
 

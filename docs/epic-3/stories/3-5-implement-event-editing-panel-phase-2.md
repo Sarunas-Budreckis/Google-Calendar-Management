@@ -1,6 +1,9 @@
 # Story 3.5: Implement Event Editing Panel (Tier 2)
 
-Status: ready-for-dev
+Status: moved
+
+> **Moved to Epic 4.** This story has been relocated to Epic 4 (Event Editing — Tier 2) as it is out of scope for Tier 1.
+> See: [docs/epic-4/stories/4-1-implement-event-editing-panel.md](../../epic-4/stories/4-1-implement-event-editing-panel.md)
 
 ## Story
 

@@ -1,6 +1,9 @@
 # Story 3.6: Implement Event Creation (Drag-to-Create and Button)
 
-Status: ready-for-dev
+Status: moved
+
+> **Moved to Epic 4.** This story has been relocated to Epic 4 (Event Editing — Tier 2) as it is out of scope for Tier 1.
+> See: [docs/epic-4/stories/4-2-implement-event-creation-drag-to-create-and-button.md](../../epic-4/stories/4-2-implement-event-creation-drag-to-create-and-button.md)
 
 ## Story
 

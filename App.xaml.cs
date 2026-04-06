@@ -186,6 +186,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ISystemStateRepository, SystemStateRepository>();
             services.AddSingleton<IColorMappingService, ColorMappingService>();
             services.AddSingleton<ICalendarQueryService, CalendarQueryService>();
+            services.AddSingleton<ISyncStatusService, SyncStatusService>();
             services.AddSingleton<INavigationStateService, NavigationStateService>();
             services.AddSingleton<ICalendarSelectionService, CalendarSelectionService>();
             services.AddSingleton<SettingsViewModel>();

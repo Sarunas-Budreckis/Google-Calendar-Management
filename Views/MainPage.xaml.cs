@@ -3,6 +3,7 @@ using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -26,6 +27,7 @@ public sealed partial class MainPage : Page
     private readonly ICalendarSelectionService _selectionService;
     private readonly TranslateTransform _selectionIndicatorTransform = new();
     private Storyboard? _selectionIndicatorStoryboard;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _lastSyncRefreshTimer;
     private bool _isLoaded;
     private bool _hasSelectionIndicatorPosition;
     private bool _isUpdatingPicker;
@@ -63,6 +65,8 @@ public sealed partial class MainPage : Page
     {
         _isLoaded = true;
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        StartLastSyncRefreshTimer();
+        ViewModel.RefreshRelativeSyncPresentation();
         _selectionIndicatorMode = ViewModel.CurrentViewMode;
         UpdateViewModeButtons();
         UpdateSelectionIndicator(_selectionIndicatorMode, animate: false);
@@ -76,6 +80,7 @@ public sealed partial class MainPage : Page
     {
         _isLoaded = false;
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        StopLastSyncRefreshTimer();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -97,6 +102,11 @@ public sealed partial class MainPage : Page
             JumpToDatePicker.Date = ViewModel.CurrentDate.ToDateTime(TimeOnly.MinValue);
             _isUpdatingPicker = false;
         }
+
+        if (e.PropertyName == nameof(MainViewModel.SyncFlyoutOpenRequestId))
+        {
+            ShowSyncFlyout();
+        }
     }
 
     private async void ViewModeButton_Click(object sender, RoutedEventArgs e)
@@ -117,6 +127,11 @@ public sealed partial class MainPage : Page
 
     private async void MainPage_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Key is VirtualKey.Left or VirtualKey.Right && ShouldSuppressShellArrowNavigation())
+        {
+            return;
+        }
+
         switch (e.Key)
         {
             case VirtualKey.P:
@@ -224,6 +239,22 @@ public sealed partial class MainPage : Page
         };
 
         await dialog.ShowAsync();
+    }
+
+    private void SyncButton_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.RequestSyncFlyout();
+    }
+
+    private void EmptyStateSyncPrompt_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.RequestSyncFlyoutForVisibleRange();
+    }
+
+    private async void ConfirmSyncButton_Click(object sender, RoutedEventArgs e)
+    {
+        GetSyncFlyout().Hide();
+        await ViewModel.ConfirmSyncAsync();
     }
 
     private void NavigateToCurrentView(bool force = false)
@@ -363,5 +394,91 @@ public sealed partial class MainPage : Page
         }
 
         await ViewModel.SwitchViewModeCommand.ExecuteAsync(mode);
+    }
+
+    private void StartLastSyncRefreshTimer()
+    {
+        if (_lastSyncRefreshTimer is not null)
+        {
+            _lastSyncRefreshTimer.Start();
+            return;
+        }
+
+        var dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        _lastSyncRefreshTimer = dispatcherQueue.CreateTimer();
+        _lastSyncRefreshTimer.Interval = TimeSpan.FromSeconds(30);
+        _lastSyncRefreshTimer.Tick += LastSyncRefreshTimer_Tick;
+        _lastSyncRefreshTimer.Start();
+    }
+
+    private void StopLastSyncRefreshTimer()
+    {
+        if (_lastSyncRefreshTimer is null)
+        {
+            return;
+        }
+
+        _lastSyncRefreshTimer.Stop();
+        _lastSyncRefreshTimer.Tick -= LastSyncRefreshTimer_Tick;
+        _lastSyncRefreshTimer = null;
+    }
+
+    private void LastSyncRefreshTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        ViewModel.RefreshRelativeSyncPresentation();
+    }
+
+    private void ShowSyncFlyout()
+    {
+        if (ViewModel.IsSyncing)
+        {
+            return;
+        }
+
+        var flyout = GetSyncFlyout();
+        flyout.Hide();
+        flyout.ShowAt(SyncButton);
+    }
+
+    private Flyout GetSyncFlyout()
+    {
+        return (Flyout)SyncButton.Flyout;
+    }
+
+    private bool ShouldSuppressShellArrowNavigation()
+    {
+        if (JumpToDatePicker.IsCalendarOpen ||
+            GetSyncFlyout().IsOpen)
+        {
+            return true;
+        }
+
+        var focusedElement = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        return IsEditableControlFocused(focusedElement);
+    }
+
+    private static bool IsEditableControlFocused(DependencyObject? focusedElement)
+    {
+        return FindAncestorOrSelf<TextBox>(focusedElement) is not null ||
+               FindAncestorOrSelf<RichEditBox>(focusedElement) is not null ||
+               FindAncestorOrSelf<PasswordBox>(focusedElement) is not null ||
+               FindAncestorOrSelf<AutoSuggestBox>(focusedElement) is not null ||
+               FindAncestorOrSelf<NumberBox>(focusedElement) is not null;
+    }
+
+    private static T? FindAncestorOrSelf<T>(DependencyObject? current)
+        where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
     }
 }

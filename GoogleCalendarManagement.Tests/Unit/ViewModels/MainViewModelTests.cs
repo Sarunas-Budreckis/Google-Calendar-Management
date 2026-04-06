@@ -1,14 +1,22 @@
 using System.Globalization;
+using CommunityToolkit.Mvvm.Messaging;
 using FluentAssertions;
+using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 
 namespace GoogleCalendarManagement.Tests.Unit.ViewModels;
 
-public sealed class MainViewModelTests
+public sealed class MainViewModelTests : IDisposable
 {
+    public MainViewModelTests()
+    {
+        WeakReferenceMessenger.Default.Reset();
+    }
+
     [Fact]
     public async Task SwitchViewModeCommand_MonthView_LoadsWholeMonth_AndUpdatesBreadcrumb()
     {
@@ -68,7 +76,7 @@ public sealed class MainViewModelTests
         var viewModel = CreateViewModel(
             queryService,
             navigationStateService,
-            new FixedTimeProvider(new DateTimeOffset(2026, 04, 02, 12, 0, 0, TimeSpan.Zero)));
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 04, 02, 12, 0, 0, TimeSpan.Zero)));
 
         await viewModel.InitializeAsync();
         await viewModel.NavigateTodayCommand.ExecuteAsync(null);
@@ -112,22 +120,280 @@ public sealed class MainViewModelTests
         queryService.LastTo.Should().Be(new DateOnly(2026, 06, 30));
     }
 
+    [Fact]
+    public async Task NavigateNextCommand_YearView_AdvancesOneYear_AndUpdatesBreadcrumb()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Year, new DateOnly(2026, 06, 15)));
+        var viewModel = CreateViewModel(queryService, navigationStateService);
+
+        await viewModel.InitializeAsync();
+        await viewModel.NavigateNextCommand.ExecuteAsync(null);
+
+        viewModel.CurrentDate.Should().Be(new DateOnly(2027, 06, 15));
+        viewModel.BreadcrumbLabel.Should().Be("2027");
+        queryService.LastFrom.Should().Be(new DateOnly(2027, 01, 01));
+        queryService.LastTo.Should().Be(new DateOnly(2027, 12, 31));
+    }
+
+    [Fact]
+    public async Task NavigateNextCommand_WeekView_AdvancesSevenDays_AndUpdatesBreadcrumb()
+    {
+        using var cultureScope = new CultureScope("en-US");
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Week, new DateOnly(2026, 03, 26)));
+        var viewModel = CreateViewModel(queryService, navigationStateService);
+
+        await viewModel.InitializeAsync();
+        await viewModel.NavigateNextCommand.ExecuteAsync(null);
+
+        viewModel.CurrentDate.Should().Be(new DateOnly(2026, 04, 02));
+        viewModel.BreadcrumbLabel.Should().Be("Mar 30\u2013Apr 5, 2026");
+        queryService.LastFrom.Should().Be(new DateOnly(2026, 03, 30));
+        queryService.LastTo.Should().Be(new DateOnly(2026, 04, 05));
+    }
+
+    [Fact]
+    public async Task NavigateNextCommand_DayView_AdvancesOneDay_AndUpdatesBreadcrumb()
+    {
+        using var cultureScope = new CultureScope("en-US");
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Day, new DateOnly(2026, 03, 26)));
+        var viewModel = CreateViewModel(queryService, navigationStateService);
+
+        await viewModel.InitializeAsync();
+        await viewModel.NavigateNextCommand.ExecuteAsync(null);
+
+        viewModel.CurrentDate.Should().Be(new DateOnly(2026, 03, 27));
+        viewModel.BreadcrumbLabel.Should().Be("Friday, 27 March 2026");
+        queryService.LastFrom.Should().Be(new DateOnly(2026, 03, 27));
+        queryService.LastTo.Should().Be(new DateOnly(2026, 03, 27));
+    }
+
+    [Fact]
+    public async Task NavigateTodayCommand_PreservesActiveViewMode()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Week, new DateOnly(2026, 01, 15)));
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 04, 02, 12, 0, 0, TimeSpan.Zero)));
+
+        await viewModel.InitializeAsync();
+        await viewModel.NavigateTodayCommand.ExecuteAsync(null);
+
+        viewModel.CurrentViewMode.Should().Be(ViewMode.Week);
+        viewModel.CurrentDate.Should().Be(new DateOnly(2026, 04, 02));
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WithoutSuccessfulSync_ShowsNeverSyncedLabel()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            syncStatusService: new StubSyncStatusService());
+
+        await viewModel.InitializeAsync();
+
+        viewModel.LastSyncLabel.Should().Be("Never synced - click to sync");
+        viewModel.LastSyncTooltip.Should().Be("No sync on record");
+    }
+
+    [Fact]
+    public void FormatRelativeLastSyncLabel_UsesRelativeAndDateFormats()
+    {
+        using var cultureScope = new CultureScope("en-US");
+        var now = new DateTime(2026, 04, 05, 12, 00, 00, DateTimeKind.Local);
+
+        MainViewModel.FormatRelativeLastSyncLabel(now.AddSeconds(-20), now)
+            .Should().Be("Last synced just now");
+        MainViewModel.FormatRelativeLastSyncLabel(now.AddMinutes(-7), now)
+            .Should().Be("Last synced 7 minutes ago");
+        MainViewModel.FormatRelativeLastSyncLabel(now.AddHours(-3), now)
+            .Should().Be("Last synced 3 hours ago");
+        MainViewModel.FormatRelativeLastSyncLabel(now.AddDays(-2), now)
+            .Should().Be("Last synced on Friday, April 3");
+    }
+
+    [Fact]
+    public void FormatLastSyncTooltip_UsesExactLocalTimeAndTimezone()
+    {
+        using var cultureScope = new CultureScope("en-US");
+        var lastSyncUtc = new DateTime(2026, 04, 05, 15, 30, 00, DateTimeKind.Utc);
+
+        var tooltip = MainViewModel.FormatLastSyncTooltip(lastSyncUtc);
+
+        tooltip.Should().NotBeNullOrWhiteSpace();
+        tooltip.Should().NotBe("No sync on record");
+        tooltip.Should().Contain("2026");
+        tooltip.Should().Contain("30");
+    }
+
+    [Fact]
+    public async Task RequestSyncFlyout_UsesCurrentVisiblePeriod()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 04, 05, 12, 00, 00, TimeSpan.Zero)));
+
+        await viewModel.InitializeAsync();
+        viewModel.RequestSyncFlyout();
+
+        DateOnly.FromDateTime(viewModel.SelectedSyncFromDate.Date).Should().Be(new DateOnly(2026, 04, 01));
+        DateOnly.FromDateTime(viewModel.SelectedSyncToDate.Date).Should().Be(new DateOnly(2026, 04, 30));
+        viewModel.SyncFlyoutOpenRequestId.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RequestSyncFlyoutForVisibleRange_PrefillsCurrentViewDates()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Week, new DateOnly(2026, 04, 09)));
+        var viewModel = CreateViewModel(queryService, navigationStateService);
+
+        await viewModel.InitializeAsync();
+        viewModel.RequestSyncFlyoutForVisibleRange();
+
+        DateOnly.FromDateTime(viewModel.SelectedSyncFromDate.Date).Should().Be(new DateOnly(2026, 04, 06));
+        DateOnly.FromDateTime(viewModel.SelectedSyncToDate.Date).Should().Be(new DateOnly(2026, 04, 12));
+    }
+
+    [Fact]
+    public async Task SelectedSyncDates_InvalidRange_ShowsValidationAndDisablesConfirm()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var viewModel = CreateViewModel(queryService, navigationStateService);
+
+        await viewModel.InitializeAsync();
+        viewModel.SelectedSyncFromDate = new DateTimeOffset(2026, 04, 10, 0, 0, 0, TimeSpan.Zero);
+        viewModel.SelectedSyncToDate = new DateTimeOffset(2026, 04, 09, 0, 0, 0, TimeSpan.Zero);
+
+        viewModel.SyncValidationText.Should().Be("Start date must be before end date");
+        viewModel.CanConfirmSync.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ConfirmSyncAsync_Success_RefreshesStateImmediately()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var syncManager = new Mock<ISyncManager>();
+        syncManager
+            .Setup(manager => manager.SyncAsync(
+                It.IsAny<string>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<DateTime?>(),
+                It.IsAny<IProgress<SyncProgress>?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SyncResult(true, 3, 1, 0, "token", null));
+
+        var syncStatusService = new StubSyncStatusService
+        {
+            LastSyncTime = new DateTime(2026, 04, 05, 13, 15, 00, DateTimeKind.Utc)
+        };
+
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            syncStatusService: syncStatusService,
+            syncManager: syncManager.Object,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 04, 05, 13, 16, 00, TimeSpan.Zero)));
+
+        await viewModel.InitializeAsync();
+        viewModel.RequestSyncFlyout();
+
+        await viewModel.ConfirmSyncAsync();
+
+        syncManager.Verify(manager => manager.SyncAsync(
+            "primary",
+            new DateTime(2026, 04, 01, 0, 0, 0),
+            new DateTime(2026, 05, 01, 0, 0, 0),
+            null,
+            It.IsAny<CancellationToken>()),
+            Times.Once);
+        viewModel.IsSyncing.Should().BeFalse();
+        viewModel.LastSyncLabel.Should().Be("Last synced 1 minute ago");
+        viewModel.LastSyncTooltip.Should().NotBe("No sync on record");
+        queryService.CallCount.Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task SyncCompletedMessage_RefreshesTopBarState()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var syncStatusService = new StubSyncStatusService();
+        var viewModel = CreateViewModel(queryService, navigationStateService, syncStatusService: syncStatusService);
+
+        await viewModel.InitializeAsync();
+        syncStatusService.LastSyncTime = new DateTime(2026, 04, 05, 13, 00, 00, DateTimeKind.Utc);
+
+        WeakReferenceMessenger.Default.Send(new SyncCompletedMessage());
+        await queryService.WaitForCallsAsync(2);
+
+        viewModel.LastSyncLabel.Should().NotBe("Never synced - click to sync");
+        queryService.CallCount.Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    public void Dispose()
+    {
+        WeakReferenceMessenger.Default.Reset();
+    }
+
     private static MainViewModel CreateViewModel(
         RecordingCalendarQueryService queryService,
         StubNavigationStateService navigationStateService,
+        StubSyncStatusService? syncStatusService = null,
+        ISyncManager? syncManager = null,
+        IContentDialogService? dialogService = null,
         TimeProvider? timeProvider = null)
     {
         return new MainViewModel(
             queryService,
             navigationStateService,
+            syncStatusService ?? new StubSyncStatusService(),
+            syncManager ?? Mock.Of<ISyncManager>(),
+            dialogService ?? Mock.Of<IContentDialogService>(),
             NullLogger<MainViewModel>.Instance,
             timeProvider ?? new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 0, 0, TimeSpan.Zero)));
     }
 
+    private sealed class StubSyncStatusService : ISyncStatusService
+    {
+        public DateTime? LastSyncTime { get; set; }
+
+        public Task<Dictionary<DateOnly, SyncStatus>> GetSyncStatusAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
+            => Task.FromResult(new Dictionary<DateOnly, SyncStatus>());
+
+        public Task<DateTime?> GetLastSyncTimeAsync(CancellationToken ct = default)
+            => Task.FromResult(LastSyncTime);
+    }
+
     private sealed class RecordingCalendarQueryService : ICalendarQueryService
     {
+        private readonly List<TaskCompletionSource> _waiters = [];
+
         public DateOnly? LastFrom { get; private set; }
         public DateOnly? LastTo { get; private set; }
+        public int CallCount { get; private set; }
 
         public Task<CalendarEventDisplayModel?> GetEventByGcalIdAsync(string gcalEventId, CancellationToken ct = default)
         {
@@ -138,7 +404,32 @@ public sealed class MainViewModelTests
         {
             LastFrom = from;
             LastTo = to;
+            CallCount++;
+
+            foreach (var waiter in _waiters.ToArray())
+            {
+                waiter.TrySetResult();
+            }
+
             return Task.FromResult<IList<CalendarEventDisplayModel>>([]);
+        }
+
+        public async Task WaitForCallsAsync(int expectedCallCount)
+        {
+            if (CallCount >= expectedCallCount)
+            {
+                return;
+            }
+
+            var waiter = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _waiters.Add(waiter);
+
+            while (CallCount < expectedCallCount)
+            {
+                await waiter.Task;
+                waiter = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _waiters.Add(waiter);
+            }
         }
     }
 

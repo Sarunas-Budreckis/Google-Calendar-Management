@@ -8,6 +8,8 @@ using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+using Windows.UI;
 
 namespace GoogleCalendarManagement.Views;
 
@@ -22,6 +24,8 @@ public sealed partial class DayViewControl : Page
     private const double ShortEventContentHeightEstimate = 16.0;
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
+    private static readonly Color SyncedColor = Color.FromArgb(0xFF, 0x4C, 0xAF, 0x50);
+    private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
     private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
@@ -45,6 +49,7 @@ public sealed partial class DayViewControl : Page
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WeakReferenceMessenger.Default.Register<DayViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
+        WeakReferenceMessenger.Default.Register<DayViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
         Rebuild();
     }
 
@@ -57,7 +62,9 @@ public sealed partial class DayViewControl : Page
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.CurrentDate) or nameof(MainViewModel.CurrentEvents))
+        if (e.PropertyName is nameof(MainViewModel.CurrentDate)
+                           or nameof(MainViewModel.CurrentEvents)
+                           or nameof(MainViewModel.SyncStatusMap))
         {
             Rebuild();
         }
@@ -77,6 +84,35 @@ public sealed partial class DayViewControl : Page
         {
             DayGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(72) });
         }
+
+        // Sync status indicator for the current day
+        var isSynced = ViewModel.SyncStatusMap.TryGetValue(ViewModel.CurrentDate, out var syncStatus)
+                       && syncStatus == SyncStatus.Synced;
+        var syncDot = new Ellipse
+        {
+            Width = 6,
+            Height = 6,
+            Fill = new SolidColorBrush(isSynced ? SyncedColor : NotSyncedColor),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var syncHeader = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            Children =
+            {
+                syncDot,
+                new TextBlock
+                {
+                    Text = isSynced ? "Synced" : "Not synced",
+                    FontSize = 12,
+                    Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+                }
+            }
+        };
+        ToolTipService.SetToolTip(syncHeader, ViewModel.LastSyncTooltip);
+        AllDayPanel.Children.Add(syncHeader);
+        AllDayPanel.Visibility = Visibility.Visible;
 
         var culture = CultureInfo.CurrentCulture;
         // Include all-day events that start on this day, and timed events that overlap this day.
@@ -224,7 +260,6 @@ public sealed partial class DayViewControl : Page
             DayGrid.Children.Add(eventBlock);
         }
 
-        AllDayPanel.Visibility = AllDayPanel.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
     }
 
@@ -236,6 +271,11 @@ public sealed partial class DayViewControl : Page
     private void OnEventSelected(EventSelectedMessage message)
     {
         _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.GcalEventId));
+    }
+
+    private void OnSyncCompleted()
+    {
+        _ = DispatcherQueue.TryEnqueue(Rebuild);
     }
 
     private void ApplySelectionVisualState(string? selectedGcalEventId)

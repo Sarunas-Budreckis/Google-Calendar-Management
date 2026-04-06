@@ -1,0 +1,215 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>6</storyId>
+    <title>Move Sync Controls to Top Bar</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2026-04-05</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/epic-2/stories/2-6-move-sync-controls-to-top-bar.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>sync controls and last-sync status visible in the main top bar</iWant>
+    <soThat>I can run a sync and understand cache freshness without opening Settings</soThat>
+    <tasks>
+      - Move manual-sync ownership from SettingsPage into MainPage/MainViewModel
+      - Reuse ISyncManager range parameters for top-bar date-range sync
+      - Add a persistent Sync button, relative last-sync label, exact tooltip, and in-progress state
+      - Implement a light-dismiss flyout with start/end date pickers and inline validation
+      - Remove manual sync controls from Settings and redirect empty-state prompts to the top-bar Sync flow
+      - Extend MainViewModel and SettingsViewModel tests while keeping GoogleCalendarSyncTests as the sync-engine contract
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC-2.6.1">A persistent grey Sync button is visible in the main top bar on every calendar view.</ac>
+    <ac id="AC-2.6.2">The top bar shows a relative last-sync label that refreshes while the app is open.</ac>
+    <ac id="AC-2.6.3">If no successful sync exists, the top bar shows Never synced - click to sync.</ac>
+    <ac id="AC-2.6.4">Hovering the Sync button or label shows the exact last successful sync time in local time with timezone, or No sync on record if none exists.</ac>
+    <ac id="AC-2.6.5">Clicking Sync opens a light-dismiss date-range popdown below the button.</ac>
+    <ac id="AC-2.6.6">The popdown defaults to 6 months back and 1 month forward unless a visible-range prefill is supplied.</ac>
+    <ac id="AC-2.6.7">Confirm Sync runs the existing SyncManager pipeline for the selected range and shows an in-progress state.</ac>
+    <ac id="AC-2.6.8">Invalid ranges disable Confirm Sync and show inline validation.</ac>
+    <ac id="AC-2.6.9">After a successful sync, the top-bar label and tooltip update immediately.</ac>
+    <ac id="AC-2.6.10">SettingsPage no longer contains manual sync controls or last-sync UI.</ac>
+    <ac id="AC-2.6.11">The empty-state sync prompt points to the top-bar Sync flow and opens the same flyout with the visible range prefilled.</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epic-2/tech-spec.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Story 2.2 / Story 2.4 sync infrastructure</section>
+        <snippet>Epic 2 already defines the Google Calendar sync engine and the sync-status refresh pattern; Story 2.6 relocates the manual trigger into the shell rather than redefining sync behavior.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Epic 2 sequencing and Story 2.4 planning</section>
+        <snippet>Provides original Epic 2 sequencing context, including the now-outdated settings-centric sync references that Story 2.6 must supersede in the live shell.</snippet>
+      </doc>
+      <doc>
+        <path>docs/ux-design-specification.md</path>
+        <title>UX Design Specification</title>
+        <section>Top Strip Controls and Tier 1 shell</section>
+        <snippet>Supports keeping sync visibility in the always-available shell instead of burying it behind Settings.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Technology choices and shell intent</section>
+        <snippet>Useful for package and platform guidance, but the live repo shape overrides the older multi-project structure shown there.</snippet>
+      </doc>
+      <doc>
+        <path>docs/_database-schemas.md</path>
+        <title>Database Schemas</title>
+        <section>data_source_refresh</section>
+        <snippet>Historical background for sync metadata. The live app uses data_source_refresh as the source for last successful sync time.</snippet>
+      </doc>
+      <doc>
+        <path>https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/dialogs-and-flyouts/flyouts</path>
+        <title>Microsoft Learn - Flyout controls</title>
+        <section>Light-dismiss flyouts</section>
+        <snippet>Confirms Flyout is the right transient container for arbitrary UI with outside-click and Escape dismissal.</snippet>
+      </doc>
+      <doc>
+        <path>https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/calendar-date-picker</path>
+        <title>Microsoft Learn - Calendar date picker</title>
+        <section>CalendarDatePicker guidance</section>
+        <snippet>Confirms CalendarDatePicker is a calendar-overlay navigation input that should remain separate from the bounded sync-range selection flow.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>Views/MainPage.xaml</path>
+        <kind>view</kind>
+        <symbol>MainPage</symbol>
+        <reason>Already contains the top strip, Refresh Status button, empty-state card, and Settings entry point. Story 2.6 must attach the new sync cluster here.</reason>
+      </file>
+      <file>
+        <path>Views/MainPage.xaml.cs</path>
+        <kind>view-code-behind</kind>
+        <symbol>MainPage</symbol>
+        <reason>Owns current shell interactions and is the most likely place to coordinate flyout opening from shell-level interactions.</reason>
+      </file>
+      <file>
+        <path>ViewModels/MainViewModel.cs</path>
+        <kind>view-model</kind>
+        <symbol>MainViewModel</symbol>
+        <reason>Already owns sync-status refresh, LastSyncTooltip, view navigation, and SyncCompletedMessage handling. Extend it instead of creating a new sync toolbar view model.</reason>
+      </file>
+      <file>
+        <path>ViewModels/SettingsViewModel.cs</path>
+        <kind>view-model</kind>
+        <symbol>SettingsViewModel</symbol>
+        <reason>Currently owns manual sync, cancellation, progress, and last-sync UI. Story 2.6 must remove that ownership without duplicating sync orchestration.</reason>
+      </file>
+      <file>
+        <path>Views/SettingsPage.xaml</path>
+        <kind>view</kind>
+        <symbol>SettingsPage</symbol>
+        <reason>Still renders Sync with Google Calendar and related progress/last-sync controls that must be removed in this story.</reason>
+      </file>
+      <file>
+        <path>Services/ISyncManager.cs</path>
+        <kind>service-contract</kind>
+        <symbol>ISyncManager.SyncAsync</symbol>
+        <reason>Already supports explicit rangeStart and rangeEnd parameters. Reuse this existing contract for top-bar range sync.</reason>
+      </file>
+      <file>
+        <path>Services/SyncManager.cs</path>
+        <kind>service</kind>
+        <symbol>SyncManager</symbol>
+        <reason>Existing manual/background sync engine. Story 2.6 should call it, not fork it.</reason>
+      </file>
+      <file>
+        <path>Services/ISyncStatusService.cs</path>
+        <kind>service-contract</kind>
+        <symbol>ISyncStatusService</symbol>
+        <reason>Authoritative source for last successful sync time used to drive the top-bar label and tooltip.</reason>
+      </file>
+      <file>
+        <path>Services/SyncStatusService.cs</path>
+        <kind>service</kind>
+        <symbol>SyncStatusService</symbol>
+        <reason>Already reads latest successful gcal refresh metadata from data_source_refresh.</reason>
+      </file>
+      <file>
+        <path>Messages/SyncCompletedMessage.cs</path>
+        <kind>message</kind>
+        <symbol>SyncCompletedMessage</symbol>
+        <reason>MainViewModel already listens for this message. Reuse it instead of creating a competing completion signal.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs</path>
+        <kind>unit-test</kind>
+        <symbol>MainViewModelTests</symbol>
+        <reason>Current shell-state test surface to extend for sync label formatting, validation, and range defaults.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Unit/SettingsViewModelTests.cs</path>
+        <kind>unit-test</kind>
+        <symbol>SettingsViewModelTests</symbol>
+        <reason>Current sync/settings test surface to adjust once Settings becomes auth-only.</reason>
+      </file>
+      <file>
+        <path>GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs</path>
+        <kind>integration-test</kind>
+        <symbol>GoogleCalendarSyncTests</symbol>
+        <reason>The existing sync-persistence integration contract should remain the authoritative SyncManager test harness.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <dotnet>
+        <project>GoogleCalendarManagement.csproj</project>
+        <existing>
+          <package name="CommunityToolkit.Mvvm" version="8.4.0" />
+          <package name="Google.Apis.Auth" version="1.73.0" />
+          <package name="Google.Apis.Calendar.v3" version="1.73.0.3993" />
+          <package name="Microsoft.EntityFrameworkCore.Sqlite" version="9.0.12" />
+          <package name="Microsoft.Extensions.Http.Polly" version="9.0.3" />
+          <package name="Microsoft.Extensions.Logging" version="10.0.2" />
+          <package name="Microsoft.WindowsAppSDK" version="1.*" />
+          <package name="Serilog" version="4.1.0" />
+        </existing>
+      </dotnet>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint id="C1" category="repo-shape">Keep work in the existing root-level Views/ViewModels/Services/Messages/Data layout. Do not introduce the older Core/Data project split shown in planning docs.</constraint>
+    <constraint id="C2" category="single-sync-path">After Story 2.6 there must be one manual-sync path in the shell. Do not leave a second independent sync orchestration flow in Settings.</constraint>
+    <constraint id="C3" category="sync-engine-reuse">Reuse ISyncManager.SyncAsync(rangeStart, rangeEnd, ...) and SyncCompletedMessage. Do not fork the Google sync engine for top-bar use.</constraint>
+    <constraint id="C4" category="status-source">Use ISyncStatusService.GetLastSyncTimeAsync() / data_source_refresh as the source of truth for the top-bar last-sync label and tooltip.</constraint>
+    <constraint id="C5" category="transient-ui">Use a Flyout-style light-dismiss popdown for the date-range picker. Do not use ContentDialog for this transient shell interaction.</constraint>
+    <constraint id="C6" category="navigation-preservation">Keep the existing CalendarDatePicker jump-to-date navigation affordance in the top bar.</constraint>
+    <constraint id="C7" category="settings-boundary">SettingsPage remains the account/authentication surface after this story. Remove manual sync, progress, cancel, and last-sync UI from Settings.</constraint>
+    <constraint id="C8" category="empty-state-routing">Empty-state sync prompts must route to the same flyout and same MainViewModel-owned state, not a second prompt-specific sync path.</constraint>
+    <constraint id="C9" category="branch-awareness">The worktree already contains in-progress shell edits. Developers must integrate with those changes and must not revert unrelated work.</constraint>
+  </constraints>
+
+  <tests>
+    <standards>xUnit + Moq + FluentAssertions. Prefer MainViewModel-focused unit tests for label formatting, default ranges, validation, and sync completion refresh. Keep GoogleCalendarSyncTests as the integration authority for SyncManager persistence.</standards>
+    <locations>
+      GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs
+      GoogleCalendarManagement.Tests/Unit/SettingsViewModelTests.cs
+      GoogleCalendarManagement.Tests/Integration/GoogleCalendarSyncTests.cs
+    </locations>
+    <ideas>
+      <test name="MainViewModel_NoSuccessfulSync_ShowsNeverSyncedLabel">No successful gcal refresh rows should produce Never synced - click to sync.</test>
+      <test name="MainViewModel_LastSyncWithinMinutes_ShowsRelativeMinutesLabel">A recent successful sync should format the visible label as Last synced X minutes ago.</test>
+      <test name="MainViewModel_LastSyncOlderThanDay_ShowsDateLabel">A sync older than 24 hours should switch to Last synced on [Day, Month D].</test>
+      <test name="MainViewModel_ExactTooltip_UsesLocalTimeAndTimezone">The hover tooltip should contain the exact local timestamp and timezone rather than the relative label text.</test>
+      <test name="MainViewModel_DefaultSyncRange_IsSixMonthsBackAndOneMonthForward">Opening the flyout without an explicit prefill should default to the standard range.</test>
+      <test name="MainViewModel_InvalidSyncRange_DisablesConfirmAndShowsInlineError">Start date after end date should produce the expected inline validation and disabled confirm state.</test>
+      <test name="MainViewModel_SyncCompletedMessage_RefreshesTopBarState">Receiving SyncCompletedMessage after a successful sync should refresh the label and tooltip immediately.</test>
+      <test name="SettingsViewModel_ExposesAuthButNotManualSyncSurface">After the refactor, Settings should remain responsible for connect/reconnect only.</test>
+      <test name="GoogleCalendarSyncTests_RangeSyncPath_RemainsBackedBySyncManager">Range-based manual sync should continue to use the existing SyncManager persistence contract rather than a new path.</test>
+    </ideas>
+  </tests>
+</story-context>

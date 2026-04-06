@@ -27,7 +27,7 @@
                             Text="Google Calendar" />
 
                         <TextBlock
-                            Text="Connect your Google Calendar account to enable local calendar sync."
+                            Text="Connect your Google Calendar account to enable local calendar sync. Use the Sync button in the main top bar to refresh calendar data."
                             TextWrapping="WrapWholeWords" />
 
                         <TextBlock>
@@ -48,47 +48,6 @@
                                 Content="Reconnect Google Calendar"
                                 Command="{x:Bind ViewModel.DisconnectGoogleCalendarCommand}"
                                 Visibility="{x:Bind ViewModel.ReconnectButtonVisibility, Mode=OneWay}" />
-                        </StackPanel>
-
-                        <StackPanel
-                            Spacing="12"
-                            Visibility="{x:Bind ViewModel.SyncControlsVisibility, Mode=OneWay}">
-                            <TextBlock
-                                Text="Manual sync pulls the default 6 months back and 1 month forward range into the local cache."
-                                TextWrapping="WrapWholeWords" />
-
-                            <StackPanel
-                                Orientation="Horizontal"
-                                Spacing="12">
-                                <Button
-                                    Style="{StaticResource PrimaryAction}"
-                                    Content="Sync with Google Calendar"
-                                    Command="{x:Bind ViewModel.SyncWithGoogleCalendarCommand}" />
-
-                                <Button
-                                    Content="Cancel Sync"
-                                    Command="{x:Bind ViewModel.CancelSyncCommand}"
-                                    Visibility="{x:Bind ViewModel.CancelSyncButtonVisibility, Mode=OneWay}" />
-
-                                <ProgressRing
-                                    Width="24"
-                                    Height="24"
-                                    IsActive="{x:Bind ViewModel.IsSyncing, Mode=OneWay}"
-                                    Visibility="{x:Bind ViewModel.CancelSyncButtonVisibility, Mode=OneWay}" />
-                            </StackPanel>
-
-                            <TextBlock>
-                                <Run Text="Status: " />
-                                <Run Text="{x:Bind ViewModel.SyncStatusText, Mode=OneWay}" />
-                            </TextBlock>
-
-                            <TextBlock
-                                Text="{x:Bind ViewModel.SyncProgressText, Mode=OneWay}" />
-
-                            <TextBlock>
-                                <Run Text="Last successful sync: " />
-                                <Run Text="{x:Bind ViewModel.LastSyncText, Mode=OneWay}" />
-                            </TextBlock>
                         </StackPanel>
                     </StackPanel>
                 </Border>

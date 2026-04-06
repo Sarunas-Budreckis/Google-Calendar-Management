@@ -8,6 +8,8 @@ using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
+using Windows.UI;
 
 namespace GoogleCalendarManagement.Views;
 
@@ -31,6 +33,8 @@ public sealed partial class WeekViewControl : Page
     private static readonly Brush OverlapOutlineBrush = new SolidColorBrush(Colors.Black);
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
+    private static readonly Color SyncedColor = Color.FromArgb(0xFF, 0x4C, 0xAF, 0x50);
+    private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
     private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
@@ -41,6 +45,8 @@ public sealed partial class WeekViewControl : Page
         ViewModel = App.GetRequiredService<MainViewModel>();
         _selectionService = App.GetRequiredService<ICalendarSelectionService>();
         InitializeComponent();
+        WeekHeaderGrid.Background = TransparentPanelBrush;
+        WeekHeaderGrid.Tapped += WeekGrid_Tapped;
         WeekGrid.Background = TransparentPanelBrush;
         WeekGrid.Tapped += WeekGrid_Tapped;
         Loaded += WeekViewControl_Loaded;
@@ -54,6 +60,7 @@ public sealed partial class WeekViewControl : Page
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WeakReferenceMessenger.Default.Register<WeekViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
+        WeakReferenceMessenger.Default.Register<WeekViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
         _resizeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         _resizeDebounceTimer.Tick += (_, _) =>
         {
@@ -74,7 +81,9 @@ public sealed partial class WeekViewControl : Page
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.CurrentDate) or nameof(MainViewModel.CurrentEvents))
+        if (e.PropertyName is nameof(MainViewModel.CurrentDate)
+                           or nameof(MainViewModel.CurrentEvents)
+                           or nameof(MainViewModel.SyncStatusMap))
         {
             Rebuild();
         }
@@ -94,6 +103,9 @@ public sealed partial class WeekViewControl : Page
 
     private void Rebuild()
     {
+        WeekHeaderGrid.Children.Clear();
+        WeekHeaderGrid.RowDefinitions.Clear();
+        WeekHeaderGrid.ColumnDefinitions.Clear();
         WeekGrid.Children.Clear();
         WeekGrid.RowDefinitions.Clear();
         WeekGrid.ColumnDefinitions.Clear();
@@ -102,28 +114,36 @@ public sealed partial class WeekViewControl : Page
         var viewportWidth = Math.Max(0d, ActualWidth - HorizontalChromeAllowance);
         var minimumContentWidth = TimeColumnWidth + (MinimumDayColumnWidth * 7) + WeekGridHorizontalPadding;
         var contentWidth = Math.Max(minimumContentWidth, viewportWidth);
-        // Subtract the WeekGrid's XAML Padding="12" (left+right=24px) so columns
-        // exactly fill the content area and Sunday's right border isn't clipped.
+        // Subtract the shared horizontal padding so columns fill the area exactly.
         var availableDayWidth = (contentWidth - WeekGridHorizontalPadding - TimeColumnWidth) / 7d;
 
+        // Both grids must be the same width so their columns align when the user
+        // scrolls horizontally — the header stays in sync with the hourly content.
+        WeekHeaderGrid.Width = contentWidth;
         WeekGrid.Width = contentWidth;
 
-        WeekGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(TimeColumnWidth) });
-        for (var column = 0; column < 7; column++)
+        // ── Shared column setup ───────────────────────────────────────────────
+        void AddColumns(Grid g)
         {
-            WeekGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(availableDayWidth) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(TimeColumnWidth) });
+            for (var c = 0; c < 7; c++)
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(availableDayWidth) });
         }
+        AddColumns(WeekHeaderGrid);
+        AddColumns(WeekGrid);
 
-        WeekGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        WeekGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        // ── Header rows (frozen) ──────────────────────────────────────────────
+        WeekHeaderGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // row 0: day name + dot
+        WeekHeaderGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // row 1: all-day events
+
+        // ── Hourly rows (scrollable) ──────────────────────────────────────────
         for (var hour = 0; hour < 24; hour++)
-        {
             WeekGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RowHeight) });
-        }
 
         var culture = CultureInfo.CurrentCulture;
         var (weekStart, _) = GetWeekRange(ViewModel.CurrentDate);
 
+        // Hour labels in the time column
         for (var hour = 0; hour < 24; hour++)
         {
             var label = new TextBlock
@@ -131,7 +151,7 @@ public sealed partial class WeekViewControl : Page
                 Text = $"{hour:00}:00",
                 VerticalAlignment = VerticalAlignment.Top
             };
-            Grid.SetRow(label, hour + 2);
+            Grid.SetRow(label, hour);
             Grid.SetColumn(label, 0);
             WeekGrid.Children.Add(label);
         }
@@ -143,32 +163,51 @@ public sealed partial class WeekViewControl : Page
             var dayEnd = dayStart.AddDays(1);
             var column = offset + 1;
 
-            var header = new TextBlock
+            // ── Day header with sync dot (header row 0) ───────────────────────
+            var isSynced = ViewModel.SyncStatusMap.TryGetValue(currentDay, out var syncStatus)
+                           && syncStatus == SyncStatus.Synced;
+            var dot = new Ellipse
             {
-                Text = currentDay.ToDateTime(TimeOnly.MinValue).ToString("ddd d", culture),
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Margin = new Thickness(4)
+                Width = 6,
+                Height = 6,
+                Fill = new SolidColorBrush(isSynced ? SyncedColor : NotSyncedColor),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 4, 0)
+            };
+            ToolTipService.SetToolTip(dot, ViewModel.LastSyncTooltip);
+
+            var header = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(4),
+                Spacing = 2,
+                Children =
+                {
+                    dot,
+                    new TextBlock
+                    {
+                        Text = currentDay.ToDateTime(TimeOnly.MinValue).ToString("ddd d", culture),
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                    }
+                }
             };
             Grid.SetRow(header, 0);
             Grid.SetColumn(header, column);
-            WeekGrid.Children.Add(header);
+            WeekHeaderGrid.Children.Add(header);
 
-            var allDayPanel = new StackPanel
-            {
-                Spacing = 4,
-                Margin = new Thickness(4)
-            };
+            // ── All-day events (header row 1) ─────────────────────────────────
+            var allDayPanel = new StackPanel { Spacing = 4, Margin = new Thickness(4) };
             foreach (var item in ViewModel.CurrentEvents
                          .Where(evt => evt.IsAllDay && DateOnly.FromDateTime(evt.StartLocal.Date) == currentDay)
                          .OrderBy(evt => evt.StartLocal))
             {
                 allDayPanel.Children.Add(CreateEventChip(item, culture));
             }
-
             Grid.SetRow(allDayPanel, 1);
             Grid.SetColumn(allDayPanel, column);
-            WeekGrid.Children.Add(allDayPanel);
+            WeekHeaderGrid.Children.Add(allDayPanel);
 
+            // ── Hourly slot borders ───────────────────────────────────────────
             for (var hour = 0; hour < 24; hour++)
             {
                 var slotBorder = new Border
@@ -176,11 +215,12 @@ public sealed partial class WeekViewControl : Page
                     BorderBrush = GridLineBrush,
                     BorderThickness = new Thickness(1, 1, column == 7 ? 1 : 0, hour == 23 ? 1 : 0)
                 };
-                Grid.SetRow(slotBorder, hour + 2);
+                Grid.SetRow(slotBorder, hour);
                 Grid.SetColumn(slotBorder, column);
                 WeekGrid.Children.Add(slotBorder);
             }
 
+            // ── Timed events ──────────────────────────────────────────────────
             var timedSegments = BuildTimedEventSegments(
                 ViewModel.CurrentEvents
                     .Where(evt => !evt.IsAllDay && evt.StartLocal < dayEnd && evt.EndLocal > dayStart)
@@ -191,11 +231,10 @@ public sealed partial class WeekViewControl : Page
             {
                 var eventBlock = CreateTimedEventBlock(segment, culture);
                 var startHour = segment.VisibleStart.Hour;
-                var startRow = startHour + 2;
                 var totalMinutesFromStartHour = segment.VisibleStart.Minute + (segment.VisibleEnd - segment.VisibleStart).TotalMinutes;
                 var span = (int)Math.Ceiling(totalMinutesFromStartHour / 60.0);
 
-                Grid.SetRow(eventBlock, startRow);
+                Grid.SetRow(eventBlock, startHour);
                 Grid.SetColumn(eventBlock, column);
                 Grid.SetRowSpan(eventBlock, Math.Max(1, Math.Min(span, 24 - startHour)));
                 WeekGrid.Children.Add(eventBlock);
@@ -322,6 +361,11 @@ public sealed partial class WeekViewControl : Page
     private void OnEventSelected(EventSelectedMessage message)
     {
         _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.GcalEventId));
+    }
+
+    private void OnSyncCompleted()
+    {
+        _ = DispatcherQueue.TryEnqueue(Rebuild);
     }
 
     private void ApplySelectionVisualState(string? selectedGcalEventId)
