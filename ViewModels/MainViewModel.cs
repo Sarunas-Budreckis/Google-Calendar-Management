@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -13,6 +14,7 @@ namespace GoogleCalendarManagement.ViewModels;
 
 public sealed class MainViewModel : ObservableObject
 {
+    private const int YearViewPreloadRadius = 5;
     private readonly ICalendarQueryService _calendarQueryService;
     private readonly INavigationStateService _navigationStateService;
     private readonly ISyncStatusService _syncStatusService;
@@ -22,6 +24,10 @@ public sealed class MainViewModel : ObservableObject
     private readonly IIcsImportService _icsImportService;
     private readonly ILogger<MainViewModel> _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly Lock _yearViewCacheGate = new();
+    private readonly Dictionary<int, YearViewCacheEntry> _yearViewCache = [];
+    private readonly Dictionary<int, Task<YearViewCacheEntry>> _yearViewLoadTasks = [];
+    private long _yearViewCacheAccessSequence;
     private Task? _initializationTask;
     private CancellationTokenSource _refreshCts = new();
     private ViewMode _currentViewMode;
@@ -258,6 +264,16 @@ public sealed class MainViewModel : ObservableObject
         return storedRange ?? GetVisibleDateRange();
     }
 
+    public async Task<YearViewDataSnapshot> EnsureYearViewDataAsync(int year, CancellationToken ct = default)
+    {
+        var data = await GetYearViewDataAsync(year, ct);
+        return new YearViewDataSnapshot(
+            data.Year,
+            data.Events,
+            data.SyncStatusMap,
+            data.LastSyncTime);
+    }
+
     /// <summary>Navigates to a specific date and view mode in a single operation, triggering only one data refresh.</summary>
     public async Task NavigateToAsync(DateOnly date, ViewMode mode)
     {
@@ -319,6 +335,7 @@ public sealed class MainViewModel : ObservableObject
 
             if (result.Success)
             {
+                InvalidateYearViewCache();
                 await RefreshAsync();
                 WeakReferenceMessenger.Default.Send(new SyncCompletedMessage());
                 return;
@@ -440,6 +457,7 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        InvalidateYearViewCache();
         _ = RefreshAsync();
     }
 
@@ -520,6 +538,17 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
+            if (CurrentViewMode == ViewMode.Year)
+            {
+                var yearViewData = await GetYearViewDataAsync(CurrentDate.Year, ct);
+                UpdateSyncPresentation(yearViewData.SyncStatusMap, yearViewData.LastSyncTime);
+                CurrentEvents = yearViewData.Events;
+                BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
+                await _navigationStateService.SaveAsync(new NavigationState(CurrentViewMode, CurrentDate), ct);
+                StartYearViewPreloads(CurrentDate.Year);
+                return;
+            }
+
             var (from, to) = GetDateRange(CurrentViewMode, CurrentDate);
             var (syncFrom, syncTo) = GetSyncStatusRange(CurrentViewMode, from, to);
             var eventsTask = _calendarQueryService.GetEventsForRangeAsync(from, to, ct);
@@ -574,6 +603,165 @@ public sealed class MainViewModel : ObservableObject
         NotificationMessage = message;
         NotificationSeverity = severity;
         IsNotificationOpen = true;
+    }
+
+    private async Task<YearViewCacheEntry> GetYearViewDataAsync(int year, CancellationToken ct)
+    {
+        var timer = Stopwatch.StartNew();
+        if (TryGetCachedYearViewData(year, out var cached))
+        {
+            timer.Stop();
+            _logger.LogInformation(
+                "Year view data cache hit for year {Year}. Data ready in {ElapsedMs}ms.",
+                year,
+                timer.ElapsedMilliseconds);
+            return cached;
+        }
+
+        var loadTask = GetOrCreateYearViewLoadTask(year);
+        var loaded = await loadTask.WaitAsync(ct);
+        timer.Stop();
+        _logger.LogInformation(
+            "Year view data cache miss for year {Year}. Data ready in {ElapsedMs}ms.",
+            year,
+            timer.ElapsedMilliseconds);
+        return loaded;
+    }
+
+    private Task<YearViewCacheEntry> GetOrCreateYearViewLoadTask(int year)
+    {
+        using var scope = _yearViewCacheGate.EnterScope();
+
+        if (_yearViewLoadTasks.TryGetValue(year, out var existingTask))
+        {
+            return existingTask;
+        }
+
+        var cacheVersion = _yearViewCacheVersion;
+        var loadTask = LoadAndCacheYearViewDataAsync(year, cacheVersion);
+        _yearViewLoadTasks[year] = loadTask;
+
+        _ = loadTask.ContinueWith(
+            task =>
+            {
+                RemoveCompletedYearViewLoadTask(year, task);
+
+                if (task.IsFaulted)
+                {
+                    _logger.LogDebug(task.Exception, "Year view preload for {Year} completed with an error.", year);
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        return loadTask;
+    }
+
+    private async Task<YearViewCacheEntry> LoadAndCacheYearViewDataAsync(int year, int cacheVersion)
+    {
+        var loaded = await LoadYearViewDataAsync(year, CancellationToken.None);
+        CacheYearViewData(loaded, cacheVersion);
+        return loaded;
+    }
+
+    private async Task<YearViewCacheEntry> LoadYearViewDataAsync(int year, CancellationToken ct)
+    {
+        var timer = Stopwatch.StartNew();
+        var from = new DateOnly(year, 1, 1);
+        var to = new DateOnly(year, 12, 31);
+        var eventsTask = _calendarQueryService.GetEventsForRangeAsync(from, to, ct);
+        var syncStatusTask = _syncStatusService.GetSyncStatusAsync(from, to, ct);
+        var lastSyncTask = _syncStatusService.GetLastSyncTimeAsync(ct);
+
+        await Task.WhenAll(eventsTask, syncStatusTask, lastSyncTask);
+        timer.Stop();
+        _logger.LogInformation(
+            "Year view data loaded for year {Year}. Events={EventCount} SyncDays={SyncDayCount} Load={ElapsedMs}ms.",
+            year,
+            eventsTask.Result.Count,
+            syncStatusTask.Result.Count,
+            timer.ElapsedMilliseconds);
+
+        return new YearViewCacheEntry(
+            year,
+            eventsTask.Result,
+            syncStatusTask.Result,
+            lastSyncTask.Result,
+            0);
+    }
+
+    private void StartYearViewPreloads(int selectedYear)
+    {
+        var actualCurrentYear = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime).Year;
+        var yearsToPreload = new HashSet<int>();
+
+        for (var year = selectedYear - YearViewPreloadRadius; year <= selectedYear + YearViewPreloadRadius; year++)
+        {
+            yearsToPreload.Add(year);
+        }
+
+        yearsToPreload.Add(actualCurrentYear);
+
+        foreach (var year in yearsToPreload.OrderBy(static year => year))
+        {
+            StartYearViewPreload(year);
+        }
+    }
+
+    private void StartYearViewPreload(int year)
+    {
+        if (TryGetCachedYearViewData(year, out _))
+        {
+            _logger.LogDebug("Year view preload skipped for year {Year}: already cached.", year);
+            return;
+        }
+
+        _logger.LogDebug("Year view preload queued for year {Year}.", year);
+        _ = GetOrCreateYearViewLoadTask(year);
+    }
+
+    private bool TryGetCachedYearViewData(int year, out YearViewCacheEntry entry)
+    {
+        using var scope = _yearViewCacheGate.EnterScope();
+
+        if (_yearViewCache.TryGetValue(year, out var cachedEntry))
+        {
+            entry = cachedEntry with { AccessSequence = ++_yearViewCacheAccessSequence };
+            _yearViewCache[year] = entry;
+            return true;
+        }
+
+        entry = default!;
+        return false;
+    }
+
+    private void CacheYearViewData(YearViewCacheEntry entry, int expectedVersion)
+    {
+        using var scope = _yearViewCacheGate.EnterScope();
+        if (expectedVersion != _yearViewCacheVersion)
+        {
+            return;
+        }
+
+        _yearViewCache[entry.Year] = entry with { AccessSequence = ++_yearViewCacheAccessSequence };
+    }
+
+    private void RemoveCompletedYearViewLoadTask(int year, Task<YearViewCacheEntry> completedTask)
+    {
+        using var scope = _yearViewCacheGate.EnterScope();
+        if (_yearViewLoadTasks.TryGetValue(year, out var existingTask) &&
+            ReferenceEquals(existingTask, completedTask))
+        {
+            _yearViewLoadTasks.Remove(year);
+        }
+    }
+
+    private void InvalidateYearViewCache()
+    {
+        using var scope = _yearViewCacheGate.EnterScope();
+        _yearViewCacheVersion++;
+        _yearViewCache.Clear();
     }
 
     private (DateOnly From, DateOnly To) GetDefaultSyncRange()
@@ -717,4 +905,19 @@ public sealed class MainViewModel : ObservableObject
             ? localTimeZone.DaylightName
             : localTimeZone.StandardName;
     }
+
+    private int _yearViewCacheVersion;
+
+    private sealed record YearViewCacheEntry(
+        int Year,
+        IList<CalendarEventDisplayModel> Events,
+        IReadOnlyDictionary<DateOnly, SyncStatus> SyncStatusMap,
+        DateTime? LastSyncTime,
+        long AccessSequence);
 }
+
+public sealed record YearViewDataSnapshot(
+    int Year,
+    IList<CalendarEventDisplayModel> Events,
+    IReadOnlyDictionary<DateOnly, SyncStatus> SyncStatusMap,
+    DateTime? LastSyncTime);

@@ -65,6 +65,9 @@
                     x:Name="TimedEventsRepeater"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Top" />
+                <Canvas
+                    x:Name="CurrentTimeOverlayCanvas"
+                    IsHitTestVisible="False" />
             </Grid>
         </ScrollViewer>
     </Grid>

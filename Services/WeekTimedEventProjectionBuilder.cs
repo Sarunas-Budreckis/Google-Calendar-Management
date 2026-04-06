@@ -66,6 +66,8 @@ public static class WeekTimedEventProjectionBuilder
         var minutesIntoStartHour = minutesFromDayStart - (gridRow * 60.0);
         var totalMinutesFromStartHour = minutesIntoStartHour + durationMinutes;
         var gridRowSpan = (int)Math.Ceiling(totalMinutesFromStartHour / 60.0);
+        var displayStart = GetDisplayStart(segment);
+        var displayEnd = GetDisplayEnd(segment);
 
         if (durationMinutes < 45)
         {
@@ -73,7 +75,7 @@ public static class WeekTimedEventProjectionBuilder
             return new WeekTimedEventLayoutItem(
                 segment.Item.GcalEventId,
                 segment.Item.Title,
-                $"{segment.Item.Title}, {segment.VisibleStart.ToString("t", culture)}",
+                $"{segment.Item.Title}, {displayStart.ToString("t", culture)}",
                 null,
                 BuildTooltipText(segment.Item, culture),
                 segment.Item.ColorHex,
@@ -97,7 +99,7 @@ public static class WeekTimedEventProjectionBuilder
             segment.Item.GcalEventId,
             segment.Item.Title,
             segment.Item.Title,
-            $"{segment.VisibleStart.ToString("t", culture)} - {segment.VisibleEnd.ToString("t", culture)}",
+            $"{displayStart.ToString("t", culture)} - {displayEnd.ToString("t", culture)}",
             BuildTooltipText(segment.Item, culture),
             segment.Item.ColorHex,
             dayOffset,
@@ -118,6 +120,20 @@ public static class WeekTimedEventProjectionBuilder
         return item.IsAllDay
             ? $"{item.Title}\nAll day"
             : $"{item.Title}\n{item.StartLocal.ToString("g", culture)} - {item.EndLocal.ToString("g", culture)}";
+    }
+
+    private static DateTime GetDisplayStart(TimedEventSegment segment)
+    {
+        return segment.Item.StartLocal.Date != segment.Item.EndLocal.Date
+            ? segment.Item.StartLocal
+            : segment.VisibleStart;
+    }
+
+    private static DateTime GetDisplayEnd(TimedEventSegment segment)
+    {
+        return segment.Item.StartLocal.Date != segment.Item.EndLocal.Date
+            ? segment.Item.EndLocal
+            : segment.VisibleEnd;
     }
 
     private static List<TimedEventSegment> BuildTimedEventSegments(

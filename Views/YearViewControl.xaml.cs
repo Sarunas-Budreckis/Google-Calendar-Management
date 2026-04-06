@@ -1,12 +1,15 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using CommunityToolkit.Mvvm.Messaging;
 using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -17,23 +20,42 @@ namespace GoogleCalendarManagement.Views;
 
 public sealed partial class YearViewControl : Page
 {
+    private const int RenderPrewarmRadius = 5;
+    private const int MaxProjectionCacheEntries = 16;
+    private const int MaxRenderCacheEntries = 16;
     private static readonly CornerRadius YearViewCornerRadius = new(4);
     private const double PreviewBarHeight = 11;
     private const double PreviewBarFontSize = 8;
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
+    private static readonly Brush TodayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4E, 0x8F, 0xD8));
+    private static readonly Brush TodayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x73, 0xA8, 0xE4));
+    private static readonly Brush TodayTextBrush = new SolidColorBrush(Colors.White);
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
     private static readonly Color SyncedColor = Color.FromArgb(0xFF, 0x4C, 0xAF, 0x50);
     private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
-    private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
-    private readonly List<DispatcherQueueTimer> _tooltipTimers = [];
+    private readonly TimeProvider _timeProvider;
+    private readonly ILogger<YearViewControl> _logger;
+    private readonly SharedTooltipManager _tooltipManager;
+    private Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, ProjectionCacheEntry> _projectionCache = [];
+    private long _projectionCacheAccessSequence;
+    private readonly Dictionary<int, RenderCacheEntry> _renderCache = [];
+    private long _renderCacheAccessSequence;
+    private RenderCacheEntry? _currentRenderState;
+    private CancellationTokenSource? _renderPrewarmCts;
+    private DispatcherTimer? _todayRefreshTimer;
+    private DateOnly _lastObservedToday;
 
     public YearViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
         _selectionService = App.GetRequiredService<ICalendarSelectionService>();
+        _timeProvider = App.GetRequiredService<TimeProvider>();
+        _logger = App.GetRequiredService<ILogger<YearViewControl>>();
         InitializeComponent();
+        _tooltipManager = new SharedTooltipManager(DispatcherQueue);
         MonthsGrid.Background = TransparentPanelBrush;
         Loaded += YearViewControl_Loaded;
         Unloaded += YearViewControl_Unloaded;
@@ -46,22 +68,43 @@ public sealed partial class YearViewControl : Page
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WeakReferenceMessenger.Default.Register<YearViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
         WeakReferenceMessenger.Default.Register<YearViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
+        _lastObservedToday = GetLocalToday();
+        StartTodayRefreshTimer();
         Rebuild();
     }
 
     private void YearViewControl_Unloaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
-        StopTooltipTimers();
+        StopTodayRefreshTimer();
+        CancelRenderPrewarm();
+        _tooltipManager.Reset();
         _eventBorders.Clear();
+        _projectionCache.Clear();
+        _renderCache.Clear();
+        _currentRenderState = null;
         WeakReferenceMessenger.Default.UnregisterAll(this);
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainViewModel.CurrentDate) && ShouldSkipCurrentDateRebuild())
+        {
+            return;
+        }
+
+        if (e.PropertyName == nameof(MainViewModel.SyncStatusMap) && ShouldSkipSyncStatusRebuild())
+        {
+            _logger.LogDebug(
+                "YearViewControl skipped intermediate SyncStatusMap rebuild for target year {TargetYear} while rendered year {RenderedYear} is still active.",
+                ViewModel.CurrentDate.Year,
+                _currentRenderState?.Year);
+            return;
+        }
+
         if (e.PropertyName is nameof(MainViewModel.CurrentDate)
-                           or nameof(MainViewModel.CurrentEvents)
-                           or nameof(MainViewModel.SyncStatusMap))
+            or nameof(MainViewModel.CurrentEvents)
+            or nameof(MainViewModel.SyncStatusMap))
         {
             Rebuild();
         }
@@ -79,11 +122,93 @@ public sealed partial class YearViewControl : Page
 
     private void Rebuild()
     {
+        var totalTimer = Stopwatch.StartNew();
+        CancelRenderPrewarm();
+        EnsureMonthsGridStructure();
+
+        if (TryActivateCachedRenderState(ViewModel.CurrentDate.Year))
+        {
+            totalTimer.Stop();
+            _logger.LogInformation(
+                "YearViewControl render cache hit for year {Year}. Reattach completed in {ElapsedMs}ms.",
+                ViewModel.CurrentDate.Year,
+                totalTimer.ElapsedMilliseconds);
+            ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
+            ScheduleRenderPrewarm();
+            return;
+        }
+
+        var resetTimer = Stopwatch.StartNew();
+        _tooltipManager.Reset();
         MonthsGrid.Children.Clear();
+        _eventBorders = new Dictionary<string, List<EventBorderRegistration>>(StringComparer.Ordinal);
+        resetTimer.Stop();
+
+        var culture = CultureInfo.CurrentCulture;
+        var projectionTimer = Stopwatch.StartNew();
+        var (projection, projectionCacheHit) = GetProjectionForYear(
+            ViewModel.CurrentDate.Year,
+            ViewModel.CurrentEvents,
+            ViewModel.SyncStatusMap);
+        projectionTimer.Stop();
+
+        var buildTimer = Stopwatch.StartNew();
+        var renderState = CreateRenderState(
+            ViewModel.CurrentDate.Year,
+            ViewModel.CurrentEvents,
+            ViewModel.SyncStatusMap,
+            culture,
+            projection,
+            attachToGrid: true);
+        buildTimer.Stop();
+
+        CacheAndActivateRenderState(renderState);
+
+        totalTimer.Stop();
+        _logger.LogInformation(
+            "YearViewControl rebuilt year {Year}. ProjectionCacheHit={ProjectionCacheHit}. Reset={ResetMs}ms Projection={ProjectionMs}ms Build={BuildMs}ms Total={TotalMs}ms.",
+            ViewModel.CurrentDate.Year,
+            projectionCacheHit,
+            resetTimer.ElapsedMilliseconds,
+            projectionTimer.ElapsedMilliseconds,
+            buildTimer.ElapsedMilliseconds,
+            totalTimer.ElapsedMilliseconds);
+
+        ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
+        ScheduleRenderPrewarm();
+    }
+
+    private bool ShouldSkipCurrentDateRebuild()
+    {
+        if (_currentRenderState is null)
+        {
+            return false;
+        }
+
+        if (_currentRenderState.Year == ViewModel.CurrentDate.Year)
+        {
+            return true;
+        }
+
+        return ReferenceEquals(_currentRenderState.Events, ViewModel.CurrentEvents) &&
+               ReferenceEquals(_currentRenderState.SyncStatusMap, ViewModel.SyncStatusMap);
+    }
+
+    private bool ShouldSkipSyncStatusRebuild()
+    {
+        return _currentRenderState is not null &&
+               _currentRenderState.Year != ViewModel.CurrentDate.Year;
+    }
+
+    private void EnsureMonthsGridStructure()
+    {
+        if (MonthsGrid.RowDefinitions.Count == 4 && MonthsGrid.ColumnDefinitions.Count == 3)
+        {
+            return;
+        }
+
         MonthsGrid.RowDefinitions.Clear();
         MonthsGrid.ColumnDefinitions.Clear();
-        StopTooltipTimers();
-        _eventBorders.Clear();
 
         for (var row = 0; row < 4; row++)
         {
@@ -94,30 +219,252 @@ public sealed partial class YearViewControl : Page
         {
             MonthsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         }
+    }
 
-        var culture = CultureInfo.CurrentCulture;
-        var yearStart = new DateOnly(ViewModel.CurrentDate.Year, 1, 1);
-        var yearEnd = new DateOnly(ViewModel.CurrentDate.Year, 12, 31);
+    private bool TryActivateCachedRenderState(int year)
+    {
+        return TryGetRenderableState(year, ViewModel.CurrentEvents, ViewModel.SyncStatusMap, out var cachedState) &&
+               ActivateCachedRenderState(cachedState);
+    }
+
+    private bool TryGetRenderableState(
+        int year,
+        IList<CalendarEventDisplayModel> events,
+        IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap,
+        out RenderCacheEntry renderState)
+    {
+        if (!_renderCache.TryGetValue(year, out var cachedState) ||
+            !ReferenceEquals(cachedState.Events, events) ||
+            !ReferenceEquals(cachedState.SyncStatusMap, syncStatusMap))
+        {
+            renderState = null!;
+            return false;
+        }
+
+        renderState = cachedState;
+        return true;
+    }
+
+    private bool ActivateCachedRenderState(RenderCacheEntry cachedState)
+    {
+        cachedState.AccessSequence = ++_renderCacheAccessSequence;
+        ActivateRenderState(cachedState);
+        return true;
+    }
+
+    private void ActivateRenderState(RenderCacheEntry renderState)
+    {
+        _tooltipManager.Reset();
+        MonthsGrid.Children.Clear();
+
+        foreach (var monthPanel in renderState.MonthPanels)
+        {
+            MonthsGrid.Children.Add(monthPanel);
+        }
+
+        _currentRenderState = renderState;
+        _eventBorders = renderState.EventBorders;
+    }
+
+    private void CacheAndActivateRenderState(RenderCacheEntry renderState)
+    {
+        CacheRenderState(renderState);
+        ActivateRenderState(renderState);
+    }
+
+    private void CacheRenderState(RenderCacheEntry renderState)
+    {
+        _renderCache[renderState.Year] = renderState;
+        TrimRenderCache();
+    }
+
+    private void TrimRenderCache()
+    {
+        while (_renderCache.Count > MaxRenderCacheEntries)
+        {
+            var oldestYear = _renderCache
+                .OrderBy(static pair => pair.Value.AccessSequence)
+                .Select(static pair => pair.Key)
+                .First();
+
+            _renderCache.Remove(oldestYear);
+        }
+    }
+
+    private (YearViewProjectionResult Projection, bool CacheHit) GetProjectionForYear(
+        int year,
+        IList<CalendarEventDisplayModel> events,
+        IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap)
+    {
+        if (_projectionCache.TryGetValue(year, out var cachedEntry) &&
+            ReferenceEquals(cachedEntry.Events, events) &&
+            ReferenceEquals(cachedEntry.SyncStatusMap, syncStatusMap))
+        {
+            cachedEntry.AccessSequence = ++_projectionCacheAccessSequence;
+            return (cachedEntry.Projection, true);
+        }
+
+        var yearStart = new DateOnly(year, 1, 1);
+        var yearEnd = new DateOnly(year, 12, 31);
         var projection = YearViewDayProjectionBuilder.Build(
             EnumerateDates(yearStart, yearEnd),
-            ViewModel.CurrentEvents,
-            ViewModel.SyncStatusMap);
+            events,
+            syncStatusMap);
+
+        _projectionCache[year] = new ProjectionCacheEntry(
+            events,
+            syncStatusMap,
+            projection,
+            ++_projectionCacheAccessSequence);
+        TrimProjectionCache();
+        return (projection, false);
+    }
+
+    private RenderCacheEntry CreateRenderState(
+        int year,
+        IList<CalendarEventDisplayModel> events,
+        IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap,
+        CultureInfo culture,
+        YearViewProjectionResult projection,
+        bool attachToGrid)
+    {
+        var eventBorders = new Dictionary<string, List<EventBorderRegistration>>(StringComparer.Ordinal);
+        var renderContext = new RenderBuildContext(eventBorders);
+        var monthPanels = new List<UIElement>(12);
 
         for (var month = 1; month <= 12; month++)
         {
-            var monthBorder = BuildMonthPanel(new DateOnly(ViewModel.CurrentDate.Year, month, 1), culture, projection);
+            var monthBorder = BuildMonthPanel(new DateOnly(year, month, 1), culture, projection, renderContext);
             Grid.SetRow(monthBorder, (month - 1) / 3);
             Grid.SetColumn(monthBorder, (month - 1) % 3);
-            MonthsGrid.Children.Add(monthBorder);
+
+            if (attachToGrid)
+            {
+                MonthsGrid.Children.Add(monthBorder);
+            }
+
+            monthPanels.Add(monthBorder);
         }
 
-        ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
+        return new RenderCacheEntry(
+            year,
+            events,
+            syncStatusMap,
+            monthPanels,
+            eventBorders,
+            ++_renderCacheAccessSequence);
+    }
+
+    private void ScheduleRenderPrewarm()
+    {
+        CancelRenderPrewarm();
+        _renderPrewarmCts = new CancellationTokenSource();
+        _ = PrewarmRenderCacheAsync(ViewModel.CurrentDate.Year, _renderPrewarmCts.Token);
+    }
+
+    private void CancelRenderPrewarm()
+    {
+        if (_renderPrewarmCts is null)
+        {
+            return;
+        }
+
+        _renderPrewarmCts.Cancel();
+        _renderPrewarmCts.Dispose();
+        _renderPrewarmCts = null;
+    }
+
+    private async Task PrewarmRenderCacheAsync(int selectedYear, CancellationToken ct)
+    {
+        var actualCurrentYear = GetLocalToday().Year;
+        var candidateYears = new HashSet<int>();
+
+        for (var year = selectedYear - RenderPrewarmRadius; year <= selectedYear + RenderPrewarmRadius; year++)
+        {
+            candidateYears.Add(year);
+        }
+
+        candidateYears.Add(actualCurrentYear);
+        candidateYears.Remove(selectedYear);
+
+        foreach (var year in candidateYears
+                     .OrderBy(year => Math.Abs(year - selectedYear))
+                     .ThenBy(static year => year))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var snapshot = await ViewModel.EnsureYearViewDataAsync(year, ct);
+            ct.ThrowIfCancellationRequested();
+
+            if (TryGetRenderableState(year, snapshot.Events, snapshot.SyncStatusMap, out _))
+            {
+                continue;
+            }
+
+            await WaitForLowPriorityTurnAsync(ct);
+            ct.ThrowIfCancellationRequested();
+
+            if (TryGetRenderableState(year, snapshot.Events, snapshot.SyncStatusMap, out _))
+            {
+                continue;
+            }
+
+            var timer = Stopwatch.StartNew();
+            var culture = CultureInfo.CurrentCulture;
+            var (projection, _) = GetProjectionForYear(year, snapshot.Events, snapshot.SyncStatusMap);
+            var renderState = CreateRenderState(
+                year,
+                snapshot.Events,
+                snapshot.SyncStatusMap,
+                culture,
+                projection,
+                attachToGrid: false);
+            CacheRenderState(renderState);
+            timer.Stop();
+
+            _logger.LogDebug(
+                "YearViewControl prewarmed render cache for year {Year} in {ElapsedMs}ms.",
+                year,
+                timer.ElapsedMilliseconds);
+        }
+    }
+
+    private Task WaitForLowPriorityTurnAsync(CancellationToken ct)
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var registration = ct.Register(() => tcs.TrySetCanceled(ct));
+
+        if (!DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+            {
+                registration.Dispose();
+                tcs.TrySetResult();
+            }))
+        {
+            registration.Dispose();
+            tcs.TrySetResult();
+        }
+
+        return tcs.Task;
+    }
+
+    private void TrimProjectionCache()
+    {
+        while (_projectionCache.Count > MaxProjectionCacheEntries)
+        {
+            var oldestYear = _projectionCache
+                .OrderBy(static pair => pair.Value.AccessSequence)
+                .Select(static pair => pair.Key)
+                .First();
+
+            _projectionCache.Remove(oldestYear);
+        }
     }
 
     private Border BuildMonthPanel(
         DateOnly firstDay,
         CultureInfo culture,
-        YearViewProjectionResult projection)
+        YearViewProjectionResult projection,
+        RenderBuildContext renderContext)
     {
         var lastDay = new DateOnly(firstDay.Year, firstDay.Month, DateTime.DaysInMonth(firstDay.Year, firstDay.Month));
         var gridStart = StartOfWeek(firstDay);
@@ -142,7 +489,7 @@ public sealed partial class YearViewControl : Page
             monthGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             var weekStart = gridStart.AddDays(row * 7);
-            var weekGrid = BuildWeekRowGrid(weekStart, firstDay.Month, culture, projection);
+            var weekGrid = BuildWeekRowGrid(weekStart, firstDay.Month, culture, projection, renderContext);
             Grid.SetRow(weekGrid, row);
             Grid.SetColumnSpan(weekGrid, 7);
             monthGrid.Children.Add(weekGrid);
@@ -165,7 +512,8 @@ public sealed partial class YearViewControl : Page
         DateOnly weekStart,
         int activeMonth,
         CultureInfo culture,
-        YearViewProjectionResult projection)
+        YearViewProjectionResult projection,
+        RenderBuildContext renderContext)
     {
         var weekGrid = new Grid();
         for (var column = 0; column < 7; column++)
@@ -190,12 +538,12 @@ public sealed partial class YearViewControl : Page
                 continue;
             }
 
-            var header = BuildDayHeader(date, culture, displayModel);
+            var header = BuildDayHeader(date, culture, displayModel, CalendarViewVisualStateCalculator.IsToday(date, _timeProvider.GetLocalNow().DateTime));
             Grid.SetColumn(header, column);
             Grid.SetRow(header, 0);
             weekGrid.Children.Add(header);
 
-            var singleDayBar = BuildPreviewBar(displayModel.SingleDayAllDayBar, true);
+            var singleDayBar = BuildPreviewBar(displayModel.SingleDayAllDayBar, true, renderContext);
             Grid.SetColumn(singleDayBar, column);
             Grid.SetRow(singleDayBar, 1);
             weekGrid.Children.Add(singleDayBar);
@@ -203,7 +551,7 @@ public sealed partial class YearViewControl : Page
 
         foreach (var segment in BuildWeekSegments(weekStart, activeMonth, projection.DayLookup))
         {
-            var multiDayBar = BuildPreviewBar(segment.Bar, false);
+            var multiDayBar = BuildPreviewBar(segment.Bar, false, renderContext);
             Grid.SetColumn(multiDayBar, segment.StartColumn);
             Grid.SetRow(multiDayBar, 2);
             Grid.SetColumnSpan(multiDayBar, segment.ColumnSpan);
@@ -237,21 +585,14 @@ public sealed partial class YearViewControl : Page
     private static Grid BuildDayHeader(
         DateOnly date,
         CultureInfo culture,
-        YearViewDayDisplayModel displayModel)
+        YearViewDayDisplayModel displayModel,
+        bool isToday)
     {
         var header = new Grid
         {
             Margin = new Thickness(2, 2, 2, 1),
             IsHitTestVisible = false
         };
-
-        header.Children.Add(new TextBlock
-        {
-            Text = date.Day.ToString(culture),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 11
-        });
 
         if (displayModel.SyncDotPlacement == YearViewSyncDotPlacement.Trailing)
         {
@@ -260,15 +601,47 @@ public sealed partial class YearViewControl : Page
                 Width = 6,
                 Height = 6,
                 Fill = new SolidColorBrush(displayModel.SyncStatus == SyncStatus.Synced ? SyncedColor : NotSyncedColor),
-                HorizontalAlignment = HorizontalAlignment.Right,
+                HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center
             });
         }
 
+        header.Children.Add(new Border
+        {
+            Width = 20,
+            Height = 20,
+            Background = TransparentPanelBrush,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new Grid
+            {
+                Children =
+                {
+                    new Ellipse
+                    {
+                        Fill = isToday ? TodayHighlightBrush : TransparentPanelBrush,
+                        Stroke = isToday ? TodayHighlightStrokeBrush : TransparentPanelBrush,
+                        StrokeThickness = isToday ? 1.25 : 0
+                    },
+                    new TextBlock
+                    {
+                        Text = date.Day.ToString(culture),
+                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                        Foreground = isToday
+                            ? TodayTextBrush
+                            : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        FontSize = 11
+                    }
+                }
+            }
+        });
+
         return header;
     }
 
-    private Border BuildPreviewBar(YearViewPreviewBarDisplayModel bar, bool isSingleDay)
+    private Border BuildPreviewBar(YearViewPreviewBarDisplayModel bar, bool isSingleDay, RenderBuildContext renderContext)
     {
         var previewBar = new Border
         {
@@ -301,8 +674,8 @@ public sealed partial class YearViewControl : Page
 
         if (bar.HasContent && bar.GcalEventId is not null)
         {
-            RegisterEventBorder(bar.GcalEventId, previewBar);
-            ConfigurePreviewBarInteractions(previewBar, bar);
+            RegisterEventBorder(bar.GcalEventId, previewBar, renderContext);
+            ConfigurePreviewBarInteractions(previewBar, bar, renderContext);
         }
 
         return previewBar;
@@ -376,7 +749,7 @@ public sealed partial class YearViewControl : Page
         return segments;
     }
 
-    private void ConfigurePreviewBarInteractions(Border previewBar, YearViewPreviewBarDisplayModel bar)
+    private void ConfigurePreviewBarInteractions(Border previewBar, YearViewPreviewBarDisplayModel bar, RenderBuildContext renderContext)
     {
         previewBar.Tapped += (_, e) =>
         {
@@ -392,55 +765,52 @@ public sealed partial class YearViewControl : Page
             Content = bar.SummaryText ?? string.Empty
         };
         ToolTipService.SetToolTip(previewBar, tooltip);
-        ConfigureTooltipDelay(previewBar, tooltip);
+        _tooltipManager.Attach(previewBar, tooltip);
     }
 
-    private void ConfigureTooltipDelay(UIElement element, ToolTip tooltip)
+    private void StartTodayRefreshTimer()
     {
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(100);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
+        if (_todayRefreshTimer is not null)
         {
-            timer.Stop();
-            tooltip.IsOpen = true;
-        };
-        _tooltipTimers.Add(timer);
-
-        element.PointerEntered += (_, _) =>
-        {
-            tooltip.IsOpen = false;
-            timer.Stop();
-            timer.Start();
-        };
-
-        element.PointerExited += (_, _) =>
-        {
-            timer.Stop();
-            tooltip.IsOpen = false;
-        };
-
-        element.PointerCanceled += (_, _) =>
-        {
-            timer.Stop();
-            tooltip.IsOpen = false;
-        };
-
-        element.PointerCaptureLost += (_, _) =>
-        {
-            timer.Stop();
-            tooltip.IsOpen = false;
-        };
-    }
-
-    private void StopTooltipTimers()
-    {
-        foreach (var timer in _tooltipTimers)
-        {
-            timer.Stop();
+            _todayRefreshTimer.Start();
+            return;
         }
 
-        _tooltipTimers.Clear();
+        _todayRefreshTimer = new DispatcherTimer();
+        _todayRefreshTimer.Tick += TodayRefreshTimer_Tick;
+        _todayRefreshTimer.Interval = GetDelayUntilNextMinute();
+        _todayRefreshTimer.Start();
+    }
+
+    private void StopTodayRefreshTimer()
+    {
+        if (_todayRefreshTimer is null)
+        {
+            return;
+        }
+
+        _todayRefreshTimer.Stop();
+        _todayRefreshTimer.Tick -= TodayRefreshTimer_Tick;
+        _todayRefreshTimer = null;
+    }
+
+    private void TodayRefreshTimer_Tick(object? sender, object e)
+    {
+        if (_todayRefreshTimer is not null)
+        {
+            _todayRefreshTimer.Interval = TimeSpan.FromMinutes(1);
+        }
+
+        var today = GetLocalToday();
+        if (today == _lastObservedToday)
+        {
+            return;
+        }
+
+        _lastObservedToday = today;
+        _renderCache.Clear();
+        _currentRenderState = null;
+        Rebuild();
     }
 
     private void ApplySelectionVisualState(string? selectedGcalEventId)
@@ -452,21 +822,20 @@ public sealed partial class YearViewControl : Page
 
             foreach (var registration in registrations)
             {
-                registration.Border.BorderBrush = isSelected ? SelectedBorderBrush : registration.DefaultBorderBrush;
-                registration.Border.BorderThickness = isSelected ? new Thickness(1) : registration.DefaultBorderThickness;
+                ApplySelectionState(registration.Border, registration, isSelected);
             }
         }
     }
 
-    private void RegisterEventBorder(string gcalEventId, Border border)
+    private static void RegisterEventBorder(string gcalEventId, Border border, RenderBuildContext renderContext)
     {
-        if (!_eventBorders.TryGetValue(gcalEventId, out var registrations))
+        if (!renderContext.EventBorders.TryGetValue(gcalEventId, out var registrations))
         {
             registrations = [];
-            _eventBorders[gcalEventId] = registrations;
+            renderContext.EventBorders[gcalEventId] = registrations;
         }
 
-        registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness));
+        registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness, border.Padding));
     }
 
     private static DateOnly StartOfWeek(DateOnly date)
@@ -481,8 +850,181 @@ public sealed partial class YearViewControl : Page
         return StartOfWeek(date).AddDays(6);
     }
 
+    private DateOnly GetLocalToday()
+    {
+        return DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
+    }
+
+    private TimeSpan GetDelayUntilNextMinute()
+    {
+        var now = _timeProvider.GetLocalNow().DateTime;
+        var nextMinute = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, now.Kind).AddMinutes(1);
+        return nextMinute - now;
+    }
+
+    private static void ApplySelectionState(Border border, EventBorderRegistration registration, bool isSelected)
+    {
+        var selectedThickness = new Thickness(1);
+        border.BorderBrush = isSelected ? SelectedBorderBrush : registration.DefaultBorderBrush;
+        border.BorderThickness = isSelected ? selectedThickness : registration.DefaultBorderThickness;
+        border.Padding = isSelected
+            ? AdjustPaddingForThickness(registration.DefaultPadding, registration.DefaultBorderThickness, selectedThickness)
+            : registration.DefaultPadding;
+    }
+
+    private static Thickness AdjustPaddingForThickness(Thickness padding, Thickness fromThickness, Thickness toThickness)
+    {
+        return new Thickness(
+            Math.Max(0, padding.Left - (toThickness.Left - fromThickness.Left)),
+            Math.Max(0, padding.Top - (toThickness.Top - fromThickness.Top)),
+            Math.Max(0, padding.Right - (toThickness.Right - fromThickness.Right)),
+            Math.Max(0, padding.Bottom - (toThickness.Bottom - fromThickness.Bottom)));
+    }
+
     private sealed record EventBorderRegistration(
         Border Border,
         Brush? DefaultBorderBrush,
-        Thickness DefaultBorderThickness);
+        Thickness DefaultBorderThickness,
+        Thickness DefaultPadding);
+
+    private sealed class ProjectionCacheEntry
+    {
+        public ProjectionCacheEntry(
+            IList<CalendarEventDisplayModel> events,
+            IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap,
+            YearViewProjectionResult projection,
+            long accessSequence)
+        {
+            Events = events;
+            SyncStatusMap = syncStatusMap;
+            Projection = projection;
+            AccessSequence = accessSequence;
+        }
+
+        public IList<CalendarEventDisplayModel> Events { get; }
+
+        public IReadOnlyDictionary<DateOnly, SyncStatus> SyncStatusMap { get; }
+
+        public YearViewProjectionResult Projection { get; }
+
+        public long AccessSequence { get; set; }
+    }
+
+    private sealed class RenderCacheEntry
+    {
+        public RenderCacheEntry(
+            int year,
+            IList<CalendarEventDisplayModel> events,
+            IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap,
+            IReadOnlyList<UIElement> monthPanels,
+            Dictionary<string, List<EventBorderRegistration>> eventBorders,
+            long accessSequence)
+        {
+            Year = year;
+            Events = events;
+            SyncStatusMap = syncStatusMap;
+            MonthPanels = monthPanels;
+            EventBorders = eventBorders;
+            AccessSequence = accessSequence;
+        }
+
+        public int Year { get; }
+
+        public IList<CalendarEventDisplayModel> Events { get; }
+
+        public IReadOnlyDictionary<DateOnly, SyncStatus> SyncStatusMap { get; }
+
+        public IReadOnlyList<UIElement> MonthPanels { get; }
+
+        public Dictionary<string, List<EventBorderRegistration>> EventBorders { get; }
+
+        public long AccessSequence { get; set; }
+    }
+
+    private sealed record RenderBuildContext(
+        Dictionary<string, List<EventBorderRegistration>> EventBorders);
+
+    private sealed class SharedTooltipManager
+    {
+        private readonly DispatcherQueue _dispatcherQueue;
+        private readonly DispatcherQueueTimer _timer;
+        private ToolTip? _pendingTooltip;
+        private ToolTip? _activeTooltip;
+
+        public SharedTooltipManager(DispatcherQueue dispatcherQueue)
+        {
+            _dispatcherQueue = dispatcherQueue;
+            _timer = _dispatcherQueue.CreateTimer();
+            _timer.Interval = TimeSpan.FromMilliseconds(100);
+            _timer.IsRepeating = false;
+            _timer.Tick += OnTimerTick;
+        }
+
+        public void Attach(UIElement element, ToolTip tooltip)
+        {
+            element.PointerEntered += (_, _) => BeginHover(tooltip);
+            element.PointerExited += (_, _) => EndHover(tooltip);
+            element.PointerCanceled += (_, _) => EndHover(tooltip);
+            element.PointerCaptureLost += (_, _) => EndHover(tooltip);
+        }
+
+        public void Reset()
+        {
+            _timer.Stop();
+            _pendingTooltip = null;
+
+            if (_activeTooltip is not null)
+            {
+                _activeTooltip.IsOpen = false;
+                _activeTooltip = null;
+            }
+        }
+
+        private void BeginHover(ToolTip tooltip)
+        {
+            if (_activeTooltip is not null && !ReferenceEquals(_activeTooltip, tooltip))
+            {
+                _activeTooltip.IsOpen = false;
+                _activeTooltip = null;
+            }
+
+            _pendingTooltip = tooltip;
+            tooltip.IsOpen = false;
+            _timer.Stop();
+            _timer.Start();
+        }
+
+        private void EndHover(ToolTip tooltip)
+        {
+            if (ReferenceEquals(_pendingTooltip, tooltip))
+            {
+                _pendingTooltip = null;
+                _timer.Stop();
+            }
+
+            if (ReferenceEquals(_activeTooltip, tooltip))
+            {
+                tooltip.IsOpen = false;
+                _activeTooltip = null;
+            }
+        }
+
+        private void OnTimerTick(DispatcherQueueTimer sender, object args)
+        {
+            sender.Stop();
+
+            if (_pendingTooltip is null)
+            {
+                return;
+            }
+
+            if (_activeTooltip is not null && !ReferenceEquals(_activeTooltip, _pendingTooltip))
+            {
+                _activeTooltip.IsOpen = false;
+            }
+
+            _activeTooltip = _pendingTooltip;
+            _activeTooltip.IsOpen = true;
+        }
+    }
 }

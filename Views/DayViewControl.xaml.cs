@@ -6,6 +6,8 @@ using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
@@ -22,18 +24,27 @@ public sealed partial class DayViewControl : Page
     private const double MinimumEventHeight = 15.0;
     private const double StandardTopPadding = 6.0;
     private const double ShortEventContentHeightEstimate = 16.0;
+    private const double TimeColumnWidth = 72.0;
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
+    private static readonly Brush TodayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4E, 0x8F, 0xD8));
+    private static readonly Brush TodayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x73, 0xA8, 0xE4));
+    private static readonly Brush TodayTextBrush = new SolidColorBrush(Colors.White);
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
+    private static readonly Brush CurrentTimeIndicatorBrush = new SolidColorBrush(Colors.Red);
     private static readonly Color SyncedColor = Color.FromArgb(0xFF, 0x4C, 0xAF, 0x50);
     private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
+    private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
+    private DispatcherTimer? _currentTimeTimer;
+    private DateOnly _lastObservedToday;
 
     public DayViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
         _selectionService = App.GetRequiredService<ICalendarSelectionService>();
+        _timeProvider = App.GetRequiredService<TimeProvider>();
         InitializeComponent();
         AllDayPanel.Background = TransparentPanelBrush;
         AllDayPanel.Tapped += CalendarSurface_Tapped;
@@ -41,6 +52,7 @@ public sealed partial class DayViewControl : Page
         DayGrid.Tapped += CalendarSurface_Tapped;
         Loaded += DayViewControl_Loaded;
         Unloaded += DayViewControl_Unloaded;
+        SizeChanged += DayViewControl_SizeChanged;
     }
 
     public MainViewModel ViewModel { get; }
@@ -50,12 +62,15 @@ public sealed partial class DayViewControl : Page
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WeakReferenceMessenger.Default.Register<DayViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
         WeakReferenceMessenger.Default.Register<DayViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
+        _lastObservedToday = GetLocalToday();
+        StartCurrentTimeTimer();
         Rebuild();
     }
 
     private void DayViewControl_Unloaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        StopCurrentTimeTimer();
         WeakReferenceMessenger.Default.UnregisterAll(this);
         _eventBorders.Clear();
     }
@@ -76,6 +91,7 @@ public sealed partial class DayViewControl : Page
         DayGrid.Children.Clear();
         DayGrid.RowDefinitions.Clear();
         DayGrid.ColumnDefinitions.Clear();
+        CurrentTimeOverlayCanvas.Children.Clear();
         _eventBorders.Clear();
 
         DayGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
@@ -110,11 +126,14 @@ public sealed partial class DayViewControl : Page
                 }
             }
         };
+        var culture = CultureInfo.CurrentCulture;
+        var localNow = _timeProvider.GetLocalNow().DateTime;
+        var dayHeader = CreateDayHeader(culture, localNow);
+        AllDayPanel.Children.Add(dayHeader);
         ToolTipService.SetToolTip(syncHeader, ViewModel.LastSyncTooltip);
         AllDayPanel.Children.Add(syncHeader);
         AllDayPanel.Visibility = Visibility.Visible;
 
-        var culture = CultureInfo.CurrentCulture;
         // Include all-day events that start on this day, and timed events that overlap this day.
         var dayEvents = ViewModel.CurrentEvents
             .Where(evt => evt.IsAllDay
@@ -174,10 +193,16 @@ public sealed partial class DayViewControl : Page
 
         foreach (var item in dayEvents.Where(evt => !evt.IsAllDay))
         {
-            var topOffset = item.StartLocal.Minute / 60.0 * RowHeight;
-            var pixelHeight = (item.EndLocal - item.StartLocal).TotalMinutes / 60.0 * RowHeight;
+            if (!CalendarViewVisualStateCalculator.TryClipTimedEventToDay(item, ViewModel.CurrentDate, out var segment))
+            {
+                continue;
+            }
+
+            var minutesFromDayStart = (segment.VisibleStart - ViewModel.CurrentDate.ToDateTime(TimeOnly.MinValue)).TotalMinutes;
+            var durationMinutes = (segment.VisibleEnd - segment.VisibleStart).TotalMinutes;
+            var topOffset = minutesFromDayStart / 60.0 * RowHeight;
+            var pixelHeight = durationMinutes / 60.0 * RowHeight;
             var eventHeight = Math.Max(MinimumEventHeight, pixelHeight - EventBottomGap);
-            var durationMinutes = (item.EndLocal - item.StartLocal).TotalMinutes;
             var white = new SolidColorBrush(Colors.White);
 
             UIElement content;
@@ -189,7 +214,7 @@ public sealed partial class DayViewControl : Page
                 padding = new Thickness(4, Math.Min(StandardTopPadding, centeredTopPadding), 4, 0);
                 content = new TextBlock
                 {
-                    Text = $"{item.Title}, {item.StartLocal.ToString("t", culture)}",
+                    Text = $"{item.Title}, {GetDisplayStartTime(item, segment).ToString("t", culture)}",
                     Foreground = white,
                     FontSize = 11,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
@@ -219,7 +244,7 @@ public sealed partial class DayViewControl : Page
                         },
                         new TextBlock
                         {
-                            Text = $"{item.StartLocal.ToString("t", culture)} - {item.EndLocal.ToString("t", culture)}",
+                            Text = $"{GetDisplayStartTime(item, segment).ToString("t", culture)} - {GetDisplayEndTime(item, segment).ToString("t", culture)}",
                             Foreground = white,
                             FontSize = 11
                         }
@@ -250,9 +275,9 @@ public sealed partial class DayViewControl : Page
 
             RegisterEventBorder(item.GcalEventId, eventBlock);
 
-            var startRow = item.StartLocal.Hour;
+            var startRow = segment.VisibleStart.Hour;
             // Span = number of hour-rows the event occupies, accounting for start-minute offset.
-            var totalMinutesFromStartHour = item.StartLocal.Minute + (item.EndLocal - item.StartLocal).TotalMinutes;
+            var totalMinutesFromStartHour = segment.VisibleStart.Minute + (segment.VisibleEnd - segment.VisibleStart).TotalMinutes;
             var span = (int)Math.Ceiling(totalMinutesFromStartHour / 60.0);
             Grid.SetRow(eventBlock, startRow);
             Grid.SetColumn(eventBlock, 1);
@@ -260,6 +285,8 @@ public sealed partial class DayViewControl : Page
             DayGrid.Children.Add(eventBlock);
         }
 
+        CurrentTimeOverlayCanvas.Height = RowHeight * 24;
+        _ = DispatcherQueue.TryEnqueue(UpdateCurrentTimeIndicator);
         ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
     }
 
@@ -278,6 +305,141 @@ public sealed partial class DayViewControl : Page
         _ = DispatcherQueue.TryEnqueue(Rebuild);
     }
 
+    private void DayViewControl_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateCurrentTimeIndicator();
+    }
+
+    private FrameworkElement CreateDayHeader(CultureInfo culture, DateTime localNow)
+    {
+        var isToday = CalendarViewVisualStateCalculator.IsToday(ViewModel.CurrentDate, localNow);
+        var header = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8
+        };
+        header.Children.Add(new TextBlock
+        {
+            Text = ViewModel.CurrentDate.ToDateTime(TimeOnly.MinValue).ToString("dddd, MMM", culture),
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        header.Children.Add(new Border
+        {
+            Width = 28,
+            Height = 28,
+            Background = TransparentPanelBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new Grid
+            {
+                Children =
+                {
+                    new Ellipse
+                    {
+                        Fill = isToday ? TodayHighlightBrush : TransparentPanelBrush,
+                        Stroke = isToday ? TodayHighlightStrokeBrush : TransparentPanelBrush,
+                        StrokeThickness = isToday ? 1.25 : 0
+                    },
+                    new TextBlock
+                    {
+                        Text = ViewModel.CurrentDate.Day.ToString(culture),
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                        Foreground = isToday
+                            ? TodayTextBrush
+                            : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                }
+            }
+        });
+        return header;
+    }
+
+    private void StartCurrentTimeTimer()
+    {
+        if (_currentTimeTimer is not null)
+        {
+            _currentTimeTimer.Start();
+            return;
+        }
+
+        _currentTimeTimer = new DispatcherTimer();
+        _currentTimeTimer.Tick += CurrentTimeTimer_Tick;
+        _currentTimeTimer.Interval = GetDelayUntilNextMinute();
+        _currentTimeTimer.Start();
+    }
+
+    private void StopCurrentTimeTimer()
+    {
+        if (_currentTimeTimer is null)
+        {
+            return;
+        }
+
+        _currentTimeTimer.Stop();
+        _currentTimeTimer.Tick -= CurrentTimeTimer_Tick;
+        _currentTimeTimer = null;
+    }
+
+    private void CurrentTimeTimer_Tick(object? sender, object e)
+    {
+        if (_currentTimeTimer is not null)
+        {
+            _currentTimeTimer.Interval = TimeSpan.FromMinutes(1);
+        }
+
+        var today = GetLocalToday();
+        if (today != _lastObservedToday)
+        {
+            _lastObservedToday = today;
+            Rebuild();
+            return;
+        }
+
+        UpdateCurrentTimeIndicator();
+    }
+
+    private void UpdateCurrentTimeIndicator()
+    {
+        CurrentTimeOverlayCanvas.Children.Clear();
+
+        var localNow = _timeProvider.GetLocalNow().DateTime;
+        if (!CalendarViewVisualStateCalculator.TryGetCurrentTimeIndicatorTop(ViewModel.CurrentDate, localNow, RowHeight * 24, out var topOffset))
+        {
+            return;
+        }
+
+        var overlayWidth = CurrentTimeOverlayCanvas.ActualWidth > 0
+            ? CurrentTimeOverlayCanvas.ActualWidth
+            : Math.Max(0, DayGrid.ActualWidth);
+        if (overlayWidth <= TimeColumnWidth)
+        {
+            return;
+        }
+
+        var dot = new Ellipse
+        {
+            Width = 10,
+            Height = 10,
+            Fill = CurrentTimeIndicatorBrush
+        };
+        var line = new Line
+        {
+            X1 = TimeColumnWidth,
+            Y1 = topOffset,
+            X2 = overlayWidth,
+            Y2 = topOffset,
+            Stroke = CurrentTimeIndicatorBrush,
+            StrokeThickness = 1.5
+        };
+
+        Canvas.SetLeft(dot, TimeColumnWidth - 5);
+        Canvas.SetTop(dot, topOffset - 5);
+        CurrentTimeOverlayCanvas.Children.Add(line);
+        CurrentTimeOverlayCanvas.Children.Add(dot);
+    }
+
     private void ApplySelectionVisualState(string? selectedGcalEventId)
     {
         foreach (var (gcalEventId, registrations) in _eventBorders)
@@ -287,8 +449,7 @@ public sealed partial class DayViewControl : Page
 
             foreach (var registration in registrations)
             {
-                registration.Border.BorderBrush = isSelected ? SelectedBorderBrush : registration.DefaultBorderBrush;
-                registration.Border.BorderThickness = isSelected ? new Thickness(2) : registration.DefaultBorderThickness;
+                ApplySelectionState(registration.Border, registration, isSelected);
             }
         }
     }
@@ -301,7 +462,7 @@ public sealed partial class DayViewControl : Page
             _eventBorders[gcalEventId] = registrations;
         }
 
-        registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness));
+        registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness, border.Padding));
     }
 
     private static string BuildTooltipText(CalendarEventDisplayModel item, CultureInfo culture)
@@ -325,8 +486,54 @@ public sealed partial class DayViewControl : Page
         return new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x00, 0x88, 0xCC));
     }
 
+    private static DateTime GetDisplayStartTime(CalendarEventDisplayModel item, VisibleTimedEventSegment segment)
+    {
+        return item.StartLocal.Date != item.EndLocal.Date
+            ? item.StartLocal
+            : segment.VisibleStart;
+    }
+
+    private static DateTime GetDisplayEndTime(CalendarEventDisplayModel item, VisibleTimedEventSegment segment)
+    {
+        return item.StartLocal.Date != item.EndLocal.Date
+            ? item.EndLocal
+            : segment.VisibleEnd;
+    }
+
+    private static void ApplySelectionState(Border border, EventBorderRegistration registration, bool isSelected)
+    {
+        var selectedThickness = new Thickness(2);
+        border.BorderBrush = isSelected ? SelectedBorderBrush : registration.DefaultBorderBrush;
+        border.BorderThickness = isSelected ? selectedThickness : registration.DefaultBorderThickness;
+        border.Padding = isSelected
+            ? AdjustPaddingForThickness(registration.DefaultPadding, registration.DefaultBorderThickness, selectedThickness)
+            : registration.DefaultPadding;
+    }
+
+    private static Thickness AdjustPaddingForThickness(Thickness padding, Thickness fromThickness, Thickness toThickness)
+    {
+        return new Thickness(
+            Math.Max(0, padding.Left - (toThickness.Left - fromThickness.Left)),
+            Math.Max(0, padding.Top - (toThickness.Top - fromThickness.Top)),
+            Math.Max(0, padding.Right - (toThickness.Right - fromThickness.Right)),
+            Math.Max(0, padding.Bottom - (toThickness.Bottom - fromThickness.Bottom)));
+    }
+
+    private DateOnly GetLocalToday()
+    {
+        return DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
+    }
+
+    private TimeSpan GetDelayUntilNextMinute()
+    {
+        var now = _timeProvider.GetLocalNow().DateTime;
+        var nextMinute = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, now.Kind).AddMinutes(1);
+        return nextMinute - now;
+    }
+
     private sealed record EventBorderRegistration(
         Border Border,
         Brush? DefaultBorderBrush,
-        Thickness DefaultBorderThickness);
+        Thickness DefaultBorderThickness,
+        Thickness DefaultPadding);
 }

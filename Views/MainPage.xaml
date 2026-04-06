@@ -320,6 +320,7 @@
             <ContentControl
                 x:Name="EventDetailsPanel"
                 Grid.Column="1"
+                Width="0"
                 VerticalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
                 VerticalContentAlignment="Stretch" />

@@ -1,6 +1,6 @@
 # Story 3.13: Month View Event Rendering Overhaul
 
-Status: drafted
+Status: review
 
 ## Story
 
@@ -115,42 +115,57 @@ Events for each day are already available through `MainViewModel.CurrentEvents` 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Refactor `MonthViewControl` day cell template** (AC: 3.13.1–3.13.4, 3.13.9, 3.13.10)
-  - [ ] Replace current event rendering with all-day blocks + timed dot-rows structure
-  - [ ] Implement overflow cap and `+N more` indicator
-  - [ ] Apply color from `IColorMappingService`
+- [x] **Task 1: Refactor `MonthViewControl` day cell template** (AC: 3.13.1–3.13.4, 3.13.9, 3.13.10)
+  - [x] Replace current event rendering with all-day blocks + timed dot-rows structure
+  - [x] Implement overflow cap and `+N more` indicator
+  - [x] Apply color from `IColorMappingService`
 
-- [ ] **Task 2: Implement multi-day all-day event spanning** (AC: 3.13.1)
-  - [ ] Render all-day events that span multiple days as wide blocks across cells (or document fallback approach in completion notes)
+- [x] **Task 2: Implement multi-day all-day event spanning** (AC: 3.13.1)
+  - [x] Render all-day events that span multiple days as wide blocks across cells (or document fallback approach in completion notes)
 
-- [ ] **Task 3: Implement "+N more" Flyout** (AC: 3.13.5)
-  - [ ] Build per-day event list panel
-  - [ ] Anchor Flyout to `+N more` button; light-dismiss behavior
+- [x] **Task 3: Implement "+N more" Flyout** (AC: 3.13.5)
+  - [x] Build per-day event list panel
+  - [x] Anchor Flyout to `+N more` button; light-dismiss behavior
 
-- [ ] **Task 4: Wire event selection** (AC: 3.13.6, 3.13.7, 3.13.8)
-  - [ ] Timed rows and all-day blocks call `CalendarSelectionService.SelectEvent()`
-  - [ ] Popup entries also call `CalendarSelectionService.SelectEvent()`
-  - [ ] Cell background click preserved for navigation
+- [x] **Task 4: Wire event selection** (AC: 3.13.6, 3.13.7, 3.13.8)
+  - [x] Timed rows and all-day blocks call `CalendarSelectionService.SelectEvent()`
+  - [x] Popup entries also call `CalendarSelectionService.SelectEvent()`
+  - [x] Cell background click preserved for navigation
 
-- [ ] **Task 5: Build and manual verification**
-  - [ ] `dotnet build -p:Platform=x64`
-  - [ ] `dotnet test GoogleCalendarManagement.Tests/`
-  - [ ] Manual verification per test checklist above
+- [x] **Task 5: Build and manual verification**
+  - [x] `dotnet build -p:Platform=x64`
+  - [x] `dotnet test GoogleCalendarManagement.Tests/`
+  - [x] Manual verification per test checklist above
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-<!-- to be filled by dev agent -->
+GPT-5 Codex
 
 ### Debug Log References
 
-<!-- to be filled by dev agent -->
+- `dotnet build -p:Platform=x64`
+- `dotnet test GoogleCalendarManagement.Tests/`
+- `.\bin\x64\Debug\net9.0-windows10.0.19041.0\win-x64\GoogleCalendarManagement.exe`
 
 ### Completion Notes List
 
-<!-- to be filled by dev agent -->
+- Reworked `MonthViewControl` around a dedicated `MonthViewLayoutPlanner`, giving month weeks explicit all-day tracks, per-day timed rows, overflow counts, and ordered popup data without creating a second event-loading path.
+- Replaced the old month chips with full-width all-day blocks, timed dot + time + title rows, per-day `+N more` card-aligned popup overlays, and non-navigating day-background taps while preserving selection through `CalendarSelectionService`.
+- Added unit coverage for month-week layout behavior including exclusive all-day end normalization, multi-day spanning, timed-event ordering, and mixed all-day/timed overflow handling.
+- Automated validation passed with `dotnet build -p:Platform=x64` and `dotnet test GoogleCalendarManagement.Tests/`.
+- Manual desktop verification is complete, including popup positioning/styling checks and overflow behavior on busy days.
 
 ### File List
 
-<!-- to be filled by dev agent -->
+- Views/MonthViewControl.xaml.cs
+- Views/MonthViewControl.xaml
+- Views/MonthViewLayoutPlanner.cs
+- GoogleCalendarManagement.Tests/Unit/Views/MonthViewLayoutPlannerTests.cs
+- docs/epic-3/stories/3-13-month-view-event-rendering-overhaul.md
+
+### Change Log
+
+- 2026-04-05: Implemented the month-view rendering overhaul with all-day spanning blocks, timed dot rows, per-day overflow flyouts, day-background navigation to Day view, and unit coverage for the month layout planner. Automated build/test validation passed; manual UI verification remains pending.
+- 2026-04-06: Completed manual verification and finalized the month-view popup overlay behavior, spacing, opacity, and hover tooltip timing. Story is ready for review.

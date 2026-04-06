@@ -18,7 +18,9 @@ namespace GoogleCalendarManagement.Views;
 public sealed partial class MainPage : Page
 {
     private static CornerRadius MediumCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusMedium"];
+    private const double DetailsPanelWidth = 380.0;
 
+    private readonly EventDetailsPanelControl _eventDetailsPanel;
     private readonly Dictionary<ViewMode, Button> _viewModeButtons;
     private readonly Brush _selectorBackground = new SolidColorBrush(Colors.Transparent);
     private readonly Brush _selectorBorderBrush = new SolidColorBrush(Colors.Transparent);
@@ -28,6 +30,7 @@ public sealed partial class MainPage : Page
     private readonly Brush _selectorUnselectedForeground;
     private readonly ICalendarSelectionService _selectionService;
     private readonly TranslateTransform _selectionIndicatorTransform = new();
+    private Storyboard? _detailsPanelWidthStoryboard;
     private Storyboard? _selectionIndicatorStoryboard;
     private DispatcherQueueTimer? _lastSyncRefreshTimer;
     private DispatcherQueueTimer? _notificationAutoDismissTimer;
@@ -41,6 +44,7 @@ public sealed partial class MainPage : Page
     {
         ViewModel = viewModel;
         _selectionService = selectionService;
+        _eventDetailsPanel = eventDetailsPanel;
         InitializeComponent();
         EventDetailsPanel.Content = eventDetailsPanel;
         _selectorHoverBackground = (Brush)Application.Current.Resources["CalendarSelectorHoverBrush"];
@@ -68,12 +72,14 @@ public sealed partial class MainPage : Page
     {
         _isLoaded = true;
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        _eventDetailsPanel.ViewModel.PropertyChanged += EventDetailsPanelViewModel_PropertyChanged;
         StartLastSyncRefreshTimer();
         ViewModel.RefreshRelativeSyncPresentation();
         _selectionIndicatorMode = ViewModel.CurrentViewMode;
         UpdateViewModeButtons();
         UpdateSelectionIndicator(_selectionIndicatorMode, animate: false);
         NavigateToCurrentView(force: true);
+        SyncDetailsPanelHostWidth(animate: false);
         _isUpdatingPicker = true;
         JumpToDatePicker.Date = ViewModel.CurrentDate.ToDateTime(TimeOnly.MinValue);
         _isUpdatingPicker = false;
@@ -83,6 +89,8 @@ public sealed partial class MainPage : Page
     {
         _isLoaded = false;
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        _eventDetailsPanel.ViewModel.PropertyChanged -= EventDetailsPanelViewModel_PropertyChanged;
+        _detailsPanelWidthStoryboard?.Stop();
         StopLastSyncRefreshTimer();
         StopNotificationAutoDismissTimer();
     }
@@ -407,6 +415,60 @@ public sealed partial class MainPage : Page
         _selectionIndicatorStoryboard = storyboard;
         _selectionIndicatorMode = targetMode;
         _hasSelectionIndicatorPosition = true;
+        storyboard.Begin();
+    }
+
+    private void EventDetailsPanelViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(EventDetailsPanelViewModel.IsPanelVisible))
+        {
+            return;
+        }
+
+        _ = DispatcherQueue.TryEnqueue(() => SyncDetailsPanelHostWidth(animate: true));
+    }
+
+    private void SyncDetailsPanelHostWidth(bool animate)
+    {
+        var targetWidth = _eventDetailsPanel.ViewModel.IsPanelVisible ? DetailsPanelWidth : 0;
+        _detailsPanelWidthStoryboard?.Stop();
+
+        if (!animate || !_isLoaded)
+        {
+            EventDetailsPanel.Width = targetWidth;
+            EventDetailsPanel.IsHitTestVisible = targetWidth > 0;
+            return;
+        }
+
+        if (targetWidth > 0)
+        {
+            EventDetailsPanel.IsHitTestVisible = true;
+        }
+
+        var easing = new CubicEase
+        {
+            EasingMode = targetWidth > 0
+                ? EasingMode.EaseOut
+                : EasingMode.EaseIn
+        };
+        var animation = new DoubleAnimation
+        {
+            To = targetWidth,
+            Duration = TimeSpan.FromMilliseconds(200),
+            EasingFunction = easing
+        };
+        Storyboard.SetTarget(animation, EventDetailsPanel);
+        Storyboard.SetTargetProperty(animation, nameof(FrameworkElement.Width));
+
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(animation);
+        storyboard.Completed += (_, _) =>
+        {
+            EventDetailsPanel.Width = targetWidth;
+            EventDetailsPanel.IsHitTestVisible = targetWidth > 0;
+        };
+
+        _detailsPanelWidthStoryboard = storyboard;
         storyboard.Begin();
     }
 

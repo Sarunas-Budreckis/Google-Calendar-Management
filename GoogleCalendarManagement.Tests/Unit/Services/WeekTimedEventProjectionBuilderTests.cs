@@ -138,7 +138,7 @@ public sealed class WeekTimedEventProjectionBuilderTests
         tuesdaySegment.GridRowSpan.Should().Be(2);
         tuesdaySegment.Height.Should().BeApproximately(87, 0.001);
         tuesdaySegment.IsCompact.Should().BeFalse();
-        tuesdaySegment.SecondaryText.Should().Be("12:00 AM - 1:15 AM");
+        tuesdaySegment.SecondaryText.Should().Be("11:30 PM - 1:15 AM");
     }
 
     [Fact]

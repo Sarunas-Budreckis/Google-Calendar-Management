@@ -1,6 +1,6 @@
 # Story 3.14: Calendar View Polish & Bug Fixes
 
-Status: drafted
+Status: review
 
 ## Story
 
@@ -183,54 +183,76 @@ Read the actual `MainPage.xaml` layout before implementing to understand the cur
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Fix midnight-crossing event rendering in `WeekViewControl`** (AC: 3.14.1, 3.14.2)
-  - [ ] Detect events where `EndLocal.Date > StartLocal.Date`
-  - [ ] Split into per-day segments; render each segment in the correct column
-  - [ ] Both segments trigger selection of the same event on click
+- [x] **Task 1: Fix midnight-crossing event rendering in `WeekViewControl`** (AC: 3.14.1, 3.14.2)
+  - [x] Detect events where `EndLocal.Date > StartLocal.Date`
+  - [x] Split into per-day segments; render each segment in the correct column
+  - [x] Both segments trigger selection of the same event on click
 
-- [ ] **Task 2: Fix midnight-crossing event rendering in `DayViewControl`** (AC: 3.14.3)
-  - [ ] Clip event to the visible day's 0–24 range
-  - [ ] Show correct start/end times for the visible portion
+- [x] **Task 2: Fix midnight-crossing event rendering in `DayViewControl`** (AC: 3.14.3)
+  - [x] Clip event to the visible day's 0–24 range
+  - [x] Show correct start/end times for the visible portion
 
-- [ ] **Task 3: Add today's date blue circle highlight to all views** (AC: 3.14.4, 3.14.5, 3.14.6)
-  - [ ] Year view: highlight day cell for today
-  - [ ] Month view: highlight day number cell for today
-  - [ ] Week view: highlight the day column header for today
-  - [ ] Day view: highlight the day header for today (if it is today)
+- [x] **Task 3: Add today's date blue circle highlight to all views** (AC: 3.14.4, 3.14.5, 3.14.6)
+  - [x] Year view: highlight day cell for today
+  - [x] Month view: highlight day number cell for today
+  - [x] Week view: highlight the day column header for today
+  - [x] Day view: highlight the day header for today (if it is today)
 
-- [ ] **Task 4: Add current time red line to `WeekViewControl`** (AC: 3.14.7, 3.14.8, 3.14.9)
-  - [ ] Add `Canvas` overlay on today's column
-  - [ ] Position red dot + horizontal line at current time offset
-  - [ ] `DispatcherTimer` at 60s interval to update position
-  - [ ] Hide indicator when today is not in the visible week
+- [x] **Task 4: Add current time red line to `WeekViewControl`** (AC: 3.14.7, 3.14.8, 3.14.9)
+  - [x] Add `Canvas` overlay on today's column
+  - [x] Position red dot + horizontal line at current time offset
+  - [x] `DispatcherTimer` at 60s interval to update position
+  - [x] Hide indicator when today is not in the visible week
 
-- [ ] **Task 5: Add current time red line to `DayViewControl`** (AC: 3.14.7, 3.14.8, 3.14.10)
-  - [ ] Same approach; show only when active day = today
+- [x] **Task 5: Add current time red line to `DayViewControl`** (AC: 3.14.7, 3.14.8, 3.14.10)
+  - [x] Same approach; show only when active day = today
 
-- [ ] **Task 6: Smooth side panel open/close animation** (AC: 3.14.11, 3.14.12, 3.14.13)
-  - [ ] Read current `MainPage.xaml` panel layout structure
-  - [ ] Replace instant visibility toggle with `DoubleAnimation` on panel width
-  - [ ] Ensure calendar content area resizes in sync, no jump at end of animation
+- [x] **Task 6: Smooth side panel open/close animation** (AC: 3.14.11, 3.14.12, 3.14.13)
+  - [x] Read current `MainPage.xaml` panel layout structure
+  - [x] Replace instant visibility toggle with `DoubleAnimation` on panel width
+  - [x] Ensure calendar content area resizes in sync, no jump at end of animation
 
-- [ ] **Task 7: Build and manual verification**
-  - [ ] `dotnet build -p:Platform=x64`
-  - [ ] `dotnet test GoogleCalendarManagement.Tests/`
-  - [ ] Manual verification per checklist above
+- [x] **Task 7: Build and manual verification**
+  - [x] `dotnet build -p:Platform=x64`
+  - [x] `dotnet test GoogleCalendarManagement.Tests/`
+  - [x] Manual verification per checklist above
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-<!-- to be filled by dev agent -->
+- GPT-5 Codex
 
 ### Debug Log References
 
-<!-- to be filled by dev agent -->
+- 2026-04-06T00:03:22.2103825-05:00: Added failing tests for calendar visual-state helper coverage before implementing the shared day-clipping/current-time logic.
+- `dotnet test GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj --filter "CalendarViewVisualStateCalculatorTests|WeekTimedEventProjectionBuilderTests"`: passed.
+- `dotnet test GoogleCalendarManagement.Tests/`: passed (202 tests).
+- `dotnet build -p:Platform=x64`: passed.
+- 2026-04-06: User confirmed manual UI verification completed.
 
 ### Completion Notes List
 
-<!-- to be filled by dev agent -->
+- Added `CalendarViewVisualStateCalculator` plus unit coverage for today detection, current-time indicator offsets, and day-clipped timed-event segments.
+- Updated `DayViewControl` to clip overnight events to the visible day, render visible start/end times, add a today badge, and overlay a live current-time red line.
+- Updated `WeekViewControl` to keep the existing overnight segmentation, add today highlighting in the header, and overlay a live current-time indicator only when the visible week contains today.
+- Updated `MonthViewControl` and `YearViewControl` to highlight today's date and refresh that highlight after midnight while the app remains open.
+- Moved side-panel layout animation to `MainPage` so the content column resizes smoothly with the details panel instead of snapping.
+- Automated validation completed and user confirmed the manual UI verification checklist.
 
 ### File List
 
-<!-- to be filled by dev agent -->
+- GoogleCalendarManagement.Tests/Unit/Services/CalendarViewVisualStateCalculatorTests.cs
+- Services/CalendarViewVisualStateCalculator.cs
+- Views/DayViewControl.xaml
+- Views/DayViewControl.xaml.cs
+- Views/MainPage.xaml
+- Views/MainPage.xaml.cs
+- Views/MonthViewControl.xaml.cs
+- Views/WeekViewControl.xaml
+- Views/WeekViewControl.xaml.cs
+- Views/YearViewControl.xaml.cs
+
+### Change Log
+
+- 2026-04-06: Implemented calendar polish fixes for today highlighting, live current-time indicators, day-view overnight clipping, and smooth details-panel width animation; automated build/tests passed and manual UI verification was confirmed complete.
