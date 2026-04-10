@@ -626,11 +626,17 @@ public sealed partial class WeekViewControl : Page
     {
         if (hex.Length == 7 && hex[0] == '#')
         {
-            return new SolidColorBrush(ColorHelper.FromArgb(
-                0xFF,
-                Convert.ToByte(hex.Substring(1, 2), 16),
-                Convert.ToByte(hex.Substring(3, 2), 16),
-                Convert.ToByte(hex.Substring(5, 2), 16)));
+            try
+            {
+                return new SolidColorBrush(ColorHelper.FromArgb(
+                    0xFF,
+                    Convert.ToByte(hex.Substring(1, 2), 16),
+                    Convert.ToByte(hex.Substring(3, 2), 16),
+                    Convert.ToByte(hex.Substring(5, 2), 16)));
+            }
+            catch (FormatException)
+            {
+            }
         }
 
         return new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x00, 0x88, 0xCC));
@@ -653,7 +659,8 @@ public sealed partial class WeekViewControl : Page
     {
         var now = _timeProvider.GetLocalNow().DateTime;
         var nextMinute = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, now.Kind).AddMinutes(1);
-        return nextMinute - now;
+        var delay = nextMinute - now;
+        return delay > TimeSpan.Zero ? delay : TimeSpan.FromSeconds(1);
     }
 
     private sealed record EventBorderRegistration(

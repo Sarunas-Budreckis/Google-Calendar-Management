@@ -1,6 +1,7 @@
 # Story 3.10: Virtualize Week View Event Rendering
 
 Status: done
+<!-- SM Review: 2026-04-06 — 3 patches applied, 2 spec deviations acknowledged, 8 items deferred -->
 
 ## Story
 
@@ -41,6 +42,30 @@ The story 3.1 spec required `ItemsRepeater` + `RecyclingElementFactory` for virt
 - `ItemsRepeater` in WinUI 3 requires a `RecyclingElementFactory` with a `RecyclePool` for efficient element reuse. The element factory creates `Border` event blocks from a template.
 - `SizeChanged` debounce: use a `DispatcherTimer` with a short interval (100–150 ms); reset it on each `SizeChanged` event; call `Rebuild()` only when it fires.
 - Ensure the debounce timer is disposed or stopped in `Unloaded`.
+
+## Review Findings
+
+### Decisions (inform only — user directed no spec-contradicting changes)
+
+- [ ] [Review][Decision] RecyclingElementFactory not used — AC-3.10.1 and dev notes require `RecyclingElementFactory` + `RecyclePool`; implementation uses a plain `DataTemplate` + custom `WeekTimedEventVirtualizingLayout` that calls `context.GetOrCreateElementAt` / `context.RecycleElement`. Functionally equivalent recycling but deviates from the specified mechanism. User acknowledged: keep as-is.
+- [ ] [Review][Decision] Out-of-scope features shipped in same commit — today-highlight ellipse, current-time indicator (red line + `DispatcherTimer`), and `AdjustPaddingForThickness` are present but not listed in story 3.10 scope. User acknowledged: keep as-is.
+
+### Patches (applied by SM review)
+
+- [x] [Review][Patch] `WeekTimedEventVirtualizingLayout` missing `UninitializeForContextCore` — `_realizedElements` not cleared when layout is detached; elements leak when `AttachFreshTimedEventsLayout` replaces the layout instance [Views/WeekTimedEventVirtualizingLayout.cs]
+- [x] [Review][Patch] `ToBrush` crashes on malformed `ColorHex` — `Convert.ToByte` throws `FormatException` if hex pairs contain non-hex characters; wrapped in `try/catch` with fallback [Views/WeekViewControl.xaml.cs:631-633]
+- [x] [Review][Patch] `GetDelayUntilNextMinute` returns zero/negative on DST spring-forward — `DispatcherTimer` rejects non-positive intervals; clamped to 1-second minimum [Views/WeekViewControl.xaml.cs:652-657]
+
+### Deferred
+
+- [x] [Review][Defer] `activeSegments` overlap depth unbounded [Services/WeekTimedEventProjectionBuilder.cs] — deferred, pre-existing algorithm carried from old implementation
+- [x] [Review][Defer] `GetDisplayStart`/`GetDisplayEnd` incorrect for events spanning 3+ calendar days [Services/WeekTimedEventProjectionBuilder.cs:125-137] — deferred, rare edge case
+- [x] [Review][Defer] `currentEvents` `IEnumerable` enumerated 7× per `Rebuild` [Services/WeekTimedEventProjectionBuilder.cs] — deferred, performance concern; callers pass a materialized list
+- [x] [Review][Defer] `ConfigureTimedEventBorder` accesses `Children[0]`/`[1]` without bounds guard [Views/WeekViewControl.xaml.cs] — deferred, fragile against template changes but not currently broken
+- [x] [Review][Defer] Tapping `WeekHeaderGrid` background clears event selection — deferred, pre-existing behavior unrelated to this story
+- [x] [Review][Defer] `Loaded` handler can double-subscribe `PropertyChanged` on repeated navigation — deferred, pre-existing pattern
+- [x] [Review][Defer] TODO comment removal unverifiable from diff — old loop replaced wholesale; likely gone
+- [x] [Review][Defer] No test for empty `currentEvents` — minor test gap
 
 ## Tasks / Subtasks
 

@@ -1,6 +1,6 @@
 # Story 3.8: Add Date Navigation and Jump-to-Date Features
 
-Status: review
+Status: done
 
 ## Story
 

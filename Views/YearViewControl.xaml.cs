@@ -543,15 +543,20 @@ public sealed partial class YearViewControl : Page
             Grid.SetRow(header, 0);
             weekGrid.Children.Add(header);
 
-            var singleDayBar = BuildPreviewBar(displayModel.SingleDayAllDayBar, true, renderContext);
+            var singleDayBar = BuildPreviewBar(displayModel.SingleDayAllDayBar, renderContext);
             Grid.SetColumn(singleDayBar, column);
             Grid.SetRow(singleDayBar, 1);
             weekGrid.Children.Add(singleDayBar);
         }
 
+        var row2Placeholder = new Border { Height = PreviewBarHeight, IsHitTestVisible = false };
+        Grid.SetRow(row2Placeholder, 2);
+        Grid.SetColumnSpan(row2Placeholder, 7);
+        weekGrid.Children.Add(row2Placeholder);
+
         foreach (var segment in BuildWeekSegments(weekStart, activeMonth, projection.DayLookup))
         {
-            var multiDayBar = BuildPreviewBar(segment.Bar, false, renderContext);
+            var multiDayBar = BuildPreviewBar(segment.Bar, renderContext);
             Grid.SetColumn(multiDayBar, segment.StartColumn);
             Grid.SetRow(multiDayBar, 2);
             Grid.SetColumnSpan(multiDayBar, segment.ColumnSpan);
@@ -641,14 +646,12 @@ public sealed partial class YearViewControl : Page
         return header;
     }
 
-    private Border BuildPreviewBar(YearViewPreviewBarDisplayModel bar, bool isSingleDay, RenderBuildContext renderContext)
+    private Border BuildPreviewBar(YearViewPreviewBarDisplayModel bar, RenderBuildContext renderContext)
     {
         var previewBar = new Border
         {
             Height = PreviewBarHeight,
-            Margin = isSingleDay
-                ? new Thickness(1, 0, 1, 1)
-                : new Thickness(1, 0, 1, 1),
+            Margin = new Thickness(1, 0, 1, 1),
             Padding = bar.HasContent ? new Thickness(3, 0, 3, 0) : new Thickness(0),
             CornerRadius = YearViewCornerRadius,
             Background = bar.HasContent && bar.ColorHex is not null

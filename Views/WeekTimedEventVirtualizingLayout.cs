@@ -9,6 +9,17 @@ internal sealed class WeekTimedEventVirtualizingLayout : VirtualizingLayout
 {
     private readonly Dictionary<int, UIElement> _realizedElements = [];
 
+    protected override void UninitializeForContextCore(VirtualizingLayoutContext context)
+    {
+        foreach (var element in _realizedElements.Values)
+        {
+            context.RecycleElement(element);
+        }
+
+        _realizedElements.Clear();
+        base.UninitializeForContextCore(context);
+    }
+
     protected override Size MeasureOverride(VirtualizingLayoutContext context, Size availableSize)
     {
         var visibleIndices = new HashSet<int>();

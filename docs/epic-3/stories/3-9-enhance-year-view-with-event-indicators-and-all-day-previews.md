@@ -1,6 +1,6 @@
 # Story 3.9: Enhance Year View with Event Indicators and All-Day Previews
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -165,7 +165,21 @@ GPT-5 Codex
 - `docs/epic-3/stories/3-9-enhance-year-view-with-event-indicators-and-all-day-previews.md`
 - `docs/sprint-status.yaml`
 
+### Review Findings
+
+- [ ] [Review][Decision] Sync dot placed LEFT instead of RIGHT — AC-3.9.2 requires the dot to the right of the centered date number; `BuildDayHeader` uses `HorizontalAlignment.Left` for the `Ellipse` despite the placement enum being named `Trailing`. [Views/YearViewControl.xaml.cs:600-606]
+- [ ] [Review][Decision] Day cell click no longer navigates to Month view — AC-3.9.10 requires clicking a day cell to navigate to Month view; the old `DayButton_Click` handler was removed; completion notes explicitly state "date-background taps do nothing." [Views/YearViewControl.xaml.cs]
+- [ ] [Review][Decision] `SharedTooltipManager` (100ms hover tooltip) added despite tooltips being explicitly out of scope — Scope Boundaries state "OUT OF SCOPE: tooltips." [Views/YearViewControl.xaml.cs:947-1026]
+- [x] [Review][Patch] `isSingleDay` ternary in `BuildPreviewBar` has identical branches — both produce `new Thickness(1, 0, 1, 1)`; parameter has no effect. Fixed 2026-04-06. [Views/YearViewControl.xaml.cs:649-651]
+- [x] [Review][Patch] Row 2 collapses to 0 height when no multi-day events exist — `GridLength.Auto` row with no content violates AC-3.9.1 "space remains reserved even when blank." Fixed by adding transparent placeholder spanning all 7 columns. 2026-04-06. [Views/YearViewControl.xaml.cs:552-558]
+- [x] [Review][Defer] `SpanDays` field in `YearViewPreviewBarDisplayModel` is populated but never consumed by any rendering code — deferred, pre-existing [Models/YearViewDayDisplayModel.cs:14]
+- [x] [Review][Defer] `Build_CollapsesMultiDayAssignmentsIntoSingleWeekSegments` test validates `projection.MultiDaySegmentsByWeekStart` which the view never reads (view uses `BuildWeekSegments` instead) — deferred, pre-existing [GoogleCalendarManagement.Tests/Unit/Services/YearViewDayProjectionBuilderTests.cs:118]
+- [x] [Review][Defer] No test covers carry-forward logic for a multi-day event whose `StartDay` precedes the visible date range — deferred, pre-existing [GoogleCalendarManagement.Tests/Unit/Services/YearViewDayProjectionBuilderTests.cs]
+- [x] [Review][Defer] Zero-duration all-day events (`EndLocal == StartLocal`) silently promoted to single-day events — deferred, pre-existing [Services/YearViewDayProjectionBuilder.cs:163-167]
+- [x] [Review][Defer] Inverted-date all-day events (`EndLocal < StartLocal`) silently clamped to single-day instead of logged and rejected — deferred, pre-existing [Services/YearViewDayProjectionBuilder.cs:168-170]
+
 ### Change Log
 
 - 2026-04-05: Implemented year-view all-day preview projection, spanning multi-day rendering, hidden padding slots, compact 4px radii, banner-based details-panel selection, delayed summary tooltips, and automated coverage for carry-forward priority and deleted/timed-event filtering.
 - 2026-04-05: Completed final manual verification and moved Story 3.9 to review.
+- 2026-04-06: Code review pass — fixed 2 bugs (dead `isSingleDay` param, Row 2 height reservation); 3 spec deviations flagged for decision; 5 items deferred.

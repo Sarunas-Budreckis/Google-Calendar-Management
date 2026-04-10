@@ -2,7 +2,9 @@
 
 Status: ready-for-dev
 
-> **Moved from Epic 3:** This story was originally Story 3.5. It has been moved to Epic 4 (Event Editing — Tier 2) as event editing is out of scope for Tier 1 (read-only). All content below is unchanged from the original 3.5 story file.
+> **Moved from Epic 3:** This story was originally Story 3.5. It has been moved to Epic 4 (Event Editing — Tier 2) as event editing is out of scope for Tier 1 (read-only).
+>
+> **Revised (2026-04-06):** Two architectural decisions updated — (1) edits are written to a new `pending_event` table, NOT directly to `gcal_event`; (2) events with a pending edit row are rendered at **60% opacity** immediately, becoming fully opaque only after a successful Push to GCal.
 
 ## Story
 
@@ -22,11 +24,11 @@ so that **I can modify events before publishing to Google Calendar**.
 
 5. **AC-4.1.5 — Color Picker Stub:** Given edit mode is active, a color swatch placeholder is visible (labelled "Color: [current color name]") with a "Coming soon" tooltip. Story 4.3 will replace this stub with a full color picker — the layout slot must exist in Story 4.1 but must NOT implement color editing logic.
 
-6. **AC-4.1.6 — Auto-Save (Debounced):** Given the user modifies any field and no validation errors exist, changes are saved to the local `gcal_event` database row automatically after 500 ms of inactivity (debounced). No explicit "Save" button is needed or shown.
+6. **AC-4.1.6 — Auto-Save (Debounced):** Given the user modifies any field and no validation errors exist, changes are saved to the local `pending_event` database row automatically after 500 ms of inactivity (debounced). No explicit "Save" button is needed or shown.
 
 7. **AC-4.1.7 — Unsaved Indicator:** Given the user is actively typing (within the 500 ms debounce window), a subtle indicator ("Saving…" text or pulsing dot) is visible. Once auto-save completes, the indicator shows "Saved" (or disappears) within 300 ms.
 
-8. **AC-4.1.8 — Database Write:** Given auto-save fires, the following `gcal_event` columns are updated: `summary`, `description`, `start_datetime`, `end_datetime` (stored as UTC), `updated_at`, and `app_last_modified_at` (set to `DateTime.UtcNow`). `app_published` remains `false`. `gcal_event_id` is NEVER changed.
+8. **AC-4.1.8 — Database Write:** Given auto-save fires, a `pending_event` row is created (if none exists for this `gcal_event_id`) or updated (if one already exists). The `pending_event` row stores: `gcal_event_id` (FK referencing the original event), `summary`, `description`, `start_datetime`, `end_datetime` (stored as UTC), `color_id` (copied from original on creation, unchanged here), `created_at`, and `updated_at`. The original `gcal_event` row is **NOT modified**.
 
 9. **AC-4.1.9 — Validation — End Before Start:** Given the user sets end time before start time, an inline validation message ("End time must be after start time") appears immediately and auto-save is blocked until corrected.
 
@@ -34,7 +36,7 @@ so that **I can modify events before publishing to Google Calendar**.
 
 11. **AC-4.1.11 — Esc Closes Panel:** Given edit mode is active and changes have been auto-saved, pressing Esc closes the panel (same behavior as Story 3.4). If the debounce timer is still pending (changes NOT yet saved), pressing Esc triggers an immediate save before closing.
 
-12. **AC-4.1.12 — `AppPublished` Stays False:** Given any edit is saved, `app_published = 0` in the database. The event remains local-only — not pushed to Google Calendar. Events with `app_published = false` are rendered at 100% opacity in Tier 2 (no translucency required until Epic 7 publishing workflow).
+12. **AC-4.1.12 — Pending State Visual:** Given auto-save creates or updates a `pending_event` row, the corresponding event block in the calendar view (all views) is rendered at **60% opacity** (translucent/pending state). The original `gcal_event` data is no longer displayed for that event — the `pending_event` data is shown instead. Events with no `pending_event` row continue to render at 100% opacity. Opacity transitions to 100% only after a successful Push to GCal (a future story).
 
 13. **AC-4.1.13 — Calendar View Refresh:** Given auto-save completes, the calendar view (Month/Week/Day/Year) refreshes to show the updated event title and any visible field changes without requiring full page reload. Only the affected event's display model is updated.
 
@@ -43,22 +45,22 @@ so that **I can modify events before publishing to Google Calendar**.
 ## Scope Boundaries (Tier 2 Only)
 
 **IN SCOPE — this story:**
-- Editing `summary`, `description`, `start_datetime`, `end_datetime` on existing `gcal_event` rows
+- Editing `summary`, `description`, `start_datetime`, `end_datetime` on existing `gcal_event` rows via a new `pending_event` row
+- `PendingEvent` EF Core entity, `EntityTypeConfiguration`, and database migration
+- `IPendingEventRepository` with `UpsertAsync(PendingEvent)` and `GetByGcalEventIdAsync(string)` methods
 - Auto-save with 500 ms debounce using `DispatcherTimer`
 - Inline validation (empty title, end-before-start)
 - Single-level Undo (Ctrl+Z)
 - Color picker stub/placeholder (layout slot only — no editing logic)
-- `IGcalEventRepository.UpdateAsync()` new method
 - `EventDetailsPanelViewModel` edit mode state and save logic
+- 60% opacity rendering for event blocks that have a `pending_event` row (all four calendar views)
 - Refresh affected event in calendar view via `CalendarSelectionService`/`WeakReferenceMessenger`
 
 **OUT OF SCOPE — do NOT implement:**
 - Color picking / color change (Story 4.3)
 - Event creation (Story 4.2)
-- Pushing edits to Google Calendar (Epic 7)
+- Pushing edits to Google Calendar (future Push to GCal story)
 - Multi-level undo
-- `pending_event` table — **all edits write directly to `gcal_event`**
-- Translucent (60% opacity) rendering for `app_published = false` events (Epic 7)
 - Drag-to-reschedule in calendar view
 
 ---
@@ -97,30 +99,56 @@ Story 4.1 requires the following to exist before implementation begins:
 
 **Do NOT reinvent `EventDetailsPanelControl` or `EventDetailsPanelViewModel`** — Story 4.1 EXTENDS them.
 
-### GcalEvent Entity — Fields to Update
+### PendingEvent Entity (NEW in Story 4.1)
 
-Only these `GcalEvent` fields are written in Story 4.1:
+Create `Data/Entities/PendingEvent.cs`:
 
 ```csharp
-event.Summary = editedTitle;
-event.Description = editedDescription;
-event.StartDatetime = startUtc;
-event.EndDatetime = endUtc;
-event.AppLastModifiedAt = DateTime.UtcNow;
-event.UpdatedAt = DateTime.UtcNow;
-// AppPublished stays unchanged (false)
-// GcalEventId NEVER modified
+public class PendingEvent
+{
+    public Guid Id { get; set; }
+    public string GcalEventId { get; set; } = null!;  // FK to GcalEvent — always set for edits (null for new events in Story 4.2)
+    public string Summary { get; set; } = null!;
+    public string? Description { get; set; }
+    public DateTime StartDatetime { get; set; }   // UTC
+    public DateTime EndDatetime { get; set; }     // UTC
+    public string ColorId { get; set; } = null!;  // copied from GcalEvent on creation
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+
+    public GcalEvent? GcalEvent { get; set; }     // navigation property
+}
 ```
+
+Add EF configuration in `Data/Configurations/PendingEventConfiguration.cs` (index on `GcalEventId`). Add migration: `dotnet ef migrations add AddPendingEventTable`.
+
+**Upsert logic** — when auto-save fires:
+1. Query `IPendingEventRepository.GetByGcalEventIdAsync(gcalEventId)`.
+2. If `null`: create new `PendingEvent`, copying `ColorId` from the original `GcalEvent`.
+3. If found: update `Summary`, `Description`, `StartDatetime`, `EndDatetime`, `UpdatedAt`.
+4. Call `UpsertAsync(pendingEvent)`.
 
 **UTC conversion:** `DateTime.SpecifyKind(localPicker.Date.DateTime + localPicker.Time, DateTimeKind.Local).ToUniversalTime()`.
 
-### New Repository Method
+### New Repository — IPendingEventRepository
 
-Add to `Services/IGcalEventRepository.cs`:
+Create `Services/IPendingEventRepository.cs`:
 
 ```csharp
-Task UpdateAsync(GcalEvent updatedEvent, CancellationToken ct = default);
+public interface IPendingEventRepository
+{
+    Task<PendingEvent?> GetByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default);
+    Task UpsertAsync(PendingEvent pendingEvent, CancellationToken ct = default);
+}
 ```
+
+Implement in `Services/PendingEventRepository.cs` using `IDbContextFactory<CalendarDbContext>`.
+
+### Calendar View Opacity — Pending State
+
+All four calendar view controls query `PendingEvent` rows alongside `GcalEvent` rows. When building `CalendarEventDisplayModel`, set `Opacity = 0.6` if a `PendingEvent` row exists for that `GcalEventId`, and use the `PendingEvent` field values (summary, times, color) for display instead of the `GcalEvent` values.
+
+The recommended approach: add a `bool IsPending` and `double Opacity` property to `CalendarEventDisplayModel`, populated by the query layer. View XAML binds `Opacity="{Binding Opacity}"` on event blocks.
 
 ### EventDetailsPanelViewModel Changes
 
@@ -186,9 +214,14 @@ public record EventUpdatedMessage(string GcalEventId);
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Add `UpdateAsync` to `IGcalEventRepository`** (AC: 4.1.8)
-  - [ ] Add method signature to `Services/IGcalEventRepository.cs`
-  - [ ] Implement in `Services/GcalEventRepository.cs` using `IDbContextFactory`
+- [ ] **Task 1: Create `PendingEvent` entity, repository, and migration** (AC: 4.1.8, 4.1.12)
+  - [ ] `Data/Entities/PendingEvent.cs` — entity class
+  - [ ] `Data/Configurations/PendingEventConfiguration.cs` — EF config with index on `GcalEventId`
+  - [ ] Register `DbSet<PendingEvent>` in `CalendarDbContext`
+  - [ ] `Services/IPendingEventRepository.cs` — `GetByGcalEventIdAsync`, `UpsertAsync`
+  - [ ] `Services/PendingEventRepository.cs` — implementation using `IDbContextFactory`
+  - [ ] Register repository in DI (`App.xaml.cs`)
+  - [ ] `dotnet ef migrations add AddPendingEventTable`
   - [ ] Add `EventUpdatedMessage` to `Messages/EventUpdatedMessage.cs`
 
 - [ ] **Task 2: Create value converters** (AC: 4.1.3)
@@ -203,11 +236,16 @@ public record EventUpdatedMessage(string GcalEventId);
   - [ ] Enable Edit button; add edit-mode controls
   - [ ] Add Ctrl+Z and Esc key handling
 
-- [ ] **Task 5: Calendar view refresh on save** (AC: 4.1.13)
+- [ ] **Task 5: Calendar view refresh on save + pending opacity** (AC: 4.1.12, 4.1.13)
+  - [ ] Add `IsPending` and `Opacity` properties to `CalendarEventDisplayModel`
+  - [ ] Update event query logic in all four view controls to check `PendingEvent` table; use pending data + `Opacity = 0.6` when a pending row exists
+  - [ ] Bind `Opacity` on event blocks in all four view XAML files
   - [ ] `MainViewModel` subscribes to `EventUpdatedMessage`, refreshes affected display model
 
-- [ ] **Task 6: Unit tests** (AC: 4.1.6, 4.1.9, 4.1.10)
-  - [ ] `EnterEditMode()`, `ValidateFields()`, `UndoLastChange()`, `UpdateAsync()` tests
+- [ ] **Task 6: Unit tests** (AC: 4.1.6, 4.1.8, 4.1.9, 4.1.10, 4.1.12)
+  - [ ] `EnterEditMode()`, `ValidateFields()`, `UndoLastChange()` tests
+  - [ ] `PendingEventRepository.UpsertAsync()` — creates on first save, updates on second save
+  - [ ] `CalendarEventDisplayModel` — `Opacity = 0.6` when `IsPending = true`, `1.0` otherwise
 
 - [ ] **Task 7: Build verification**
   - [ ] `dotnet build -p:Platform=x64` — 0 errors
