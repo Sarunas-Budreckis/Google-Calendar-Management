@@ -45,6 +45,11 @@ public sealed partial class MonthViewControl : Page
         InitializeComponent();
         MonthGrid.Background = TransparentPanelBrush;
         MonthGrid.Tapped += MonthGrid_Tapped;
+        MoreEventsPopup.Closed += (_, _) =>
+        {
+            StopTooltipTimers();
+            MoreEventsPopup.Child = null;
+        };
         Loaded += MonthViewControl_Loaded;
         Unloaded += MonthViewControl_Unloaded;
     }
@@ -312,6 +317,7 @@ public sealed partial class MonthViewControl : Page
         var block = new Border
         {
             Height = 20,
+            Opacity = item.Opacity,
             Padding = new Thickness(6, 2, 6, 2),
             Margin = new Thickness(continuesFromLeft ? 4 : 8, 2, continuesToRight ? 4 : 8, 2),
             CornerRadius = new CornerRadius(
@@ -621,6 +627,7 @@ public sealed partial class MonthViewControl : Page
         layoutRoot.Children.Add(titleText);
 
         row.Child = layoutRoot;
+        row.Opacity = item.Opacity;
         AttachInstantTooltip(row, BuildTooltipText(item, culture));
         row.Tapped += (_, e) =>
         {

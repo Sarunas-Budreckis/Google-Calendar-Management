@@ -84,6 +84,9 @@ public sealed class MainViewModel : ObservableObject
         WeakReferenceMessenger.Default.Register<MainViewModel, SyncCompletedMessage>(
             this,
             static (recipient, _) => recipient.OnSyncCompleted());
+        WeakReferenceMessenger.Default.Register<MainViewModel, EventUpdatedMessage>(
+            this,
+            static (recipient, message) => recipient.OnEventUpdated(message));
     }
 
     public ViewMode CurrentViewMode
@@ -421,7 +424,7 @@ public sealed class MainViewModel : ObservableObject
             if (result.Success)
             {
                 var notificationMessage =
-                    $"Imported {result.ImportedEventCount} events ({result.NewEventCount} new, {result.UpdatedEventCount} updated, {result.SkippedEventCount} skipped as invalid).";
+                    $"Imported {result.ImportedEventCount} events ({result.NewEventCount} new, {result.UpdatedEventCount} updated, {result.SkippedInvalidEventCount} skipped as invalid).";
 
                 if (result.SkippedRecurringEventCount > 0)
                 {
@@ -459,6 +462,16 @@ public sealed class MainViewModel : ObservableObject
 
         InvalidateYearViewCache();
         _ = RefreshAsync();
+    }
+
+    private void OnEventUpdated(EventUpdatedMessage message)
+    {
+        if (string.IsNullOrWhiteSpace(message.GcalEventId))
+        {
+            return;
+        }
+
+        _ = RefreshAffectedEventAsync(message.GcalEventId);
     }
 
     private async Task RefreshStatusAsync()
@@ -603,6 +616,55 @@ public sealed class MainViewModel : ObservableObject
         NotificationMessage = message;
         NotificationSeverity = severity;
         IsNotificationOpen = true;
+    }
+
+    private async Task RefreshAffectedEventAsync(string gcalEventId)
+    {
+        try
+        {
+            var refreshedEvent = await _calendarQueryService.GetEventByGcalIdAsync(gcalEventId);
+            var updatedEvents = CurrentEvents.ToList();
+            var existingIndex = updatedEvents.FindIndex(
+                item => string.Equals(item.GcalEventId, gcalEventId, StringComparison.Ordinal));
+            var (from, to) = GetVisibleDateRange();
+            var isVisibleInCurrentRange = refreshedEvent is not null && OverlapsVisibleRange(refreshedEvent, from, to);
+
+            if (existingIndex >= 0)
+            {
+                if (isVisibleInCurrentRange)
+                {
+                    updatedEvents[existingIndex] = refreshedEvent!;
+                }
+                else
+                {
+                    updatedEvents.RemoveAt(existingIndex);
+                }
+            }
+            else if (isVisibleInCurrentRange)
+            {
+                updatedEvents.Add(refreshedEvent!);
+            }
+            else
+            {
+                return;
+            }
+
+            CurrentEvents = updatedEvents
+                .OrderBy(item => item.StartLocal)
+                .ThenBy(item => item.EndLocal)
+                .ThenBy(item => item.Title, StringComparer.CurrentCulture)
+                .ToList();
+
+            InvalidateYearViewCache();
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignore event-specific refreshes that lose a race with navigation changes.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unable to refresh calendar event {GcalEventId} after a local edit.", gcalEventId);
+        }
     }
 
     private async Task<YearViewCacheEntry> GetYearViewDataAsync(int year, CancellationToken ct)
@@ -904,6 +966,17 @@ public sealed class MainViewModel : ObservableObject
         return localTimeZone.IsDaylightSavingTime(localSyncTime)
             ? localTimeZone.DaylightName
             : localTimeZone.StandardName;
+    }
+
+    private static bool OverlapsVisibleRange(CalendarEventDisplayModel item, DateOnly from, DateOnly to)
+    {
+        var rangeStartLocal = from.ToDateTime(TimeOnly.MinValue);
+        var rangeEndExclusiveLocal = to.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        var effectiveEnd = item.EndLocal > item.StartLocal
+            ? item.EndLocal
+            : item.StartLocal;
+
+        return item.StartLocal < rangeEndExclusiveLocal && effectiveEnd >= rangeStartLocal;
     }
 
     private int _yearViewCacheVersion;

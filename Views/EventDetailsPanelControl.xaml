@@ -7,13 +7,41 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Border
-        x:Name="PanelRoot"
-        Width="380"
-        VerticalAlignment="Stretch"
-        Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
-        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-        BorderThickness="1,0,0,0">
+    <Grid x:Name="RootLayout">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="PanelModeStates">
+                <VisualState x:Name="ReadOnlyMode">
+                    <VisualState.Setters>
+                        <Setter Target="ReadOnlyWhenPanel.Visibility" Value="Visible" />
+                        <Setter Target="ReadOnlyColorPanel.Visibility" Value="Visible" />
+                        <Setter Target="ReadOnlyDescriptionPanel.Visibility" Value="Visible" />
+                        <Setter Target="ReadOnlySourcePanel.Visibility" Value="Visible" />
+                        <Setter Target="ReadOnlyLastSyncedPanel.Visibility" Value="Visible" />
+                        <Setter Target="EditButtonHost.Visibility" Value="Visible" />
+                        <Setter Target="EditPanelHost.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="EditMode">
+                    <VisualState.Setters>
+                        <Setter Target="ReadOnlyWhenPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="ReadOnlyColorPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="ReadOnlyDescriptionPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="ReadOnlySourcePanel.Visibility" Value="Collapsed" />
+                        <Setter Target="ReadOnlyLastSyncedPanel.Visibility" Value="Collapsed" />
+                        <Setter Target="EditButtonHost.Visibility" Value="Collapsed" />
+                        <Setter Target="EditPanelHost.Visibility" Value="Visible" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Border
+            x:Name="PanelRoot"
+            Width="380"
+            VerticalAlignment="Stretch"
+            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1,0,0,0">
 
         <Border.RenderTransform>
             <TranslateTransform x:Name="PanelTranslate" X="380" />
@@ -24,9 +52,7 @@
             VerticalScrollBarVisibility="Auto"
             VerticalScrollMode="Auto">
 
-            <StackPanel Padding="20,16,20,24" Spacing="16">
-
-                <!-- Header: title + close button -->
+                <StackPanel x:Name="ContentStack" Padding="20,16,20,24" Spacing="16">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -34,6 +60,7 @@
                     </Grid.ColumnDefinitions>
 
                     <TextBlock
+                        x:Name="HeaderTitleText"
                         Grid.Column="0"
                         MaxLines="2"
                         Style="{StaticResource SubtitleTextBlockStyle}"
@@ -57,14 +84,12 @@
                     </Button>
                 </Grid>
 
-                <!-- Separator -->
                 <Border
                     Height="1"
                     Background="{ThemeResource CardStrokeColorDefaultBrush}"
                     Margin="-20,0,-20,0" />
 
-                <!-- Date / Time -->
-                <StackPanel Spacing="4">
+                <StackPanel x:Name="ReadOnlyWhenPanel" Spacing="4">
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
@@ -74,8 +99,7 @@
                         TextWrapping="Wrap" />
                 </StackPanel>
 
-                <!-- Colour swatch + name -->
-                <StackPanel Spacing="4">
+                <StackPanel x:Name="ReadOnlyColorPanel" Spacing="4">
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
@@ -93,8 +117,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Description -->
-                <StackPanel Spacing="4">
+                <StackPanel x:Name="ReadOnlyDescriptionPanel" Spacing="4">
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
@@ -104,8 +127,7 @@
                         TextWrapping="Wrap" />
                 </StackPanel>
 
-                <!-- Source -->
-                <StackPanel Spacing="4">
+                <StackPanel x:Name="ReadOnlySourcePanel" Spacing="4">
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
@@ -113,8 +135,7 @@
                     <TextBlock Text="{x:Bind ViewModel.SourceDisplay, Mode=OneWay}" />
                 </StackPanel>
 
-                <!-- Last synced -->
-                <StackPanel Spacing="4">
+                <StackPanel x:Name="ReadOnlyLastSyncedPanel" Spacing="4">
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
@@ -122,16 +143,17 @@
                     <TextBlock Text="{x:Bind ViewModel.LastSyncedDisplay, Mode=OneWay}" />
                 </StackPanel>
 
-                <!-- Edit button (disabled in Tier 1) -->
-                <Grid Margin="0,8,0,0">
-                    <ToolTipService.ToolTip>Coming in Tier 2</ToolTipService.ToolTip>
+                <Grid x:Name="EditButtonHost" Margin="0,8,0,0">
                     <Button
+                        x:Name="EditButton"
+                        Command="{x:Bind ViewModel.EnterEditModeCommand}"
                         Content="Edit"
-                        HorizontalAlignment="Stretch"
-                        IsEnabled="False" />
+                        HorizontalAlignment="Stretch" />
                 </Grid>
 
+                <StackPanel x:Name="EditPanelHost" Visibility="Collapsed" />
             </StackPanel>
         </ScrollViewer>
     </Border>
+</Grid>
 </UserControl>

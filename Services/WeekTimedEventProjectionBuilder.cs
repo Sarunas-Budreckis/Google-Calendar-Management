@@ -89,7 +89,8 @@ public static class WeekTimedEventProjectionBuilder
                 Math.Min(StandardTopPadding, centeredTopPadding),
                 true,
                 segment.OverlapDepth > 0,
-                1);
+                1,
+                segment.Item.Opacity);
         }
 
         var durationInt = (int)durationMinutes;
@@ -112,7 +113,8 @@ public static class WeekTimedEventProjectionBuilder
             StandardTopPadding,
             false,
             segment.OverlapDepth > 0,
-            summaryLineCount);
+            summaryLineCount,
+            segment.Item.Opacity);
     }
 
     private static string BuildTooltipText(CalendarEventDisplayModel item, CultureInfo culture)

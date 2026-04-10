@@ -10,7 +10,7 @@
 
     <Page.Resources>
         <DataTemplate x:Key="MonthTimedEventTemplate">
-            <Border>
+            <Border Opacity="{Binding Opacity}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />

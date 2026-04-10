@@ -1,6 +1,6 @@
 # Story 3.13: Month View Event Rendering Overhaul
 
-Status: review
+Status: done
 
 ## Story
 
@@ -169,3 +169,9 @@ GPT-5 Codex
 
 - 2026-04-05: Implemented the month-view rendering overhaul with all-day spanning blocks, timed dot rows, per-day overflow flyouts, day-background navigation to Day view, and unit coverage for the month layout planner. Automated build/test validation passed; manual UI verification remains pending.
 - 2026-04-06: Completed manual verification and finalized the month-view popup overlay behavior, spacing, opacity, and hover tooltip timing. Story is ready for review.
+- 2026-04-10: Code review completed.
+
+## Review Findings
+
+- [x] [Review][Patch] `_tooltipTimers` leak between popup opens [Views/MonthViewControl.xaml.cs:46–50] — `AttachInstantTooltip` adds `DispatcherQueueTimer` instances to `_tooltipTimers` on every popup open; light-dismiss never cleans them up, so timers accumulate until the next `Rebuild()`. Fixed by subscribing to `MoreEventsPopup.Closed` to call `StopTooltipTimers()` and null the child.
+- [x] [Review][Defer] `DayCellBackground_Tapped` does not navigate to Day view [Views/MonthViewControl.xaml.cs:746] — AC-3.13.8 specifies that clicking the day cell background should preserve existing Day-view navigation. The handler only sets `e.Handled = true` with no navigation call. Marked as intentional deviation per dev notes.

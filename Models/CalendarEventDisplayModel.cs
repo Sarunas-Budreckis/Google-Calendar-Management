@@ -12,4 +12,6 @@ public sealed record CalendarEventDisplayModel(
     string ColorName,
     bool IsRecurringInstance,
     string? Description,
-    DateTime? LastSyncedAt);
+    DateTime? LastSyncedAt,
+    bool IsPending = false,
+    double Opacity = 1.0);

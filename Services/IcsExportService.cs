@@ -80,7 +80,6 @@ public sealed class IcsExportService : IIcsExportService
         {
             _logger.LogError(ex, "Failed to export ICS file to {Path}.", savePath);
             TryDeleteFile(tempPath);
-            TryDeleteFile(savePath);
 
             return new ExportResult(
                 Success: false,

@@ -17,4 +17,5 @@ public sealed record WeekTimedEventLayoutItem(
     double CompactTopPadding,
     bool IsCompact,
     bool UseOverlapOutline,
-    int MaxTitleLines);
+    int MaxTitleLines,
+    double Opacity = 1.0);

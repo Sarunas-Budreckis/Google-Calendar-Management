@@ -9,6 +9,7 @@ public class CalendarDbContext : DbContext
         : base(options) { }
 
     public DbSet<GcalEvent> GcalEvents { get; set; }
+    public DbSet<PendingEvent> PendingEvents { get; set; }
     public DbSet<GcalEventVersion> GcalEventVersions { get; set; }
     public DbSet<SaveState> SaveStates { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }

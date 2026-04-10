@@ -10,7 +10,7 @@
 
     <Page.Resources>
         <DataTemplate x:Key="WeekTimedEventTemplate">
-            <Border>
+            <Border Opacity="{Binding Opacity}">
                 <Grid>
                     <TextBlock
                         FontSize="11"

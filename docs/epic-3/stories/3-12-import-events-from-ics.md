@@ -1,6 +1,6 @@
 # Story 3.12: Import Events from ICS File
 
-Status: review
+Status: done
 
 ## Story
 
@@ -223,3 +223,11 @@ GPT-5 Codex
 ### Change Log
 
 - 2026-04-05: Implemented ICS import parsing, upsert/version-history persistence, UI trigger/notification wiring, and automated plus manual verification. Story is ready for review.
+
+## Review Findings
+
+- [x] [Review][Patch] "skipped as invalid" count includes recurring events in summary message [ViewModels/MainViewModel.cs:424]
+- [x] [Review][Patch] File read uses `File.ReadAllTextAsync(file.Path)` instead of WinRT `FileIO.ReadTextAsync(file)` [Services/IcsImportService.cs:41]
+- [x] [Review][Patch] Duplicate UIDs in ICS input create spurious version snapshot for unsaved entity [Services/IcsImportService.cs:93-99]
+- [x] [Review][Defer] RRULE + malformed DTSTART miscounts event as invalid instead of skipped-recurring [Services/IcsParser.cs:122-139] — deferred, pre-existing edge case; no real-world ICS file has both RRULE and a bad DTSTART
+- [x] [Review][Defer] `FindValueSeparatorIndex` treats `\:` as escaped colon (not a real RFC 5545 escape) [Services/IcsParser.cs:235-246] — deferred, pre-existing; `\:` never appears in valid ICS property lines

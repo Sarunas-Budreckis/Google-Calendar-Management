@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
@@ -169,7 +170,10 @@ public sealed partial class MainPage : Page
                 break;
             case VirtualKey.Escape:
                 e.Handled = true;
-                _selectionService.ClearSelection();
+                if (!await _eventDetailsPanel.ViewModel.HandleEscapeAsync())
+                {
+                    _selectionService.ClearSelection();
+                }
                 break;
             case VirtualKey.G:
                 e.Handled = true;
@@ -658,7 +662,16 @@ public sealed partial class MainPage : Page
         toPicker.DateChanged += (_, _) => UpdateValidation();
         UpdateValidation();
 
-        var result = await dialog.ShowAsync();
+        ContentDialogResult result;
+        try
+        {
+            result = await dialog.ShowAsync();
+        }
+        catch (Exception ex) when (ex is COMException or TaskCanceledException)
+        {
+            return null;
+        }
+
         if (result != ContentDialogResult.Primary)
         {
             return null;

@@ -32,8 +32,7 @@ public sealed class CalendarQueryServiceTests : IDisposable
     public async Task GetEventsForRangeAsync_ReturnsOnlyEventsInRequestedRange()
     {
         await SeedMonthEventsAsync(totalEvents: 50, deletedEvery: 0);
-        var repository = new GcalEventRepository(_contextFactory);
-        var service = new CalendarQueryService(repository, new ColorMappingService());
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
 
         var events = await service.GetEventsForRangeAsync(
             new DateOnly(2026, 01, 10),
@@ -49,8 +48,7 @@ public sealed class CalendarQueryServiceTests : IDisposable
     public async Task GetEventsForRangeAsync_ExcludesSoftDeletedEvents()
     {
         await SeedMonthEventsAsync(totalEvents: 12, deletedEvery: 3);
-        var repository = new GcalEventRepository(_contextFactory);
-        var service = new CalendarQueryService(repository, new ColorMappingService());
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
 
         var events = await service.GetEventsForRangeAsync(
             new DateOnly(2026, 01, 01),
@@ -78,8 +76,7 @@ public sealed class CalendarQueryServiceTests : IDisposable
             await context.SaveChangesAsync();
         }
 
-        var repository = new GcalEventRepository(_contextFactory);
-        var service = new CalendarQueryService(repository, new ColorMappingService());
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
 
         var events = await service.GetEventsForRangeAsync(
             new DateOnly(2026, 01, 01),
@@ -112,8 +109,7 @@ public sealed class CalendarQueryServiceTests : IDisposable
             await context.SaveChangesAsync();
         }
 
-        var repository = new GcalEventRepository(_contextFactory);
-        var service = new CalendarQueryService(repository, new ColorMappingService());
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
 
         var events = await service.GetEventsForRangeAsync(date, date);
         var projection = YearViewDayProjectionBuilder.Build([date], events, new Dictionary<DateOnly, SyncStatus>());
@@ -121,6 +117,52 @@ public sealed class CalendarQueryServiceTests : IDisposable
         events.Should().BeEmpty();
         projection.DayLookup[date].SingleDayAllDayBar.HasContent.Should().BeFalse();
         projection.DayLookup[date].MultiDayAllDayBar.HasContent.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetEventsForRangeAsync_UsesPendingEventOverlayAndOpacity()
+    {
+        await using (var context = await _contextFactory.CreateDbContextAsync())
+        {
+            context.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "event-pending",
+                CalendarId = "primary",
+                Summary = "Original title",
+                Description = "Original description",
+                StartDatetime = new DateTime(2026, 01, 15, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 15, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "1",
+                CreatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc)
+            });
+            context.PendingEvents.Add(new PendingEvent
+            {
+                Id = Guid.NewGuid(),
+                GcalEventId = "event-pending",
+                Summary = "Pending title",
+                Description = "Pending description",
+                StartDatetime = new DateTime(2026, 01, 15, 11, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 15, 12, 0, 0, DateTimeKind.Utc),
+                ColorId = "4",
+                CreatedAt = new DateTime(2026, 01, 15, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
+
+        var events = await service.GetEventsForRangeAsync(
+            new DateOnly(2026, 01, 15),
+            new DateOnly(2026, 01, 15));
+
+        events.Should().ContainSingle();
+        events[0].Title.Should().Be("Pending title");
+        events[0].Description.Should().Be("Pending description");
+        events[0].ColorName.Should().Be("Flamingo");
+        events[0].IsPending.Should().BeTrue();
+        events[0].Opacity.Should().Be(0.6);
     }
 
     public void Dispose()

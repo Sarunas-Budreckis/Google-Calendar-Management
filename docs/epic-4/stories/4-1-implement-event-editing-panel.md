@@ -1,6 +1,6 @@
 # Story 4.1: Implement Event Editing Panel
 
-Status: ready-for-dev
+Status: review
 
 > **Moved from Epic 3:** This story was originally Story 3.5. It has been moved to Epic 4 (Event Editing — Tier 2) as event editing is out of scope for Tier 1 (read-only).
 >
@@ -214,57 +214,99 @@ public record EventUpdatedMessage(string GcalEventId);
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Create `PendingEvent` entity, repository, and migration** (AC: 4.1.8, 4.1.12)
-  - [ ] `Data/Entities/PendingEvent.cs` — entity class
-  - [ ] `Data/Configurations/PendingEventConfiguration.cs` — EF config with index on `GcalEventId`
-  - [ ] Register `DbSet<PendingEvent>` in `CalendarDbContext`
-  - [ ] `Services/IPendingEventRepository.cs` — `GetByGcalEventIdAsync`, `UpsertAsync`
-  - [ ] `Services/PendingEventRepository.cs` — implementation using `IDbContextFactory`
-  - [ ] Register repository in DI (`App.xaml.cs`)
-  - [ ] `dotnet ef migrations add AddPendingEventTable`
-  - [ ] Add `EventUpdatedMessage` to `Messages/EventUpdatedMessage.cs`
+- [x] **Task 1: Create `PendingEvent` entity, repository, and migration** (AC: 4.1.8, 4.1.12)
+  - [x] `Data/Entities/PendingEvent.cs` — entity class
+  - [x] `Data/Configurations/PendingEventConfiguration.cs` — EF config with index on `GcalEventId`
+  - [x] Register `DbSet<PendingEvent>` in `CalendarDbContext`
+  - [x] `Services/IPendingEventRepository.cs` — `GetByGcalEventIdAsync`, `UpsertAsync`
+  - [x] `Services/PendingEventRepository.cs` — implementation using `IDbContextFactory`
+  - [x] Register repository in DI (`App.xaml.cs`)
+  - [x] `dotnet ef migrations add AddPendingEventTable`
+  - [x] Add `EventUpdatedMessage` to `Messages/EventUpdatedMessage.cs`
 
-- [ ] **Task 2: Create value converters** (AC: 4.1.3)
-  - [ ] `Views/Converters/DateOnlyToDateTimeOffsetConverter.cs`
-  - [ ] `Views/Converters/TimeOnlyToTimeSpanConverter.cs`
+- [x] **Task 2: Create value converters** (AC: 4.1.3)
+  - [x] `Views/Converters/DateOnlyToDateTimeOffsetConverter.cs`
+  - [x] `Views/Converters/TimeOnlyToTimeSpanConverter.cs`
 
-- [ ] **Task 3: Extend `EventDetailsPanelViewModel`** (AC: 4.1.1–4.1.13)
-  - [ ] Add edit mode state, editable fields, validation, debounce timer, undo
+- [x] **Task 3: Extend `EventDetailsPanelViewModel`** (AC: 4.1.1–4.1.13)
+  - [x] Add edit mode state, editable fields, validation, debounce timer, undo
 
-- [ ] **Task 4: Extend `EventDetailsPanelControl.xaml`** (AC: 4.1.1–4.1.13)
-  - [ ] Add `VisualStateManager` ReadOnly/EditMode states
-  - [ ] Enable Edit button; add edit-mode controls
-  - [ ] Add Ctrl+Z and Esc key handling
+- [x] **Task 4: Extend `EventDetailsPanelControl.xaml`** (AC: 4.1.1–4.1.13)
+  - [x] Add `VisualStateManager` ReadOnly/EditMode states
+  - [x] Enable Edit button; add edit-mode controls
+  - [x] Add Ctrl+Z and Esc key handling
 
-- [ ] **Task 5: Calendar view refresh on save + pending opacity** (AC: 4.1.12, 4.1.13)
-  - [ ] Add `IsPending` and `Opacity` properties to `CalendarEventDisplayModel`
-  - [ ] Update event query logic in all four view controls to check `PendingEvent` table; use pending data + `Opacity = 0.6` when a pending row exists
-  - [ ] Bind `Opacity` on event blocks in all four view XAML files
-  - [ ] `MainViewModel` subscribes to `EventUpdatedMessage`, refreshes affected display model
+- [x] **Task 5: Calendar view refresh on save + pending opacity** (AC: 4.1.12, 4.1.13)
+  - [x] Add `IsPending` and `Opacity` properties to `CalendarEventDisplayModel`
+  - [x] Update event query logic in all four view controls to check `PendingEvent` table; use pending data + `Opacity = 0.6` when a pending row exists
+  - [x] Bind `Opacity` on event blocks in all four view XAML files
+  - [x] `MainViewModel` subscribes to `EventUpdatedMessage`, refreshes affected display model
 
-- [ ] **Task 6: Unit tests** (AC: 4.1.6, 4.1.8, 4.1.9, 4.1.10, 4.1.12)
-  - [ ] `EnterEditMode()`, `ValidateFields()`, `UndoLastChange()` tests
-  - [ ] `PendingEventRepository.UpsertAsync()` — creates on first save, updates on second save
-  - [ ] `CalendarEventDisplayModel` — `Opacity = 0.6` when `IsPending = true`, `1.0` otherwise
+- [x] **Task 6: Unit tests** (AC: 4.1.6, 4.1.8, 4.1.9, 4.1.10, 4.1.12)
+  - [x] `EnterEditMode()`, `ValidateFields()`, `UndoLastChange()` tests
+  - [x] `PendingEventRepository.UpsertAsync()` — creates on first save, updates on second save
+  - [x] `CalendarEventDisplayModel` — `Opacity = 0.6` when `IsPending = true`, `1.0` otherwise
 
-- [ ] **Task 7: Build verification**
-  - [ ] `dotnet build -p:Platform=x64` — 0 errors
-  - [ ] `dotnet test GoogleCalendarManagement.Tests/` — all pass
+- [x] **Task 7: Build verification**
+  - [x] `dotnet build -p:Platform=x64` — 0 errors
+  - [x] `dotnet test GoogleCalendarManagement.Tests/` — all pass
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-<!-- to be filled by dev agent -->
+GPT-5 Codex
 
 ### Debug Log References
 
-<!-- to be filled by dev agent -->
+- `dotnet ef migrations add AddPendingEventTable`
+- `dotnet build -p:Platform=x64`
+- `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64` (initial rerun needed after a transient WinUI markup compiler file lock on `obj/.../input.json`)
 
 ### Completion Notes List
 
-<!-- to be filled by dev agent -->
+- Added `PendingEvent` persistence, repository wiring, EF configuration, and migration so edits are stored separately from `gcal_event`.
+- Extended `EventDetailsPanelViewModel` with edit mode state, inline validation, 500 ms debounced auto-save, single-level undo, and Escape-to-save-and-close behavior.
+- Extended the event details panel with read-only/edit visual states plus in-place edit controls, including the color placeholder tooltip and scrollable multiline description editor.
+- Overlaid pending event data in calendar queries and projections so all calendar views render pending edits at 60% opacity and show updated event details immediately.
+- Added integration and unit coverage for pending-event overlay/upsert behavior and event-details edit flows.
 
 ### File List
 
-<!-- to be filled by dev agent -->
+- `App.xaml.cs`
+- `Data/CalendarDbContext.cs`
+- `Data/Configurations/PendingEventConfiguration.cs`
+- `Data/Entities/GcalEvent.cs`
+- `Data/Entities/PendingEvent.cs`
+- `Data/Migrations/20260410201810_AddPendingEventTable.cs`
+- `Data/Migrations/20260410201810_AddPendingEventTable.Designer.cs`
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs`
+- `GoogleCalendarManagement.Tests/Integration/CalendarQueryServiceTests.cs`
+- `GoogleCalendarManagement.Tests/Integration/PendingEventRepositoryTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs`
+- `Messages/EventUpdatedMessage.cs`
+- `Models/CalendarEventDisplayModel.cs`
+- `Models/WeekTimedEventLayoutItem.cs`
+- `Models/YearViewDayDisplayModel.cs`
+- `Services/CalendarQueryService.cs`
+- `Services/IPendingEventRepository.cs`
+- `Services/PendingEventRepository.cs`
+- `Services/WeekTimedEventProjectionBuilder.cs`
+- `Services/YearViewDayProjectionBuilder.cs`
+- `ViewModels/EventDetailsPanelViewModel.cs`
+- `ViewModels/MainViewModel.cs`
+- `Views/Converters/DateOnlyToDateTimeOffsetConverter.cs`
+- `Views/Converters/TimeOnlyToTimeSpanConverter.cs`
+- `Views/DayViewControl.xaml.cs`
+- `Views/EventDetailsPanelControl.xaml`
+- `Views/EventDetailsPanelControl.xaml.cs`
+- `Views/MainPage.xaml.cs`
+- `Views/MonthViewControl.xaml`
+- `Views/MonthViewControl.xaml.cs`
+- `Views/WeekViewControl.xaml`
+- `Views/WeekViewControl.xaml.cs`
+- `Views/YearViewControl.xaml.cs`
+
+## Change Log
+
+- 2026-04-10: Implemented Story 4.1 event editing, pending-event persistence, live calendar refresh, and pending-opacity rendering; verified with build and automated tests.

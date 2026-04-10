@@ -104,8 +104,39 @@ public static class IcsExporter
 
     private static void AppendLine(StringBuilder builder, string value)
     {
-        builder.Append(value);
-        builder.Append(CrLf);
+        // RFC 5545 §3.1: fold lines longer than 75 octets using CRLF + SPACE.
+        var bytes = Encoding.UTF8.GetBytes(value);
+        if (bytes.Length <= 75)
+        {
+            builder.Append(value);
+            builder.Append(CrLf);
+            return;
+        }
+
+        var offset = 0;
+        var firstLine = true;
+        while (offset < bytes.Length)
+        {
+            var maxOctets = firstLine ? 75 : 74; // continuation lines start with a SPACE (1 octet)
+            var chunkLength = Math.Min(maxOctets, bytes.Length - offset);
+
+            // Walk back to a safe UTF-8 character boundary if the chunk splits a multi-byte sequence.
+            while (chunkLength > 0 && (bytes[offset + chunkLength - 1] & 0xC0) == 0x80)
+            {
+                chunkLength--;
+            }
+
+            if (!firstLine)
+            {
+                builder.Append(' ');
+            }
+
+            builder.Append(Encoding.UTF8.GetString(bytes, offset, chunkLength));
+            builder.Append(CrLf);
+
+            offset += chunkLength;
+            firstLine = false;
+        }
     }
 
     private static string EscapeIcsText(string text)

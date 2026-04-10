@@ -72,10 +72,15 @@ public sealed class GcalEventRepository : IGcalEventRepository
                 gcalEvent.EndDatetime,
                 gcalEvent.IsAllDay
             })
-            .FirstAsync(ct);
+            .FirstOrDefaultAsync(ct);
+
+        if (latestEvent is null || !latestEvent.Start.HasValue)
+        {
+            return null;
+        }
 
         var from = DateOnly.FromDateTime(NormalizeUtc(earliestEvent.Start.Value).Date);
-        var to = GetInclusiveEndDate(latestEvent.Start!.Value, latestEvent.EndDatetime, latestEvent.IsAllDay);
+        var to = GetInclusiveEndDate(latestEvent.Start.Value, latestEvent.EndDatetime, latestEvent.IsAllDay);
         return (from, to);
     }
 

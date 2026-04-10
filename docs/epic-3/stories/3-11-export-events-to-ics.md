@@ -1,6 +1,6 @@
 # Story 3.11: Export Events to ICS File
 
-Status: review
+Status: done
 
 ## Story
 
@@ -228,3 +228,15 @@ GPT-5
 - 2026-04-05: Implemented the ICS export pipeline, added shell export UI and non-blocking notifications, registered the new services in DI, and added unit/integration coverage for export formatting and range filtering.
 - 2026-04-05: Changed the `More` shell action to an explicit dropdown menu and updated export-range defaults to use earliest/latest stored event bounds with automated regression coverage.
 - 2026-04-05: Completed manual verification and moved the story to review.
+
+### Review Findings
+
+- [x] [Review][Patch] Race condition: `GetStoredDateRangeAsync` second query uses `FirstAsync` — throws `InvalidOperationException` if all non-deleted events are soft-deleted between the two sequential DB round-trips [Services/GcalEventRepository.cs]
+- [x] [Review][Patch] `TryDeleteFile(savePath)` in error catch block destroys a pre-existing user file when `WriteAllTextAsync` to the temp path fails (savePath is untouched until `File.Move` — should only clean up `tempPath`) [Services/IcsExportService.cs]
+- [x] [Review][Patch] RFC 5545 §3.1 line folding not implemented — long `SUMMARY`, `DESCRIPTION`, or `UID` values produce lines exceeding 75 octets; Apple Calendar and Outlook may reject or truncate the file [Services/IcsExporter.cs]
+- [x] [Review][Patch] No exception handling around `dialog.ShowAsync()` in `ShowExportDateRangeDialogAsync` — `COMException` or `TaskCanceledException` propagates silently through the `async void` click handler if XamlRoot is destroyed while dialog is open [Views/MainPage.xaml.cs]
+- [x] [Review][Defer] Zero-duration timed events produce `DTSTART == DTEND`, violating RFC 5545 §3.6.1 [Services/IcsExporter.cs] — deferred, pre-existing; Google Calendar never produces zero-duration events
+- [x] [Review][Defer] Bare `\r` (old Mac line endings) in field values silently deleted rather than escaped to `\n` [Services/IcsExporter.cs] — deferred, pre-existing; Google Calendar data does not produce bare CR
+- [x] [Review][Defer] `ExportToFileAsync` has no `from <= to` guard at service layer [Services/IcsExportService.cs] — deferred, pre-existing; dialog already enforces this constraint
+- [x] [Review][Defer] `DatePicker` pre-fill not guarded against `DateOnly.MinValue`/`MaxValue` causing `ArgumentOutOfRangeException` [Views/MainPage.xaml.cs] — deferred; defaults always come from today or stored events
+- [x] [Review][Defer] `File.Move` is non-atomic across filesystems/network shares [Services/IcsExportService.cs] — deferred; mitigated because temp file is placed in the same directory as the destination

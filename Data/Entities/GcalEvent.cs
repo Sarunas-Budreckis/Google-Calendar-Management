@@ -25,4 +25,5 @@ public class GcalEvent
     public DateTime UpdatedAt { get; set; }
 
     public ICollection<GcalEventVersion> Versions { get; set; } = new List<GcalEventVersion>();
+    public PendingEvent? PendingEvent { get; set; }
 }

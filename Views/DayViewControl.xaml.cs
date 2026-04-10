@@ -148,6 +148,7 @@ public sealed partial class DayViewControl : Page
             var eventBorder = new Border
             {
                 Padding = new Thickness(8),
+                Opacity = item.Opacity,
                 CornerRadius = ElementCornerRadius,
                 Background = ToBrush(item.ColorHex),
                 BorderBrush = TransparentPanelBrush,
@@ -257,6 +258,7 @@ public sealed partial class DayViewControl : Page
                 // Top margin encodes the sub-hour start offset so the block begins at the correct pixel.
                 Margin = new Thickness(4, topOffset, 4, 0),
                 Height = eventHeight,
+                Opacity = item.Opacity,
                 VerticalAlignment = VerticalAlignment.Top,
                 Padding = padding,
                 CornerRadius = ElementCornerRadius,

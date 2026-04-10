@@ -15,6 +15,19 @@
 - **Tapping `WeekHeaderGrid` background clears event selection** — `WeekGrid_Tapped` is also attached to `WeekHeaderGrid`; tapping a day header area without a handled child fires `ClearSelection()` unexpectedly. Pre-existing behavior. [`Views/WeekViewControl.xaml.cs`]
 - **`Loaded` handler can double-subscribe `PropertyChanged` on repeated navigation** — `ViewModel.PropertyChanged += ViewModel_PropertyChanged` in `WeekViewControl_Loaded` has no guard; if `Loaded` fires twice without an intervening `Unloaded`, event handlers fire twice per change. Pre-existing pattern. [`Views/WeekViewControl.xaml.cs`]
 
+## Deferred from: code review of 3-11-export-events-to-ics (2026-04-10)
+
+- **Zero-duration timed events produce `DTSTART == DTEND`** — Violates RFC 5545 §3.6.1; Google Calendar never produces zero-duration events so this is unreachable in practice. [`Services/IcsExporter.cs`]
+- **Bare `\r` in field values silently deleted rather than escaped** — Mac line-ending edge case; Google Calendar data does not produce bare CR. [`Services/IcsExporter.cs`]
+- **`ExportToFileAsync` has no `from <= to` guard at service layer** — Dialog enforces this constraint before calling the service; defensive only. [`Services/IcsExportService.cs`]
+- **`DatePicker` pre-fill not guarded against extreme `DateOnly` values** — Defaults always resolve to today or stored event dates, so `MinValue`/`MaxValue` can't be produced. [`Views/MainPage.xaml.cs`]
+- **`File.Move` non-atomic across filesystems/network shares** — Mitigated because temp file is placed in the same directory as the destination (same volume). [`Services/IcsExportService.cs`]
+
+## Deferred from: code review of 3-12-import-events-from-ics (2026-04-10)
+
+- **RRULE + malformed DTSTART miscounts as invalid instead of skipped-recurring** — If a VEVENT has both an RRULE and an unparseable DTSTART, early-return in date parsing increments `invalidEventCount` before the post-loop RRULE check fires; the summary shows it as invalid rather than recurring-skipped. Rare edge case; no real-world ICS files exhibit this combination. [`Services/IcsParser.cs:122-139`]
+- **`FindValueSeparatorIndex` treats `\:` as escaped colon** — RFC 5545 does not define `\:` as an escape; the guard `line[i-1] != '\\'` is technically incorrect but harmless — `\:` never appears in valid ICS property descriptor lines. [`Services/IcsParser.cs:235-246`]
+
 ## Deferred from: code review of 3-9-enhance-year-view-with-event-indicators-and-all-day-previews (2026-04-06)
 
 - **`SpanDays` field populated but unused** — `YearViewPreviewBarDisplayModel.SpanDays` is assigned from `AllDayEventSpan.SpanDays` but no rendering path reads it; if future code uses it, the value reflects the full calendar span of the event, not the clipped visible span. [`Models/YearViewDayDisplayModel.cs:14`]

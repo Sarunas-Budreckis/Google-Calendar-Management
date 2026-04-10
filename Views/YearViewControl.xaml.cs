@@ -652,6 +652,7 @@ public sealed partial class YearViewControl : Page
         {
             Height = PreviewBarHeight,
             Margin = new Thickness(1, 0, 1, 1),
+            Opacity = bar.Opacity,
             Padding = bar.HasContent ? new Thickness(3, 0, 3, 0) : new Thickness(0),
             CornerRadius = YearViewCornerRadius,
             Background = bar.HasContent && bar.ColorHex is not null

@@ -24,7 +24,7 @@ public sealed class IcsImportService : IIcsImportService
 
     public async Task<ImportResult> ImportFromFileAsync(StorageFile file, CancellationToken ct = default)
     {
-        if (file is null || string.IsNullOrWhiteSpace(file.Path))
+        if (file is null)
         {
             return CreateFailureResult("Unable to open the selected ICS file.");
         }
@@ -32,11 +32,11 @@ public sealed class IcsImportService : IIcsImportService
         string content;
         try
         {
-            content = await File.ReadAllTextAsync(file.Path, ct);
+            content = await FileIO.ReadTextAsync(file);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read ICS file from {Path}.", file.Path);
+            _logger.LogError(ex, "Failed to read ICS file '{Name}'.", file.Name);
             return CreateFailureResult("Unable to read the selected ICS file.");
         }
 
@@ -64,7 +64,7 @@ public sealed class IcsImportService : IIcsImportService
         var newEventCount = 0;
         var updatedEventCount = 0;
 
-        foreach (var parsedEvent in parseResult.Events)
+        foreach (var parsedEvent in parseResult.Events.DistinctBy(e => e.Uid, StringComparer.Ordinal))
         {
             if (existingEvents.TryGetValue(parsedEvent.Uid, out var existingEvent))
             {
@@ -74,9 +74,7 @@ public sealed class IcsImportService : IIcsImportService
                 continue;
             }
 
-            var createdEvent = CreateImportedEvent(parsedEvent, nowUtc);
-            context.GcalEvents.Add(createdEvent);
-            existingEvents[createdEvent.GcalEventId] = createdEvent;
+            context.GcalEvents.Add(CreateImportedEvent(parsedEvent, nowUtc));
             newEventCount++;
         }
 

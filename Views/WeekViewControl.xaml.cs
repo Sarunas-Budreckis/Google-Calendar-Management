@@ -297,6 +297,7 @@ public sealed partial class WeekViewControl : Page
         var border = new Border
         {
             Padding = new Thickness(4),
+            Opacity = item.Opacity,
             CornerRadius = ElementCornerRadius,
             Background = ToBrush(item.ColorHex),
             BorderBrush = TransparentPanelBrush,
@@ -374,6 +375,7 @@ public sealed partial class WeekViewControl : Page
         var timeTextBlock = (TextBlock)detailedPanel.Children[1];
 
         border.Tag = item.GcalEventId;
+        border.Opacity = item.Opacity;
         border.CornerRadius = ElementCornerRadius;
         border.Background = ToBrush(item.ColorHex);
         border.BorderBrush = item.UseOverlapOutline ? OverlapOutlineBrush : null;

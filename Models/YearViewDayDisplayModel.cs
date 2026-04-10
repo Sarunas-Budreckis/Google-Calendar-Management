@@ -11,7 +11,8 @@ public sealed record YearViewPreviewBarDisplayModel(
     string? GcalEventId,
     string? ColorHex,
     string? SummaryText,
-    int SpanDays)
+    int SpanDays,
+    double Opacity = 1.0)
 {
     public static YearViewPreviewBarDisplayModel Empty { get; } = new(null, null, null, 0);
 

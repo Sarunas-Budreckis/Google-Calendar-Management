@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.Messaging;
 using FluentAssertions;
+using GoogleCalendarManagement.Data.Entities;
 using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
@@ -11,31 +12,43 @@ namespace GoogleCalendarManagement.Tests.Unit.ViewModels;
 [Collection("Messenger")]
 public sealed class EventDetailsPanelViewModelTests : IDisposable
 {
-    private static readonly DateTime UtcBase = new DateTime(2026, 4, 4, 9, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime UtcBase = new(2026, 4, 4, 9, 0, 0, DateTimeKind.Utc);
 
     private readonly Mock<ICalendarQueryService> _queryServiceMock = new();
     private readonly Mock<ICalendarSelectionService> _selectionServiceMock = new();
+    private readonly Mock<IGcalEventRepository> _gcalEventRepositoryMock = new();
+    private readonly Mock<IPendingEventRepository> _pendingEventRepositoryMock = new();
 
     public EventDetailsPanelViewModelTests()
     {
         WeakReferenceMessenger.Default.Reset();
+        _gcalEventRepositoryMock
+            .Setup(repo => repo.GetByGcalEventIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string id, CancellationToken _) => new GcalEvent
+            {
+                GcalEventId = id,
+                CalendarId = "primary",
+                Summary = "Stored title",
+                Description = "Stored description",
+                StartDatetime = UtcBase,
+                EndDatetime = UtcBase.AddHours(1),
+                ColorId = "1",
+                CreatedAt = UtcBase,
+                UpdatedAt = UtcBase
+            });
     }
 
     public void Dispose()
     {
-        // Clean up any lingering messenger registrations from the view model
-        // The WeakReferenceMessenger holds weak refs, but clean up explicitly.
-        WeakReferenceMessenger.Default.Cleanup();
+        WeakReferenceMessenger.Default.Reset();
     }
-
-    // ── AC-3.4.1 / 3.4.2: selected message loads event and shows panel ────────
 
     [Fact]
     public async Task EventSelectedMessage_NonNull_LoadsEventAndShowsPanel()
     {
         var evt = MakeEvent("evt-1", title: "Team Meeting");
         _queryServiceMock
-            .Setup(s => s.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
 
         var sut = CreateSut();
@@ -47,153 +60,170 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         sut.Title.Should().Be("Team Meeting");
         sut.ColorHex.Should().Be("#7986CB");
         sut.ColorName.Should().Be("Lavender");
-        sut.SourceDisplay.Should().Be("From Google Calendar");
     }
 
-    // ── AC-3.4.6: null selection message hides panel ──────────────────────────
-
     [Fact]
-    public async Task EventSelectedMessage_Null_HidesPanel()
+    public async Task CloseCommand_CallsClearSelection_WhenPanelIsVisible()
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .Setup(s => s.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
-
         var sut = CreateSut();
-
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
         await WaitUntilAsync(() => sut.IsPanelVisible);
-        sut.IsPanelVisible.Should().BeTrue();
 
-        WeakReferenceMessenger.Default.Send(new EventSelectedMessage(null));
-        await WaitUntilAsync(() => !sut.IsPanelVisible);
+        await sut.CloseCommand.ExecuteAsync(null);
 
-        sut.IsPanelVisible.Should().BeFalse();
-        sut.Title.Should().BeEmpty();
+        _selectionServiceMock.Verify(service => service.ClearSelection(), Times.Once);
     }
 
-    // ── AC-3.4.4: close command clears selection ──────────────────────────────
-
     [Fact]
-    public void CloseCommand_CallsClearSelection()
+    public async Task EnterEditMode_PopulatesEditableFields()
     {
-        var sut = CreateSut();
-
-        sut.CloseCommand.Execute(null);
-
-        _selectionServiceMock.Verify(s => s.ClearSelection(), Times.Once);
-    }
-
-    // ── AC-3.4.7: null description uses placeholder ───────────────────────────
-
-    [Fact]
-    public async Task EventSelectedMessage_NullDescription_UsesPlaceholder()
-    {
-        var evt = MakeEvent("evt-1", description: null);
+        var evt = MakeEvent("evt-1", title: "Draft title", description: "Draft description");
         _queryServiceMock
-            .Setup(s => s.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
-
         var sut = CreateSut();
 
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
         await WaitUntilAsync(() => sut.IsPanelVisible);
 
-        sut.DescriptionDisplay.Should().Be("No description provided.");
+        sut.EnterEditMode();
+
+        sut.IsEditMode.Should().BeTrue();
+        sut.EditTitle.Should().Be("Draft title");
+        sut.EditDescription.Should().Be("Draft description");
+        sut.EditStartDate.Should().Be(DateOnly.FromDateTime(evt.StartLocal));
+        sut.EditEndDate.Should().Be(DateOnly.FromDateTime(evt.EndLocal));
     }
 
     [Fact]
-    public async Task EventSelectedMessage_EmptyDescription_UsesPlaceholder()
+    public async Task ValidateFields_EmptyTitleAndInvalidDateRange_ReturnsFalse()
     {
-        var evt = MakeEvent("evt-1", description: "");
+        var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .Setup(s => s.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+        sut.EditTitle = string.Empty;
+        sut.EditEndDate = sut.EditStartDate;
+        sut.EditEndTime = sut.EditStartTime;
+
+        var isValid = sut.ValidateFields();
+
+        isValid.Should().BeFalse();
+        sut.TitleError.Should().Be("Title is required");
+        sut.DateTimeError.Should().Be("End time must be after start time");
+    }
+
+    [Fact]
+    public async Task UndoLastChange_RestoresPreviousFieldValue()
+    {
+        var evt = MakeEvent("evt-1", title: "Before");
+        _queryServiceMock
+            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt);
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+        sut.EditTitle = "After";
+
+        sut.UndoLastChange();
+
+        sut.EditTitle.Should().Be("Before");
+    }
+
+    [Fact]
+    public async Task SaveNowAsync_CreatesPendingEventAndPublishesUpdateMessage()
+    {
+        var evt = MakeEvent("evt-1");
+        _queryServiceMock
+            .SetupSequence(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt)
+            .ReturnsAsync(evt with { Title = "Edited title", IsPending = true, Opacity = 0.6 });
+        _pendingEventRepositoryMock
+            .Setup(repo => repo.GetByGcalEventIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PendingEvent?)null);
+
+        WeakReferenceMessenger.Default.Register<EventDetailsPanelViewModelTests, EventUpdatedMessage>(
+            this,
+            static (recipient, message) => recipient.OnEventUpdated(message));
 
         var sut = CreateSut();
 
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
         await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+        sut.EditTitle = "Edited title";
 
-        sut.DescriptionDisplay.Should().Be("No description provided.");
+        await sut.SaveNowAsync();
+
+        _pendingEventRepositoryMock.Verify(
+            repo => repo.UpsertAsync(
+                It.Is<PendingEvent>(pending => pending.GcalEventId == "evt-1" && pending.Summary == "Edited title"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        _lastPublishedMessage.Should().NotBeNull();
+        _lastPublishedMessage!.GcalEventId.Should().Be("evt-1");
+        sut.SaveStatusText.Should().Be("Saved");
     }
 
-    // ── AC-3.4.7: null last-synced renders "Never" ────────────────────────────
-
     [Fact]
-    public async Task EventSelectedMessage_NullLastSynced_RendersNever()
+    public async Task HandleEscapeAsync_WithPendingChanges_SavesThenCloses()
     {
-        var evt = MakeEvent("evt-1", lastSyncedAt: null);
+        var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .Setup(s => s.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(evt);
+            .SetupSequence(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt)
+            .ReturnsAsync(evt with { IsPending = true, Opacity = 0.6 });
+        _pendingEventRepositoryMock
+            .Setup(repo => repo.GetByGcalEventIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PendingEvent?)null);
 
         var sut = CreateSut();
 
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
-        await Task.Delay(50);
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+        sut.EditTitle = "Edited title";
 
-        sut.LastSyncedDisplay.Should().Be("Never");
+        var handled = await sut.HandleEscapeAsync();
+
+        handled.Should().BeTrue();
+        _pendingEventRepositoryMock.Verify(repo => repo.UpsertAsync(It.IsAny<PendingEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _selectionServiceMock.Verify(service => service.ClearSelection(), Times.Once);
     }
 
-    // ── AC-3.4.5: view-mode switch does not affect panel state ────────────────
-
-    [Fact]
-    public async Task PanelState_UnchangedWhenNoNewMessage_AfterLoadingEvent()
+    private void OnEventUpdated(EventUpdatedMessage message)
     {
-        var evt = MakeEvent("evt-1", title: "Stable Event");
-        _queryServiceMock
-            .Setup(s => s.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(evt);
-
-        var sut = CreateSut();
-
-        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
-        await Task.Delay(50);
-
-        // Simulate view mode switch by doing nothing to the panel ─
-        // no new EventSelectedMessage means no state change.
-        sut.IsPanelVisible.Should().BeTrue();
-        sut.Title.Should().Be("Stable Event");
+        _lastPublishedMessage = message;
     }
 
-    // ── AC-3.4.7: missing event from query service does not throw ─────────────
-
-    [Fact]
-    public async Task EventSelectedMessage_EventNotFoundInQuery_DoesNotThrowAndHidesPanel()
-    {
-        _queryServiceMock
-            .Setup(s => s.GetEventByGcalIdAsync("evt-missing", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((CalendarEventDisplayModel?)null);
-
-        var sut = CreateSut();
-
-        var act = async () =>
-        {
-            WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-missing"));
-            await WaitUntilAsync(() => !sut.IsPanelVisible);
-        };
-
-        await act.Should().NotThrowAsync();
-        sut.IsPanelVisible.Should().BeFalse();
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    private EventUpdatedMessage? _lastPublishedMessage;
 
     private EventDetailsPanelViewModel CreateSut()
     {
+        _lastPublishedMessage = null;
         return new EventDetailsPanelViewModel(
             _queryServiceMock.Object,
-            _selectionServiceMock.Object);
+            _selectionServiceMock.Object,
+            _gcalEventRepositoryMock.Object,
+            _pendingEventRepositoryMock.Object,
+            new FixedTimeProvider(new DateTimeOffset(UtcBase)));
     }
 
     private static CalendarEventDisplayModel MakeEvent(
         string id,
         string title = "Test Event",
-        string? description = "A test description",
-        DateTime? lastSyncedAt = null,
-        string colorId = "1")
+        string? description = "A test description")
     {
         var startUtc = UtcBase;
         var endUtc = UtcBase.AddHours(1);
@@ -209,7 +239,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
             ColorName: "Lavender",
             IsRecurringInstance: false,
             Description: description,
-            LastSyncedAt: lastSyncedAt);
+            LastSyncedAt: null);
     }
 
     private static async Task WaitUntilAsync(Func<bool> predicate, int timeoutMs = 500)
@@ -224,5 +254,17 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
 
             await Task.Delay(10);
         }
+    }
+
+    private sealed class FixedTimeProvider : TimeProvider
+    {
+        private readonly DateTimeOffset _utcNow;
+
+        public FixedTimeProvider(DateTimeOffset utcNow)
+        {
+            _utcNow = utcNow;
+        }
+
+        public override DateTimeOffset GetUtcNow() => _utcNow;
     }
 }

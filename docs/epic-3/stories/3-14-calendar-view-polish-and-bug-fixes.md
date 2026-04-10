@@ -217,6 +217,10 @@ Read the actual `MainPage.xaml` layout before implementing to understand the cur
   - [x] `dotnet test GoogleCalendarManagement.Tests/`
   - [x] Manual verification per checklist above
 
+### Review Findings
+
+- [ ] [Review][Decision] Overnight timed-event labels still show the full original span instead of per-segment visible times, which contradicts AC-3.14.2 and the current story spec. The implementation now intentionally preserves the original full-span labels per user direction.
+
 ## Dev Agent Record
 
 ### Agent Model Used

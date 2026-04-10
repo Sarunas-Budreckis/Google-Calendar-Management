@@ -41,7 +41,7 @@ public static class YearViewDayProjectionBuilder
                 {
                     singleDayAssignments.TryAdd(
                         date,
-                        new YearViewPreviewBarDisplayModel(span.GcalEventId, span.ColorHex, span.Title, span.SpanDays));
+                        new YearViewPreviewBarDisplayModel(span.GcalEventId, span.ColorHex, span.Title, span.SpanDays, span.Opacity));
                     continue;
                 }
 
@@ -82,7 +82,8 @@ public static class YearViewDayProjectionBuilder
                     activeMultiDaySpan.GcalEventId,
                     activeMultiDaySpan.ColorHex,
                     activeMultiDaySpan.Title,
-                    activeMultiDaySpan.SpanDays);
+                    activeMultiDaySpan.SpanDays,
+                    activeMultiDaySpan.Opacity);
 
             if (multiDayBar.HasContent)
             {
@@ -177,7 +178,8 @@ public static class YearViewDayProjectionBuilder
                 startDay,
                 endDay,
                 endDay.DayNumber - startDay.DayNumber + 1,
-                inputOrder++);
+                inputOrder++,
+                evt.Opacity);
         }
     }
 
@@ -217,7 +219,8 @@ public static class YearViewDayProjectionBuilder
         DateOnly StartDay,
         DateOnly EndDay,
         int SpanDays,
-        int InputOrder)
+        int InputOrder,
+        double Opacity)
     {
         public bool Covers(DateOnly date) => date >= StartDay && date <= EndDay;
     }
