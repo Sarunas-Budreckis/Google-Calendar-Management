@@ -9,6 +9,9 @@ internal sealed class WeekTimedEventVirtualizingLayout : VirtualizingLayout
 {
     private readonly Dictionary<int, UIElement> _realizedElements = [];
 
+    public string? DragGcalEventId { get; set; }
+    public double DragHeight { get; set; }
+
     protected override void UninitializeForContextCore(VirtualizingLayoutContext context)
     {
         foreach (var element in _realizedElements.Values)
@@ -96,20 +99,26 @@ internal sealed class WeekTimedEventVirtualizingLayout : VirtualizingLayout
         return Math.Max(0, Math.Max(availableSize, safeExtent));
     }
 
-    private static bool TryGetValidBounds(WeekTimedEventLayoutItem item, out Rect bounds)
+    private bool TryGetValidBounds(WeekTimedEventLayoutItem item, out Rect bounds)
     {
+        var height = DragGcalEventId is not null &&
+            string.Equals(item.GcalEventId, DragGcalEventId, StringComparison.Ordinal) &&
+            DragHeight > 0
+            ? DragHeight
+            : item.Height;
+
         if (!double.IsFinite(item.Left) ||
             !double.IsFinite(item.Top) ||
             !double.IsFinite(item.Width) ||
-            !double.IsFinite(item.Height) ||
+            !double.IsFinite(height) ||
             item.Width <= 0 ||
-            item.Height <= 0)
+            height <= 0)
         {
             bounds = Rect.Empty;
             return false;
         }
 
-        bounds = new Rect(item.Left, item.Top, item.Width, item.Height);
+        bounds = new Rect(item.Left, item.Top, item.Width, height);
         return true;
     }
 

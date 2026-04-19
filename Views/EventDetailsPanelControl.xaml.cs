@@ -23,6 +23,9 @@ public sealed partial class EventDetailsPanelControl : UserControl
     private TextBlock? _saveStatusTextBlock;
     private TextBox? _editTitleTextBox;
     private TextBlock? _titleErrorTextBlock;
+    private StackPanel? _editSingleDatePanel;
+    private DatePicker? _editSingleDatePicker;
+    private Grid? _editDateGrid;
     private DatePicker? _editStartDatePicker;
     private TimePicker? _editStartTimePicker;
     private DatePicker? _editEndDatePicker;
@@ -32,7 +35,9 @@ public sealed partial class EventDetailsPanelControl : UserControl
     private Border? _editColorSwatch;
     private TextBlock? _editColorTextBlock;
     private TextBlock? _editSourceTextBlock;
-    private TextBlock? _editLastSyncedTextBlock;
+    private TextBlock? _editLastSavedTextBlock;
+    private Button? _editSaveButton;
+    private Button? _editRevertButton;
 
     public EventDetailsPanelControl(EventDetailsPanelViewModel viewModel)
     {
@@ -81,6 +86,8 @@ public sealed partial class EventDetailsPanelControl : UserControl
         }
 
         if (_editPanel is not null && e.PropertyName is nameof(EventDetailsPanelViewModel.EditTitle)
+            or nameof(EventDetailsPanelViewModel.EditSingleDate)
+            or nameof(EventDetailsPanelViewModel.UsesSingleDateEditor)
             or nameof(EventDetailsPanelViewModel.EditStartDate)
             or nameof(EventDetailsPanelViewModel.EditStartTime)
             or nameof(EventDetailsPanelViewModel.EditEndDate)
@@ -89,8 +96,9 @@ public sealed partial class EventDetailsPanelControl : UserControl
             or nameof(EventDetailsPanelViewModel.TitleError)
             or nameof(EventDetailsPanelViewModel.DateTimeError)
             or nameof(EventDetailsPanelViewModel.SaveStatusText)
+            or nameof(EventDetailsPanelViewModel.RevertButtonVisibility)
             or nameof(EventDetailsPanelViewModel.SourceDisplay)
-            or nameof(EventDetailsPanelViewModel.LastSyncedDisplay))
+            or nameof(EventDetailsPanelViewModel.LastSavedLocallyDisplay))
         {
             SyncEditPanelFromViewModel();
         }
@@ -131,12 +139,35 @@ public sealed partial class EventDetailsPanelControl : UserControl
         _editTitleTextBox = new TextBox();
         _editTitleTextBox.TextChanged += EditTitleTextBox_TextChanged;
         _titleErrorTextBlock = CreateErrorTextBlock();
+        _editSingleDatePicker = new DatePicker();
+        _editSingleDatePicker.DateChanged += EditSingleDatePicker_DateChanged;
+        _editSingleDatePanel = new StackPanel
+        {
+            Spacing = 8,
+            Children =
+            {
+                CreateFieldLabelTextBlock("Date"),
+                _editSingleDatePicker
+            }
+        };
+
         _editStartDatePicker = new DatePicker { Header = "Start date" };
         _editStartDatePicker.DateChanged += EditStartDatePicker_DateChanged;
-        _editStartTimePicker = new TimePicker { Header = "Start time", MinuteIncrement = 15 };
-        _editStartTimePicker.TimeChanged += EditStartTimePicker_TimeChanged;
         _editEndDatePicker = new DatePicker { Header = "End date" };
         _editEndDatePicker.DateChanged += EditEndDatePicker_DateChanged;
+        _editDateGrid = new Grid
+        {
+            RowSpacing = 8
+        };
+        _editDateGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _editDateGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetRow(_editStartDatePicker, 0);
+        Grid.SetRow(_editEndDatePicker, 1);
+        _editDateGrid.Children.Add(_editStartDatePicker);
+        _editDateGrid.Children.Add(_editEndDatePicker);
+
+        _editStartTimePicker = new TimePicker { Header = "Start time", MinuteIncrement = 15 };
+        _editStartTimePicker.TimeChanged += EditStartTimePicker_TimeChanged;
         _editEndTimePicker = new TimePicker { Header = "End time", MinuteIncrement = 15 };
         _editEndTimePicker.TimeChanged += EditEndTimePicker_TimeChanged;
         _dateTimeErrorTextBlock = CreateErrorTextBlock();
@@ -153,26 +184,34 @@ public sealed partial class EventDetailsPanelControl : UserControl
         _editColorTextBlock = new TextBlock();
         ToolTipService.SetToolTip(_editColorTextBlock, "Coming soon");
         _editSourceTextBlock = new TextBlock();
-        _editLastSyncedTextBlock = new TextBlock();
+        _editLastSavedTextBlock = new TextBlock();
+        _editSaveButton = new Button
+        {
+            Content = "Save"
+        };
+        _editSaveButton.Click += EditSaveButton_Click;
+        _editRevertButton = new Button
+        {
+            Content = "Revert"
+        };
+        _editRevertButton.Click += EditRevertButton_Click;
 
-        var dateGrid = new Grid
+        var timeGrid = new Grid
         {
             ColumnSpacing = 12
         };
-        dateGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        dateGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        timeGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        timeGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var startStack = new StackPanel { Spacing = 8 };
-        startStack.Children.Add(_editStartDatePicker);
         startStack.Children.Add(_editStartTimePicker);
         Grid.SetColumn(startStack, 0);
-        dateGrid.Children.Add(startStack);
+        timeGrid.Children.Add(startStack);
 
         var endStack = new StackPanel { Spacing = 8 };
-        endStack.Children.Add(_editEndDatePicker);
         endStack.Children.Add(_editEndTimePicker);
         Grid.SetColumn(endStack, 1);
-        dateGrid.Children.Add(endStack);
+        timeGrid.Children.Add(endStack);
 
         var colorStack = new StackPanel
         {
@@ -185,22 +224,40 @@ public sealed partial class EventDetailsPanelControl : UserControl
             }
         };
 
+        var actionButtons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 8,
+            Children =
+            {
+                _editRevertButton,
+                _editSaveButton
+            }
+        };
+
         _editPanel = new StackPanel
         {
             Spacing = 10,
             Children =
             {
                 _saveStatusTextBlock,
-                new TextBlock { Text = "Title" },
+                CreateFieldLabelTextBlock("Title"),
                 _editTitleTextBox,
                 _titleErrorTextBlock,
-                dateGrid,
+                _editSingleDatePanel,
+                _editDateGrid,
+                timeGrid,
                 _dateTimeErrorTextBlock,
-                new TextBlock { Text = "Description" },
+                CreateFieldLabelTextBlock("Description"),
                 _editDescriptionTextBox,
+                CreateFieldLabelTextBlock("Color"),
                 colorStack,
+                CreateFieldLabelTextBlock("Source"),
                 _editSourceTextBlock,
-                _editLastSyncedTextBlock
+                CreateFieldLabelTextBlock("Last Saved Locally"),
+                _editLastSavedTextBlock,
+                actionButtons
             }
         };
 
@@ -216,10 +273,35 @@ public sealed partial class EventDetailsPanelControl : UserControl
         };
     }
 
+    private static TextBlock CreateFieldLabelTextBlock(string text)
+    {
+        var label = new TextBlock
+        {
+            Text = text
+        };
+
+        if (Application.Current.Resources.TryGetValue("TextFillColorSecondaryBrush", out var brush) &&
+            brush is Brush secondaryBrush)
+        {
+            label.Foreground = secondaryBrush;
+        }
+
+        if (Application.Current.Resources.TryGetValue("CaptionTextBlockStyle", out var style) &&
+            style is Style textStyle)
+        {
+            label.Style = textStyle;
+        }
+
+        return label;
+    }
+
     private void SyncEditPanelFromViewModel()
     {
         if (_editPanel is null ||
             _editTitleTextBox is null ||
+            _editSingleDatePicker is null ||
+            _editSingleDatePanel is null ||
+            _editDateGrid is null ||
             _editStartDatePicker is null ||
             _editStartTimePicker is null ||
             _editEndDatePicker is null ||
@@ -230,13 +312,15 @@ public sealed partial class EventDetailsPanelControl : UserControl
             _dateTimeErrorTextBlock is null ||
             _editColorTextBlock is null ||
             _editSourceTextBlock is null ||
-            _editLastSyncedTextBlock is null)
+            _editLastSavedTextBlock is null ||
+            _editRevertButton is null)
         {
             return;
         }
 
         _isSyncingEditors = true;
         _editTitleTextBox.Text = ViewModel.EditTitle;
+        _editSingleDatePicker.Date = ToDateTimeOffset(ViewModel.EditSingleDate);
         _editStartDatePicker.Date = ToDateTimeOffset(ViewModel.EditStartDate);
         _editStartTimePicker.Time = ViewModel.EditStartTime.ToTimeSpan();
         _editEndDatePicker.Date = ToDateTimeOffset(ViewModel.EditEndDate);
@@ -245,9 +329,12 @@ public sealed partial class EventDetailsPanelControl : UserControl
         _saveStatusTextBlock.Text = ViewModel.SaveStatusText;
         _titleErrorTextBlock.Text = ViewModel.TitleError;
         _dateTimeErrorTextBlock.Text = ViewModel.DateTimeError;
-        _editColorTextBlock.Text = ViewModel.ColorPlaceholderText;
+        _editColorTextBlock.Text = ViewModel.ColorName;
         _editSourceTextBlock.Text = ViewModel.SourceDisplay;
-        _editLastSyncedTextBlock.Text = ViewModel.LastSyncedDisplay;
+        _editLastSavedTextBlock.Text = ViewModel.LastSavedLocallyDisplay;
+        _editSingleDatePanel.Visibility = ViewModel.UsesSingleDateEditor ? Visibility.Visible : Visibility.Collapsed;
+        _editDateGrid.Visibility = ViewModel.UsesSingleDateEditor ? Visibility.Collapsed : Visibility.Visible;
+        _editRevertButton.Visibility = ViewModel.RevertButtonVisibility;
         UpdateColorSwatches();
         _isSyncingEditors = false;
     }
@@ -341,6 +428,14 @@ public sealed partial class EventDetailsPanelControl : UserControl
         }
     }
 
+    private void EditSingleDatePicker_DateChanged(object? sender, DatePickerValueChangedEventArgs args)
+    {
+        if (!_isSyncingEditors && sender is DatePicker datePicker)
+        {
+            ViewModel.EditSingleDate = DateOnly.FromDateTime(datePicker.Date.DateTime);
+        }
+    }
+
     private void EditStartDatePicker_DateChanged(object? sender, DatePickerValueChangedEventArgs args)
     {
         if (!_isSyncingEditors && sender is DatePicker datePicker)
@@ -379,6 +474,16 @@ public sealed partial class EventDetailsPanelControl : UserControl
         {
             ViewModel.EditDescription = _editDescriptionTextBox.Text;
         }
+    }
+
+    private async void EditSaveButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ViewModel.SaveAndExitEditModeAsync();
+    }
+
+    private async void EditRevertButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ViewModel.RevertPendingChangesAsync();
     }
 
     private void UpdateColorSwatches()

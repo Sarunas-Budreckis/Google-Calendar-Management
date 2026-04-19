@@ -68,6 +68,7 @@ namespace GoogleCalendarManagement
             if (appWindow is not null)
             {
                 appWindow.Resize(new Windows.Graphics.SizeInt32 { Width = 1024, Height = 768 });
+                appWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "GCalAppIcon.ico"));
             }
 
             // Set window content

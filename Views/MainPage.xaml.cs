@@ -145,6 +145,11 @@ public sealed partial class MainPage : Page
 
     private async void MainPage_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (ShouldSuppressShellHotkeys())
+        {
+            return;
+        }
+
         if (e.Key is VirtualKey.Left or VirtualKey.Right && ShouldSuppressShellArrowNavigation())
         {
             return;
@@ -694,13 +699,28 @@ public sealed partial class MainPage : Page
         return IsEditableControlFocused(focusedElement);
     }
 
+    private bool ShouldSuppressShellHotkeys()
+    {
+        if (JumpToDatePicker.IsCalendarOpen ||
+            GetSyncFlyout().IsOpen)
+        {
+            return true;
+        }
+
+        var focusedElement = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+        return IsEditableControlFocused(focusedElement);
+    }
+
     private static bool IsEditableControlFocused(DependencyObject? focusedElement)
     {
         return FindAncestorOrSelf<TextBox>(focusedElement) is not null ||
                FindAncestorOrSelf<RichEditBox>(focusedElement) is not null ||
                FindAncestorOrSelf<PasswordBox>(focusedElement) is not null ||
                FindAncestorOrSelf<AutoSuggestBox>(focusedElement) is not null ||
-               FindAncestorOrSelf<NumberBox>(focusedElement) is not null;
+               FindAncestorOrSelf<NumberBox>(focusedElement) is not null ||
+               FindAncestorOrSelf<DatePicker>(focusedElement) is not null ||
+               FindAncestorOrSelf<TimePicker>(focusedElement) is not null ||
+               FindAncestorOrSelf<CalendarDatePicker>(focusedElement) is not null;
     }
 
     private static T? FindAncestorOrSelf<T>(DependencyObject? current)

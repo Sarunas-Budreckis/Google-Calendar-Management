@@ -124,7 +124,8 @@ public sealed class CalendarQueryService : ICalendarQueryService
             effectiveDescription,
             gcalEvent.LastSyncedAt,
             isPending,
-            isPending ? 0.6 : 1.0);
+            isPending ? 0.6 : 1.0,
+            pendingEvent?.UpdatedAt);
     }
 
     private static bool OverlapsRange(CalendarEventDisplayModel item, DateOnly from, DateOnly to)

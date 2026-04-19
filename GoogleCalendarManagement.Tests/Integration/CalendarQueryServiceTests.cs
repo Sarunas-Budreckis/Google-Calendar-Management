@@ -163,6 +163,7 @@ public sealed class CalendarQueryServiceTests : IDisposable
         events[0].ColorName.Should().Be("Flamingo");
         events[0].IsPending.Should().BeTrue();
         events[0].Opacity.Should().Be(0.6);
+        events[0].PendingUpdatedAt.Should().Be(new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc));
     }
 
     public void Dispose()

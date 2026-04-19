@@ -471,6 +471,12 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        if (message.PreviewEvent is not null)
+        {
+            ApplyAffectedEventUpdate(message.GcalEventId, message.PreviewEvent);
+            return;
+        }
+
         _ = RefreshAffectedEventAsync(message.GcalEventId);
     }
 
@@ -623,39 +629,7 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             var refreshedEvent = await _calendarQueryService.GetEventByGcalIdAsync(gcalEventId);
-            var updatedEvents = CurrentEvents.ToList();
-            var existingIndex = updatedEvents.FindIndex(
-                item => string.Equals(item.GcalEventId, gcalEventId, StringComparison.Ordinal));
-            var (from, to) = GetVisibleDateRange();
-            var isVisibleInCurrentRange = refreshedEvent is not null && OverlapsVisibleRange(refreshedEvent, from, to);
-
-            if (existingIndex >= 0)
-            {
-                if (isVisibleInCurrentRange)
-                {
-                    updatedEvents[existingIndex] = refreshedEvent!;
-                }
-                else
-                {
-                    updatedEvents.RemoveAt(existingIndex);
-                }
-            }
-            else if (isVisibleInCurrentRange)
-            {
-                updatedEvents.Add(refreshedEvent!);
-            }
-            else
-            {
-                return;
-            }
-
-            CurrentEvents = updatedEvents
-                .OrderBy(item => item.StartLocal)
-                .ThenBy(item => item.EndLocal)
-                .ThenBy(item => item.Title, StringComparer.CurrentCulture)
-                .ToList();
-
-            InvalidateYearViewCache();
+            ApplyAffectedEventUpdate(gcalEventId, refreshedEvent);
         }
         catch (OperationCanceledException)
         {
@@ -665,6 +639,43 @@ public sealed class MainViewModel : ObservableObject
         {
             _logger.LogError(ex, "Unable to refresh calendar event {GcalEventId} after a local edit.", gcalEventId);
         }
+    }
+
+    private void ApplyAffectedEventUpdate(string gcalEventId, CalendarEventDisplayModel? refreshedEvent)
+    {
+        var updatedEvents = CurrentEvents.ToList();
+        var existingIndex = updatedEvents.FindIndex(
+            item => string.Equals(item.GcalEventId, gcalEventId, StringComparison.Ordinal));
+        var (from, to) = GetVisibleDateRange();
+        var isVisibleInCurrentRange = refreshedEvent is not null && OverlapsVisibleRange(refreshedEvent, from, to);
+
+        if (existingIndex >= 0)
+        {
+            if (isVisibleInCurrentRange)
+            {
+                updatedEvents[existingIndex] = refreshedEvent!;
+            }
+            else
+            {
+                updatedEvents.RemoveAt(existingIndex);
+            }
+        }
+        else if (isVisibleInCurrentRange)
+        {
+            updatedEvents.Add(refreshedEvent!);
+        }
+        else
+        {
+            return;
+        }
+
+        CurrentEvents = updatedEvents
+            .OrderBy(item => item.StartLocal)
+            .ThenBy(item => item.EndLocal)
+            .ThenBy(item => item.Title, StringComparer.CurrentCulture)
+            .ToList();
+
+        InvalidateYearViewCache();
     }
 
     private async Task<YearViewCacheEntry> GetYearViewDataAsync(int year, CancellationToken ct)

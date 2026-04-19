@@ -6,11 +6,13 @@ using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using Windows.Foundation;
 using Windows.UI;
 
 namespace GoogleCalendarManagement.Views;
@@ -22,6 +24,7 @@ public sealed partial class DayViewControl : Page
     private const double RowHeight = 72.0;
     private const double EventBottomGap = 3.0;
     private const double MinimumEventHeight = 15.0;
+    private const double ResizeBoundaryThickness = 5.0;
     private const double StandardTopPadding = 6.0;
     private const double ShortEventContentHeightEstimate = 16.0;
     private const double TimeColumnWidth = 72.0;
@@ -31,19 +34,24 @@ public sealed partial class DayViewControl : Page
     private static readonly Brush TodayTextBrush = new SolidColorBrush(Colors.White);
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
     private static readonly Brush CurrentTimeIndicatorBrush = new SolidColorBrush(Colors.Red);
+    private static readonly InputSystemCursor ResizeVerticalCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeNorthSouth);
     private static readonly Color SyncedColor = Color.FromArgb(0xFF, 0x4C, 0xAF, 0x50);
     private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
+    private readonly EventDetailsPanelViewModel _eventDetailsViewModel;
     private readonly TimeProvider _timeProvider;
     private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
+    private readonly Dictionary<Border, TimedEventInteractionRegistration> _interactiveTimedEventBorders = new();
     private DispatcherTimer? _currentTimeTimer;
     private DateOnly _lastObservedToday;
+    private EventInteractionState? _activeInteraction;
 
     public DayViewControl()
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
         _selectionService = App.GetRequiredService<ICalendarSelectionService>();
+        _eventDetailsViewModel = App.GetRequiredService<EventDetailsPanelViewModel>();
         _timeProvider = App.GetRequiredService<TimeProvider>();
         InitializeComponent();
         AllDayPanel.Background = TransparentPanelBrush;
@@ -60,6 +68,7 @@ public sealed partial class DayViewControl : Page
     private void DayViewControl_Loaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        _eventDetailsViewModel.PropertyChanged += EventDetailsViewModel_PropertyChanged;
         WeakReferenceMessenger.Default.Register<DayViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
         WeakReferenceMessenger.Default.Register<DayViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
         _lastObservedToday = GetLocalToday();
@@ -70,9 +79,12 @@ public sealed partial class DayViewControl : Page
     private void DayViewControl_Unloaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        _eventDetailsViewModel.PropertyChanged -= EventDetailsViewModel_PropertyChanged;
         StopCurrentTimeTimer();
         WeakReferenceMessenger.Default.UnregisterAll(this);
         _eventBorders.Clear();
+        _interactiveTimedEventBorders.Clear();
+        _activeInteraction = null;
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -85,6 +97,14 @@ public sealed partial class DayViewControl : Page
         }
     }
 
+    private void EventDetailsViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(EventDetailsPanelViewModel.IsEditMode))
+        {
+            RefreshInteractiveTimedEventBlocks();
+        }
+    }
+
     private void Rebuild()
     {
         AllDayPanel.Children.Clear();
@@ -93,6 +113,8 @@ public sealed partial class DayViewControl : Page
         DayGrid.ColumnDefinitions.Clear();
         CurrentTimeOverlayCanvas.Children.Clear();
         _eventBorders.Clear();
+        _interactiveTimedEventBorders.Clear();
+        _activeInteraction = null;
 
         DayGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
         DayGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -276,6 +298,7 @@ public sealed partial class DayViewControl : Page
             };
 
             RegisterEventBorder(item.GcalEventId, eventBlock);
+            RegisterInteractiveTimedEventBorder(eventBlock, item.GcalEventId);
 
             var startRow = segment.VisibleStart.Hour;
             // Span = number of hour-rows the event occupies, accounting for start-minute offset.
@@ -299,7 +322,11 @@ public sealed partial class DayViewControl : Page
 
     private void OnEventSelected(EventSelectedMessage message)
     {
-        _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.GcalEventId));
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            ApplySelectionVisualState(message.GcalEventId);
+            RefreshInteractiveTimedEventBlocks();
+        });
     }
 
     private void OnSyncCompleted()
@@ -467,6 +494,155 @@ public sealed partial class DayViewControl : Page
         registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness, border.Padding));
     }
 
+    private void RegisterInteractiveTimedEventBorder(Border border, string gcalEventId)
+    {
+        border.PointerPressed -= TimedEventBlock_PointerPressed;
+        border.PointerMoved -= TimedEventBlock_PointerMoved;
+        border.PointerReleased -= TimedEventBlock_PointerReleased;
+        border.PointerCaptureLost -= TimedEventBlock_PointerCaptureLost;
+        border.PointerExited -= TimedEventBlock_PointerExited;
+
+        _interactiveTimedEventBorders[border] = new TimedEventInteractionRegistration(
+            gcalEventId,
+            border.Margin,
+            border.Height);
+
+        border.PointerPressed += TimedEventBlock_PointerPressed;
+        border.PointerMoved += TimedEventBlock_PointerMoved;
+        border.PointerReleased += TimedEventBlock_PointerReleased;
+        border.PointerCaptureLost += TimedEventBlock_PointerCaptureLost;
+        border.PointerExited += TimedEventBlock_PointerExited;
+
+        RefreshInteractiveTimedEventBorder(border);
+    }
+
+    private void RefreshInteractiveTimedEventBlocks()
+    {
+        foreach (var border in _interactiveTimedEventBorders.Keys.ToList())
+        {
+            RefreshInteractiveTimedEventBorder(border);
+        }
+    }
+
+    private void RefreshInteractiveTimedEventBorder(Border border)
+    {
+        if (!_interactiveTimedEventBorders.TryGetValue(border, out var registration))
+        {
+            return;
+        }
+
+        var isInteractive = _eventDetailsViewModel.IsEditingSelectedTimedEvent(registration.GcalEventId);
+        ProtectedCursor = null;
+
+        if (!isInteractive &&
+            (_activeInteraction is null || !ReferenceEquals(_activeInteraction.Border, border)))
+        {
+            ResetInteractivePreview(border, registration);
+        }
+    }
+
+    private void TimedEventBlock_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Border border ||
+            !_interactiveTimedEventBorders.TryGetValue(border, out var registration) ||
+            !_eventDetailsViewModel.TryGetEditableTimedRange(registration.GcalEventId, out var startLocal, out var endLocal))
+        {
+            return;
+        }
+
+        var mode = IsPointerNearResizeBoundary(e.GetCurrentPoint(border).Position, border)
+            ? EventInteractionMode.Resize
+            : EventInteractionMode.Move;
+
+        var transform = border.RenderTransform as TranslateTransform ?? new TranslateTransform();
+        border.RenderTransform = transform;
+        border.CapturePointer(e.Pointer);
+        _activeInteraction = new EventInteractionState(
+            border,
+            registration.GcalEventId,
+            mode,
+            e.Pointer.PointerId,
+            e.GetCurrentPoint(DayTimelineSurface).Position,
+            startLocal,
+            endLocal,
+            registration.BaseHeight,
+            transform);
+        e.Handled = true;
+    }
+
+    private void TimedEventBlock_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Border border ||
+            _activeInteraction is null ||
+            !ReferenceEquals(_activeInteraction.Border, border) ||
+            _activeInteraction.PointerId != e.Pointer.PointerId ||
+            !_interactiveTimedEventBorders.TryGetValue(border, out var registration))
+        {
+            if (sender is Border hoverBorder &&
+                _interactiveTimedEventBorders.TryGetValue(hoverBorder, out var hoverRegistration) &&
+                _eventDetailsViewModel.IsEditingSelectedTimedEvent(hoverRegistration.GcalEventId))
+            {
+                ProtectedCursor = IsPointerNearResizeBoundary(e.GetCurrentPoint(hoverBorder).Position, hoverBorder)
+                    ? ResizeVerticalCursor
+                    : null;
+            }
+
+            return;
+        }
+
+        ApplyInteractivePreview(_activeInteraction, registration, e.GetCurrentPoint(DayTimelineSurface).Position);
+        ProtectedCursor = _activeInteraction.Mode == EventInteractionMode.Resize ? ResizeVerticalCursor : null;
+        e.Handled = true;
+    }
+
+    private void TimedEventBlock_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Border border ||
+            _activeInteraction is null ||
+            !ReferenceEquals(_activeInteraction.Border, border) ||
+            _activeInteraction.PointerId != e.Pointer.PointerId ||
+            !_interactiveTimedEventBorders.TryGetValue(border, out var registration))
+        {
+            return;
+        }
+
+        var preview = GetPreviewRange(_activeInteraction, e.GetCurrentPoint(DayTimelineSurface).Position);
+        if (_activeInteraction.Mode == EventInteractionMode.Move)
+        {
+            _eventDetailsViewModel.ApplyDraggedTimeRange(_activeInteraction.GcalEventId, preview.StartLocal, preview.EndLocal);
+        }
+        else
+        {
+            _eventDetailsViewModel.ApplyResizedEndTime(_activeInteraction.GcalEventId, preview.EndLocal);
+        }
+
+        border.ReleasePointerCaptures();
+        _activeInteraction = null;
+        e.Handled = true;
+    }
+
+    private void TimedEventBlock_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Border border ||
+            _activeInteraction is null ||
+            !ReferenceEquals(_activeInteraction.Border, border) ||
+            !_interactiveTimedEventBorders.TryGetValue(border, out var registration))
+        {
+            return;
+        }
+
+        ResetInteractivePreview(border, registration);
+        _activeInteraction = null;
+    }
+
+    private void TimedEventBlock_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Border border && (_activeInteraction is null || !ReferenceEquals(_activeInteraction.Border, border)))
+        {
+            ProtectedCursor = null;
+        }
+    }
+
     private static string BuildTooltipText(CalendarEventDisplayModel item, CultureInfo culture)
     {
         return item.IsAllDay
@@ -521,6 +697,93 @@ public sealed partial class DayViewControl : Page
             Math.Max(0, padding.Bottom - (toThickness.Bottom - fromThickness.Bottom)));
     }
 
+    private static bool IsPointerNearResizeBoundary(Point point, Border border)
+    {
+        return point.Y >= Math.Max(0, border.ActualHeight - ResizeBoundaryThickness);
+    }
+
+    private void ApplyInteractivePreview(
+        EventInteractionState interaction,
+        TimedEventInteractionRegistration registration,
+        Point pointerPosition)
+    {
+        var preview = GetPreviewRange(interaction, pointerPosition);
+        if (interaction.Mode == EventInteractionMode.Move)
+        {
+            interaction.Transform.Y = MinutesToPixels(preview.MinuteDelta);
+            interaction.Border.Height = registration.BaseHeight;
+        }
+        else
+        {
+            interaction.Transform.Y = 0;
+            interaction.Border.Height = Math.Max(
+                MinimumEventHeight,
+                registration.BaseHeight + MinutesToPixels(preview.MinuteDelta));
+        }
+    }
+
+    private static PreviewRangeResult GetPreviewRange(EventInteractionState interaction, Point pointerPosition)
+    {
+        var minuteDelta = SnapMinutes((pointerPosition.Y - interaction.OriginPoint.Y) / RowHeight * 60.0);
+        if (interaction.Mode == EventInteractionMode.Move)
+        {
+            return new PreviewRangeResult(
+                interaction.OriginalStartLocal.AddMinutes(minuteDelta),
+                interaction.OriginalEndLocal.AddMinutes(minuteDelta),
+                minuteDelta);
+        }
+
+        var candidateEnd = RoundToNearestQuarterHour(interaction.OriginalEndLocal.AddMinutes(minuteDelta));
+        var minEnd = interaction.OriginalStartLocal.AddMinutes(15);
+        var maxEnd = interaction.OriginalStartLocal.Date.AddDays(1).AddHours(2);
+        var clampedEnd = candidateEnd < minEnd
+            ? minEnd
+            : candidateEnd > maxEnd
+                ? maxEnd
+                : candidateEnd;
+
+        return new PreviewRangeResult(
+            interaction.OriginalStartLocal,
+            clampedEnd,
+            (int)Math.Round((clampedEnd - interaction.OriginalEndLocal).TotalMinutes));
+    }
+
+    private static int SnapMinutes(double rawMinutes)
+    {
+        return (int)Math.Round(rawMinutes / 15.0) * 15;
+    }
+
+    private static DateTime RoundToNearestQuarterHour(DateTime value)
+    {
+        var totalMinutes = value.Hour * 60 + value.Minute + (value.Second / 60.0);
+        var snappedMinutes = (int)Math.Round(totalMinutes / 15.0) * 15;
+        var dayOffset = Math.DivRem(snappedMinutes, 24 * 60, out var minuteOfDay);
+        if (minuteOfDay < 0)
+        {
+            minuteOfDay += 24 * 60;
+            dayOffset--;
+        }
+
+        return value.Date.AddDays(dayOffset).AddMinutes(minuteOfDay);
+    }
+
+    private static double MinutesToPixels(int minutes)
+    {
+        return minutes / 60.0 * RowHeight;
+    }
+
+    private void ResetInteractivePreview(Border border, TimedEventInteractionRegistration registration)
+    {
+        if (border.RenderTransform is TranslateTransform transform)
+        {
+            transform.Y = 0;
+        }
+
+        ProtectedCursor = null;
+        border.Margin = registration.BaseMargin;
+        border.Height = registration.BaseHeight;
+    }
+
     private DateOnly GetLocalToday()
     {
         return DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
@@ -538,4 +801,28 @@ public sealed partial class DayViewControl : Page
         Brush? DefaultBorderBrush,
         Thickness DefaultBorderThickness,
         Thickness DefaultPadding);
+
+    private sealed record TimedEventInteractionRegistration(
+        string GcalEventId,
+        Thickness BaseMargin,
+        double BaseHeight);
+
+    private sealed record EventInteractionState(
+        Border Border,
+        string GcalEventId,
+        EventInteractionMode Mode,
+        uint PointerId,
+        Point OriginPoint,
+        DateTime OriginalStartLocal,
+        DateTime OriginalEndLocal,
+        double BaseHeight,
+        TranslateTransform Transform);
+
+    private sealed record PreviewRangeResult(DateTime StartLocal, DateTime EndLocal, int MinuteDelta);
+
+    private enum EventInteractionMode
+    {
+        Move,
+        Resize
+    }
 }

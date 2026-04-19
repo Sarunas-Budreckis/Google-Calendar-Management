@@ -53,4 +53,21 @@ public sealed class PendingEventRepository : IPendingEventRepository
 
         await context.SaveChangesAsync(ct);
     }
+
+    public async Task DeleteByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
+        var existing = await context.PendingEvents
+            .SingleOrDefaultAsync(
+                storedPendingEvent => storedPendingEvent.GcalEventId == gcalEventId,
+                ct);
+
+        if (existing is null)
+        {
+            return;
+        }
+
+        context.PendingEvents.Remove(existing);
+        await context.SaveChangesAsync(ct);
+    }
 }

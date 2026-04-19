@@ -86,6 +86,44 @@ public sealed class PendingEventRepositoryTests : IDisposable
         stored.UpdatedAt.Should().Be(updated.UpdatedAt);
     }
 
+    [Fact]
+    public async Task DeleteByGcalEventIdAsync_RemovesPendingEvent()
+    {
+        await using (var seedContext = await _contextFactory.CreateDbContextAsync())
+        {
+            seedContext.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "evt-2",
+                CalendarId = "primary",
+                Summary = "Original",
+                StartDatetime = new DateTime(2026, 04, 04, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 04, 04, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "1",
+                CreatedAt = new DateTime(2026, 04, 04, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 04, 04, 8, 0, 0, DateTimeKind.Utc)
+            });
+            seedContext.PendingEvents.Add(new PendingEvent
+            {
+                Id = Guid.NewGuid(),
+                GcalEventId = "evt-2",
+                Summary = "Draft",
+                StartDatetime = new DateTime(2026, 04, 04, 11, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 04, 04, 12, 0, 0, DateTimeKind.Utc),
+                ColorId = "1",
+                CreatedAt = new DateTime(2026, 04, 04, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 04, 04, 8, 30, 0, DateTimeKind.Utc)
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        var repository = new PendingEventRepository(_contextFactory);
+
+        await repository.DeleteByGcalEventIdAsync("evt-2");
+
+        var stored = await repository.GetByGcalEventIdAsync("evt-2");
+        stored.Should().BeNull();
+    }
+
     public void Dispose()
     {
         _connection.Dispose();

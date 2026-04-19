@@ -17,11 +17,14 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private const string TitleRequiredMessage = "Title is required";
     private const string EndBeforeStartMessage = "End time must be after start time";
     private const string DefaultSourceDisplay = "From Google Calendar";
-    private const string PendingSourceDisplay = "Pending local edit";
+    private const string PendingSourceDisplay = "Local changes, pending push to GCal";
     private const string NoDescriptionPlaceholder = "No description provided.";
     private const string UndoFieldEditTitle = nameof(EditTitle);
+    private const string UndoFieldEditSingleDate = nameof(EditSingleDate);
     private const string UndoFieldEditStartDate = nameof(EditStartDate);
     private const string UndoFieldEditStartTime = nameof(EditStartTime);
+    private const string UndoFieldEditDraggedRange = "DraggedTimeRange";
+    private const string UndoFieldEditResizedEnd = "ResizedEndTime";
     private const string UndoFieldEditEndDate = nameof(EditEndDate);
     private const string UndoFieldEditEndTime = nameof(EditEndTime);
     private const string UndoFieldEditDescription = nameof(EditDescription);
@@ -44,6 +47,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private string _descriptionDisplay = string.Empty;
     private string _sourceDisplay = DefaultSourceDisplay;
     private string _lastSyncedDisplay = string.Empty;
+    private string _lastSavedLocallyDisplay = "No local changes";
+    private bool _isPendingEvent;
     private bool _isEditMode;
     private string _editTitle = string.Empty;
     private DateOnly _editStartDate = DateOnly.FromDateTime(DateTime.Today);
@@ -76,6 +81,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         CloseCommand = new AsyncRelayCommand(ClosePanelAsync);
         EnterEditModeCommand = new RelayCommand(EnterEditMode);
+        SaveAndExitEditModeCommand = new AsyncRelayCommand(SaveAndExitEditModeAsync);
+        RevertPendingChangesCommand = new AsyncRelayCommand(RevertPendingChangesAsync);
 
         WeakReferenceMessenger.Default.Register<EventDetailsPanelViewModel, EventSelectedMessage>(
             this,
@@ -150,6 +157,27 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         private set => SetProperty(ref _lastSyncedDisplay, value);
     }
 
+    public string LastSavedLocallyDisplay
+    {
+        get => _lastSavedLocallyDisplay;
+        private set => SetProperty(ref _lastSavedLocallyDisplay, value);
+    }
+
+    public bool IsPendingEvent
+    {
+        get => _isPendingEvent;
+        private set
+        {
+            if (SetProperty(ref _isPendingEvent, value))
+            {
+                OnPropertyChanged(nameof(RevertButtonVisibility));
+            }
+        }
+    }
+
+    public Visibility RevertButtonVisibility =>
+        IsPendingEvent ? Visibility.Visible : Visibility.Collapsed;
+
     public bool IsEditMode
     {
         get => _isEditMode;
@@ -176,19 +204,31 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     public DateOnly EditStartDate
     {
         get => _editStartDate;
-        set => SetEditableProperty(ref _editStartDate, value, UndoFieldEditStartDate);
+        set
+        {
+            if (SetEditableProperty(ref _editStartDate, value, UndoFieldEditStartDate))
+            {
+                NotifyDateEditorShapeChanged();
+            }
+        }
     }
 
     public TimeOnly EditStartTime
     {
         get => _editStartTime;
-        set => SetEditableProperty(ref _editStartTime, value, UndoFieldEditStartTime);
+        set => SetEditStartTime(value);
     }
 
     public DateOnly EditEndDate
     {
         get => _editEndDate;
-        set => SetEditableProperty(ref _editEndDate, value, UndoFieldEditEndDate);
+        set
+        {
+            if (SetEditableProperty(ref _editEndDate, value, UndoFieldEditEndDate))
+            {
+                NotifyDateEditorShapeChanged();
+            }
+        }
     }
 
     public TimeOnly EditEndTime
@@ -202,6 +242,20 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         get => _editDescription;
         set => SetEditableProperty(ref _editDescription, value, UndoFieldEditDescription);
     }
+
+    public DateOnly EditSingleDate
+    {
+        get => _editStartDate;
+        set => SetEditSingleDate(value);
+    }
+
+    public bool UsesSingleDateEditor => EditStartDate == EditEndDate;
+
+    public bool CanInteractivelyAdjustSelectedTimedEvent =>
+        IsEditMode &&
+        _currentEvent is not null &&
+        !_currentEvent.IsAllDay &&
+        _currentGcalEventId is not null;
 
     public string TitleError
     {
@@ -255,6 +309,10 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     public IRelayCommand EnterEditModeCommand { get; }
 
+    public IAsyncRelayCommand SaveAndExitEditModeCommand { get; }
+
+    public IAsyncRelayCommand RevertPendingChangesCommand { get; }
+
     public void EnterEditMode()
     {
         if (!IsPanelVisible || _currentEvent is null)
@@ -303,15 +361,41 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             case UndoFieldEditTitle:
                 EditTitle = (string?)_undoState.PreviousValue ?? string.Empty;
                 break;
+            case UndoFieldEditSingleDate:
+                if (_undoState.PreviousValue is SingleDateUndoValue singleDate)
+                {
+                    EditStartDate = singleDate.StartDate;
+                    EditEndDate = singleDate.EndDate;
+                }
+                break;
             case UndoFieldEditStartDate:
                 EditStartDate = _undoState.PreviousValue is DateOnly startDate
                     ? startDate
                     : EditStartDate;
                 break;
             case UndoFieldEditStartTime:
-                EditStartTime = _undoState.PreviousValue is TimeOnly startTime
-                    ? startTime
-                    : EditStartTime;
+                if (_undoState.PreviousValue is StartTimeUndoValue startTime)
+                {
+                    EditStartTime = startTime.StartTime;
+                    EditEndDate = startTime.EndDate;
+                    EditEndTime = startTime.EndTime;
+                }
+                break;
+            case UndoFieldEditDraggedRange:
+                if (_undoState.PreviousValue is TimeRangeUndoValue draggedRange)
+                {
+                    EditStartDate = draggedRange.StartDate;
+                    EditStartTime = draggedRange.StartTime;
+                    EditEndDate = draggedRange.EndDate;
+                    EditEndTime = draggedRange.EndTime;
+                }
+                break;
+            case UndoFieldEditResizedEnd:
+                if (_undoState.PreviousValue is EndTimeUndoValue resizedEnd)
+                {
+                    EditEndDate = resizedEnd.EndDate;
+                    EditEndTime = resizedEnd.EndTime;
+                }
                 break;
             case UndoFieldEditEndDate:
                 EditEndDate = _undoState.PreviousValue is DateOnly endDate
@@ -343,18 +427,18 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         }
     }
 
-    public async Task SaveNowAsync(CancellationToken ct = default)
+    public async Task<bool> SaveNowAsync(bool keepEditMode = true, CancellationToken ct = default)
     {
         if (_isSaving || _currentGcalEventId is null)
         {
-            return;
+            return false;
         }
 
         StopDebounce();
         if (!ValidateFields())
         {
             SaveStatusText = string.Empty;
-            return;
+            return false;
         }
 
         _isSaving = true;
@@ -366,7 +450,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             if (gcalEvent is null)
             {
                 SaveStatusText = string.Empty;
-                return;
+                return false;
             }
 
             var pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(_currentGcalEventId, ct);
@@ -402,12 +486,17 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             var refreshedEvent = await _queryService.GetEventByGcalIdAsync(_currentGcalEventId, ct);
             if (refreshedEvent is not null)
             {
-                RunOnUiThread(() => ApplyEventDetails(refreshedEvent, _currentGcalEventId!, keepEditMode: true));
+                RunOnUiThread(() => ApplyEventDetails(refreshedEvent, _currentGcalEventId!, keepEditMode));
+            }
+            else if (!keepEditMode)
+            {
+                RunOnUiThread(() => IsEditMode = false);
             }
 
             _hasPendingLocalChanges = false;
             SaveStatusText = SavedStatusText;
             WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(_currentGcalEventId));
+            return true;
         }
         finally
         {
@@ -440,6 +529,104 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         _selectionService.ClearSelection();
         return true;
+    }
+
+    public async Task SaveAndExitEditModeAsync()
+    {
+        if (!IsEditMode)
+        {
+            return;
+        }
+
+        if (_hasPendingLocalChanges)
+        {
+            var saved = await SaveNowAsync(keepEditMode: false);
+            if (!saved)
+            {
+                return;
+            }
+        }
+        else
+        {
+            StopDebounce();
+            SaveStatusText = string.Empty;
+            IsEditMode = false;
+        }
+    }
+
+    public async Task RevertPendingChangesAsync()
+    {
+        if (_currentGcalEventId is null || !IsPendingEvent)
+        {
+            return;
+        }
+
+        StopDebounce();
+        await _pendingEventRepository.DeleteByGcalEventIdAsync(_currentGcalEventId);
+
+        var refreshedEvent = await _queryService.GetEventByGcalIdAsync(_currentGcalEventId);
+        if (refreshedEvent is not null)
+        {
+            RunOnUiThread(() => ApplyEventDetails(refreshedEvent, _currentGcalEventId!, keepEditMode: false));
+        }
+
+        SaveStatusText = string.Empty;
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(_currentGcalEventId));
+    }
+
+    public bool IsEditingSelectedTimedEvent(string? gcalEventId)
+    {
+        return CanInteractivelyAdjustSelectedTimedEvent &&
+            string.Equals(_currentGcalEventId, gcalEventId, StringComparison.Ordinal);
+    }
+
+    public bool TryGetEditableTimedRange(string? gcalEventId, out DateTime startLocal, out DateTime endLocal)
+    {
+        if (!IsEditingSelectedTimedEvent(gcalEventId))
+        {
+            startLocal = default;
+            endLocal = default;
+            return false;
+        }
+
+        (_, _, startLocal, endLocal) = BuildEditDateTimes();
+        return true;
+    }
+
+    public void ApplyDraggedTimeRange(string? gcalEventId, DateTime startLocal, DateTime endLocal)
+    {
+        if (!IsEditingSelectedTimedEvent(gcalEventId))
+        {
+            return;
+        }
+
+        var previousValue = new TimeRangeUndoValue(EditStartDate, EditStartTime, EditEndDate, EditEndTime);
+        ApplyTimeRangeInternal(startLocal, endLocal);
+        _undoState = new UndoState(UndoFieldEditDraggedRange, previousValue);
+        _hasPendingLocalChanges = true;
+        PublishOptimisticEventUpdate(startLocal, endLocal);
+        TriggerValidationAndSaveState();
+    }
+
+    public void ApplyResizedEndTime(string? gcalEventId, DateTime endLocal)
+    {
+        if (!IsEditingSelectedTimedEvent(gcalEventId))
+        {
+            return;
+        }
+
+        var previousValue = new EndTimeUndoValue(EditEndDate, EditEndTime);
+        _isInitializingEditFields = true;
+        EditEndDate = DateOnly.FromDateTime(endLocal);
+        EditEndTime = TimeOnly.FromDateTime(endLocal);
+        _isInitializingEditFields = false;
+        NotifyDateEditorShapeChanged();
+        _undoState = new UndoState(UndoFieldEditResizedEnd, previousValue);
+        _hasPendingLocalChanges = true;
+        PublishOptimisticEventUpdate(
+            EditStartDate.ToDateTime(EditStartTime),
+            endLocal);
+        TriggerValidationAndSaveState();
     }
 
     private void OnEventSelected(EventSelectedMessage message)
@@ -501,10 +688,14 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         DescriptionDisplay = string.IsNullOrEmpty(evt.Description)
             ? NoDescriptionPlaceholder
             : evt.Description;
+        IsPendingEvent = evt.IsPending;
         SourceDisplay = evt.IsPending ? PendingSourceDisplay : DefaultSourceDisplay;
         LastSyncedDisplay = evt.LastSyncedAt.HasValue
             ? evt.LastSyncedAt.Value.ToLocalTime().ToString("g")
             : "Never";
+        LastSavedLocallyDisplay = evt.PendingUpdatedAt.HasValue
+            ? evt.PendingUpdatedAt.Value.ToLocalTime().ToString("g")
+            : "No local changes";
         StartEndDisplay = BuildStartEndDisplay(evt.StartLocal, evt.EndLocal, evt.IsAllDay);
         IsPanelVisible = true;
 
@@ -541,8 +732,10 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         ColorHex = string.Empty;
         ColorName = string.Empty;
         DescriptionDisplay = string.Empty;
+        IsPendingEvent = false;
         SourceDisplay = DefaultSourceDisplay;
         LastSyncedDisplay = string.Empty;
+        LastSavedLocallyDisplay = "No local changes";
         ResetEditSession();
     }
 
@@ -558,6 +751,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         EditEndTime = TimeOnly.MinValue;
         EditDescription = string.Empty;
         _isInitializingEditFields = false;
+        NotifyDateEditorShapeChanged();
         TitleError = string.Empty;
         DateTimeError = string.Empty;
         SaveStatusText = string.Empty;
@@ -565,10 +759,36 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         _undoState = null;
     }
 
-    private void SetEditableProperty<T>(ref T storage, T value, string fieldName)
+    private bool SetEditableProperty<T>(ref T storage, T value, string fieldName)
     {
         var previousValue = storage;
         if (!SetProperty(ref storage, value))
+        {
+            return false;
+        }
+
+        if (_isInitializingEditFields || !IsEditMode)
+        {
+            return true;
+        }
+
+        HandleEditableChange(fieldName, previousValue);
+        return true;
+    }
+
+    private void SetEditStartTime(TimeOnly value)
+    {
+        if (_editStartTime == value)
+        {
+            return;
+        }
+
+        var previousStartTime = _editStartTime;
+        var previousEndDate = _editEndDate;
+        var previousEndTime = _editEndTime;
+        var originalDuration = TryGetCurrentDuration();
+
+        if (!SetProperty(ref _editStartTime, value))
         {
             return;
         }
@@ -578,9 +798,77 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             return;
         }
 
+        if (originalDuration.HasValue)
+        {
+            var shiftedEndLocal = DateTime.SpecifyKind(EditStartDate.ToDateTime(value), DateTimeKind.Local) + originalDuration.Value;
+
+            _isInitializingEditFields = true;
+            EditEndDate = DateOnly.FromDateTime(shiftedEndLocal);
+            EditEndTime = TimeOnly.FromDateTime(shiftedEndLocal);
+            _isInitializingEditFields = false;
+            NotifyDateEditorShapeChanged();
+        }
+
+        _undoState = new UndoState(
+            UndoFieldEditStartTime,
+            new StartTimeUndoValue(previousStartTime, previousEndDate, previousEndTime));
+        _hasPendingLocalChanges = true;
+        TriggerValidationAndSaveState();
+    }
+
+    private void SetEditSingleDate(DateOnly value)
+    {
+        if (EditStartDate == value && EditEndDate == value)
+        {
+            return;
+        }
+
+        var previousValue = new SingleDateUndoValue(EditStartDate, EditEndDate);
+
+        _isInitializingEditFields = true;
+        EditStartDate = value;
+        EditEndDate = value;
+        _isInitializingEditFields = false;
+        NotifyDateEditorShapeChanged();
+
+        if (!IsEditMode)
+        {
+            return;
+        }
+
+        _undoState = new UndoState(UndoFieldEditSingleDate, previousValue);
+        _hasPendingLocalChanges = true;
+        TriggerValidationAndSaveState();
+    }
+
+    private void ApplyTimeRangeInternal(DateTime startLocal, DateTime endLocal)
+    {
+        _isInitializingEditFields = true;
+        EditStartDate = DateOnly.FromDateTime(startLocal);
+        EditStartTime = TimeOnly.FromDateTime(startLocal);
+        EditEndDate = DateOnly.FromDateTime(endLocal);
+        EditEndTime = TimeOnly.FromDateTime(endLocal);
+        _isInitializingEditFields = false;
+        NotifyDateEditorShapeChanged();
+    }
+
+    private void HandleEditableChange<T>(string fieldName, T previousValue)
+    {
         TrackUndo(fieldName, previousValue);
         _hasPendingLocalChanges = true;
+        TriggerValidationAndSaveState();
+    }
 
+    private void TrackUndo<T>(string fieldName, T previousValue)
+    {
+        if (_undoState is null || !string.Equals(_undoState.FieldName, fieldName, StringComparison.Ordinal) || !_hasPendingLocalChanges)
+        {
+            _undoState = new UndoState(fieldName, previousValue);
+        }
+    }
+
+    private void TriggerValidationAndSaveState()
+    {
         if (ValidateFields())
         {
             StartDebounce();
@@ -589,14 +877,6 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         {
             SaveStatusText = string.Empty;
             StopDebounce();
-        }
-    }
-
-    private void TrackUndo<T>(string fieldName, T previousValue)
-    {
-        if (_undoState is null || !string.Equals(_undoState.FieldName, fieldName, StringComparison.Ordinal) || !_hasPendingLocalChanges)
-        {
-            _undoState = new UndoState(fieldName, previousValue);
         }
     }
 
@@ -647,6 +927,18 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         return (startLocal.ToUniversalTime(), endLocal.ToUniversalTime(), startLocal, endLocal);
     }
 
+    private TimeSpan? TryGetCurrentDuration()
+    {
+        var (_, _, startLocal, endLocal) = BuildEditDateTimes();
+        return endLocal > startLocal ? endLocal - startLocal : null;
+    }
+
+    private void NotifyDateEditorShapeChanged()
+    {
+        OnPropertyChanged(nameof(EditSingleDate));
+        OnPropertyChanged(nameof(UsesSingleDateEditor));
+    }
+
     private static string BuildStartEndDisplay(DateTime startLocal, DateTime endLocal, bool isAllDay)
     {
         if (isAllDay)
@@ -663,6 +955,35 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private static string? NormalizeDescription(string? description)
     {
         return string.IsNullOrWhiteSpace(description) ? null : description;
+    }
+
+    private void PublishOptimisticEventUpdate(DateTime startLocal, DateTime endLocal)
+    {
+        if (_currentEvent is null || _currentGcalEventId is null)
+        {
+            return;
+        }
+
+        var startLocalWithKind = DateTime.SpecifyKind(startLocal, DateTimeKind.Local);
+        var endLocalWithKind = DateTime.SpecifyKind(endLocal, DateTimeKind.Local);
+        var previewEvent = _currentEvent with
+        {
+            Title = string.IsNullOrWhiteSpace(EditTitle) ? _currentEvent.Title : EditTitle.Trim(),
+            StartLocal = startLocalWithKind,
+            EndLocal = endLocalWithKind,
+            StartUtc = startLocalWithKind.ToUniversalTime(),
+            EndUtc = endLocalWithKind.ToUniversalTime(),
+            Description = NormalizeDescription(EditDescription),
+            IsPending = true,
+            Opacity = 0.6,
+            PendingUpdatedAt = _currentEvent.PendingUpdatedAt ?? _timeProvider.GetUtcNow().UtcDateTime
+        };
+
+        _currentEvent = previewEvent;
+        IsPendingEvent = true;
+        SourceDisplay = PendingSourceDisplay;
+        StartEndDisplay = BuildStartEndDisplay(previewEvent.StartLocal, previewEvent.EndLocal, previewEvent.IsAllDay);
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(_currentGcalEventId, previewEvent));
     }
 
     private void RunOnUiThread(Action action)
@@ -684,4 +1005,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     }
 
     private sealed record UndoState(string FieldName, object? PreviousValue);
+    private sealed record StartTimeUndoValue(TimeOnly StartTime, DateOnly EndDate, TimeOnly EndTime);
+    private sealed record SingleDateUndoValue(DateOnly StartDate, DateOnly EndDate);
+    private sealed record TimeRangeUndoValue(DateOnly StartDate, TimeOnly StartTime, DateOnly EndDate, TimeOnly EndTime);
+    private sealed record EndTimeUndoValue(DateOnly EndDate, TimeOnly EndTime);
 }

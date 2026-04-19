@@ -142,13 +142,37 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task EditStartTime_ShiftsEndTimeBySameDuration()
+    {
+        var evt = MakeEvent("evt-1");
+        _queryServiceMock
+            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt);
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+
+        sut.EditStartTime = sut.EditStartTime.AddHours(2);
+
+        sut.EditEndTime.Should().Be(TimeOnly.FromDateTime(evt.EndLocal).AddHours(2));
+    }
+
+    [Fact]
     public async Task SaveNowAsync_CreatesPendingEventAndPublishesUpdateMessage()
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
             .SetupSequence(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt)
-            .ReturnsAsync(evt with { Title = "Edited title", IsPending = true, Opacity = 0.6 });
+            .ReturnsAsync(evt with
+            {
+                Title = "Edited title",
+                IsPending = true,
+                Opacity = 0.6,
+                PendingUpdatedAt = UtcBase.AddMinutes(30)
+            });
         _pendingEventRepositoryMock
             .Setup(repo => repo.GetByGcalEventIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync((PendingEvent?)null);
@@ -174,6 +198,8 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         _lastPublishedMessage.Should().NotBeNull();
         _lastPublishedMessage!.GcalEventId.Should().Be("evt-1");
         sut.SaveStatusText.Should().Be("Saved");
+        sut.SourceDisplay.Should().Be("Local changes, pending push to GCal");
+        sut.LastSavedLocallyDisplay.Should().NotBe("No local changes");
     }
 
     [Fact]
@@ -202,6 +228,114 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         _selectionServiceMock.Verify(service => service.ClearSelection(), Times.Once);
     }
 
+    [Fact]
+    public async Task SaveAndExitEditModeAsync_SavesAndReturnsToViewMode()
+    {
+        var evt = MakeEvent("evt-1");
+        _queryServiceMock
+            .SetupSequence(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt)
+            .ReturnsAsync(evt with
+            {
+                Title = "Edited title",
+                IsPending = true,
+                Opacity = 0.6,
+                PendingUpdatedAt = UtcBase.AddMinutes(30)
+            });
+        _pendingEventRepositoryMock
+            .Setup(repo => repo.GetByGcalEventIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PendingEvent?)null);
+
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+        sut.EditTitle = "Edited title";
+
+        await sut.SaveAndExitEditModeAsync();
+
+        sut.IsEditMode.Should().BeFalse();
+        sut.Title.Should().Be("Edited title");
+        sut.IsPendingEvent.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RevertPendingChangesAsync_RemovesPendingEventAndReloadsOriginalEvent()
+    {
+        var pendingEvent = MakeEvent(
+            "evt-1",
+            title: "Pending title",
+            description: "Draft description",
+            isPending: true,
+            pendingUpdatedAt: UtcBase.AddMinutes(30));
+        var originalEvent = MakeEvent("evt-1", title: "Original title", description: "Original description");
+
+        _queryServiceMock
+            .SetupSequence(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(pendingEvent)
+            .ReturnsAsync(originalEvent);
+
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+
+        await sut.RevertPendingChangesAsync();
+
+        _pendingEventRepositoryMock.Verify(repo => repo.DeleteByGcalEventIdAsync("evt-1", It.IsAny<CancellationToken>()), Times.Once);
+        sut.Title.Should().Be("Original title");
+        sut.IsPendingEvent.Should().BeFalse();
+        sut.SourceDisplay.Should().Be("From Google Calendar");
+        sut.LastSavedLocallyDisplay.Should().Be("No local changes");
+    }
+
+    [Fact]
+    public async Task ApplyDraggedTimeRange_UpdatesStartAndEndTogether()
+    {
+        var evt = MakeEvent("evt-1");
+        _queryServiceMock
+            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt);
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+
+        var newStart = evt.StartLocal.AddMinutes(30);
+        var newEnd = evt.EndLocal.AddMinutes(30);
+
+        sut.ApplyDraggedTimeRange("evt-1", newStart, newEnd);
+
+        sut.EditStartDate.Should().Be(DateOnly.FromDateTime(newStart));
+        sut.EditStartTime.Should().Be(TimeOnly.FromDateTime(newStart));
+        sut.EditEndDate.Should().Be(DateOnly.FromDateTime(newEnd));
+        sut.EditEndTime.Should().Be(TimeOnly.FromDateTime(newEnd));
+    }
+
+    [Fact]
+    public async Task ApplyResizedEndTime_UpdatesOnlyEndFields()
+    {
+        var evt = MakeEvent("evt-1");
+        _queryServiceMock
+            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt);
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+
+        var newEnd = evt.EndLocal.AddMinutes(45);
+        sut.ApplyResizedEndTime("evt-1", newEnd);
+
+        sut.EditStartDate.Should().Be(DateOnly.FromDateTime(evt.StartLocal));
+        sut.EditStartTime.Should().Be(TimeOnly.FromDateTime(evt.StartLocal));
+        sut.EditEndDate.Should().Be(DateOnly.FromDateTime(newEnd));
+        sut.EditEndTime.Should().Be(TimeOnly.FromDateTime(newEnd));
+    }
+
     private void OnEventUpdated(EventUpdatedMessage message)
     {
         _lastPublishedMessage = message;
@@ -223,7 +357,9 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     private static CalendarEventDisplayModel MakeEvent(
         string id,
         string title = "Test Event",
-        string? description = "A test description")
+        string? description = "A test description",
+        bool isPending = false,
+        DateTime? pendingUpdatedAt = null)
     {
         var startUtc = UtcBase;
         var endUtc = UtcBase.AddHours(1);
@@ -239,7 +375,9 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
             ColorName: "Lavender",
             IsRecurringInstance: false,
             Description: description,
-            LastSyncedAt: null);
+            LastSyncedAt: null,
+            IsPending: isPending,
+            PendingUpdatedAt: pendingUpdatedAt);
     }
 
     private static async Task WaitUntilAsync(Func<bool> predicate, int timeoutMs = 500)

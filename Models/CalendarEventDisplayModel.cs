@@ -14,4 +14,5 @@ public sealed record CalendarEventDisplayModel(
     string? Description,
     DateTime? LastSyncedAt,
     bool IsPending = false,
-    double Opacity = 1.0);
+    double Opacity = 1.0,
+    DateTime? PendingUpdatedAt = null);

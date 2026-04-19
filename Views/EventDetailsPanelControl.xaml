@@ -93,7 +93,7 @@
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="When" />
+                        Text="Date" />
                     <TextBlock
                         Text="{x:Bind ViewModel.StartEndDisplay, Mode=OneWay}"
                         TextWrapping="Wrap" />
@@ -143,12 +143,24 @@
                     <TextBlock Text="{x:Bind ViewModel.LastSyncedDisplay, Mode=OneWay}" />
                 </StackPanel>
 
-                <Grid x:Name="EditButtonHost" Margin="0,8,0,0">
+                <Grid x:Name="EditButtonHost" Margin="0,8,0,0" HorizontalAlignment="Right" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
                     <Button
                         x:Name="EditButton"
+                        Grid.Column="0"
                         Command="{x:Bind ViewModel.EnterEditModeCommand}"
-                        Content="Edit"
-                        HorizontalAlignment="Stretch" />
+                        Content="Edit" />
+
+                    <Button
+                        x:Name="RevertButton"
+                        Grid.Column="1"
+                        Command="{x:Bind ViewModel.RevertPendingChangesCommand}"
+                        Content="Revert"
+                        Visibility="{x:Bind ViewModel.RevertButtonVisibility, Mode=OneWay}" />
                 </Grid>
 
                 <StackPanel x:Name="EditPanelHost" Visibility="Collapsed" />
