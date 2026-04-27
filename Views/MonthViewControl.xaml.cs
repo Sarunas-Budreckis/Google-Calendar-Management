@@ -31,9 +31,12 @@ public sealed partial class MonthViewControl : Page
     private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
+    private readonly EventDetailsPanelViewModel _eventDetailsViewModel;
     private readonly TimeProvider _timeProvider;
+    private readonly EventColorPickerFlyoutController _eventColorPicker;
     private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
     private readonly List<DispatcherQueueTimer> _tooltipTimers = [];
+    private ColorPickerTarget? _activeColorTarget;
     private DispatcherTimer? _todayRefreshTimer;
     private DateOnly _lastObservedToday;
 
@@ -41,7 +44,36 @@ public sealed partial class MonthViewControl : Page
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
         _selectionService = App.GetRequiredService<ICalendarSelectionService>();
+        _eventDetailsViewModel = App.GetRequiredService<EventDetailsPanelViewModel>();
         _timeProvider = App.GetRequiredService<TimeProvider>();
+        _eventColorPicker = new EventColorPickerFlyoutController(
+            _eventDetailsViewModel.AvailableColors,
+            () => _activeColorTarget?.ColorKey,
+            async colorKey =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
+                await _eventDetailsViewModel.ApplyColorToEventAsync(
+                    _activeColorTarget.EventId,
+                    _activeColorTarget.SourceKind,
+                    colorKey);
+                _activeColorTarget = _activeColorTarget with { ColorKey = colorKey };
+            },
+            () => new EventColorPickerMenuState(_activeColorTarget?.IsPending == true),
+            async () =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
+                await _eventDetailsViewModel.RevertPendingChangesForEventAsync(
+                    _activeColorTarget.EventId,
+                    _activeColorTarget.SourceKind);
+            });
         InitializeComponent();
         MonthGrid.Background = TransparentPanelBrush;
         MonthGrid.Tapped += MonthGrid_Tapped;
@@ -125,7 +157,7 @@ public sealed partial class MonthViewControl : Page
             MonthGrid.Children.Add(weekGrid);
         }
 
-        ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
+        ApplySelectionVisualState(_selectionService.SelectedEventId);
     }
 
     private Grid BuildWeekRowGrid(
@@ -330,7 +362,7 @@ public sealed partial class MonthViewControl : Page
             BorderThickness = new Thickness(0),
             Child = new TextBlock
             {
-                Text = item.Title,
+                Text = GetDisplayTitle(item),
                 Foreground = new SolidColorBrush(Colors.White),
                 FontSize = 12,
                 TextTrimming = TextTrimming.CharacterEllipsis,
@@ -341,11 +373,16 @@ public sealed partial class MonthViewControl : Page
         ToolTipService.SetToolTip(block, BuildTooltipText(item, culture));
         block.Tapped += (_, e) =>
         {
-            _selectionService.Select(item.GcalEventId);
+            _selectionService.Select(item.EventId, item.SourceKind);
+            e.Handled = true;
+        };
+        block.RightTapped += (_, e) =>
+        {
+            ShowEventColorPicker(block, item, e.GetPosition(block));
             e.Handled = true;
         };
 
-        RegisterEventBorder(item.GcalEventId, block);
+        RegisterEventBorder(item.EventId, block);
         return block;
     }
 
@@ -382,30 +419,30 @@ public sealed partial class MonthViewControl : Page
             return;
         }
 
-        if (border.Tag is string previousGcalEventId &&
-            !string.Equals(previousGcalEventId, item.GcalEventId, StringComparison.Ordinal))
+        if (border.Tag is string previousEventId &&
+            !string.Equals(previousEventId, item.EventId, StringComparison.Ordinal))
         {
-            UnregisterEventBorder(previousGcalEventId, border);
+            UnregisterEventBorder(previousEventId, border);
         }
 
         ConfigureTimedEventRow(border, item, CultureInfo.CurrentCulture);
-        RegisterEventBorder(item.GcalEventId, border);
+        RegisterEventBorder(item.EventId, border);
 
-        if (_selectionService.SelectedGcalEventId is string selectedGcalEventId &&
-            string.Equals(selectedGcalEventId, item.GcalEventId, StringComparison.Ordinal))
+        if (_selectionService.SelectedEventId is string selectedEventId &&
+            string.Equals(selectedEventId, item.EventId, StringComparison.Ordinal))
         {
-            ApplySelectionState(border, _eventBorders[item.GcalEventId].Last(), isSelected: true);
+            ApplySelectionState(border, _eventBorders[item.EventId].Last(), isSelected: true);
         }
     }
 
     private void MonthTimedEventsRepeater_ElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
     {
-        if (args.Element is not Border border || border.Tag is not string gcalEventId)
+        if (args.Element is not Border border || border.Tag is not string eventId)
         {
             return;
         }
 
-        UnregisterEventBorder(gcalEventId, border);
+        UnregisterEventBorder(eventId, border);
         ResetTimedEventRow(border);
     }
 
@@ -423,7 +460,7 @@ public sealed partial class MonthViewControl : Page
             return;
         }
 
-        border.Tag = item.GcalEventId;
+        border.Tag = item.EventId;
         border.Height = MonthViewLayoutMetrics.TimedRowHeight;
         border.Padding = new Thickness(4, 2, 4, 2);
         border.CornerRadius = ElementCornerRadius;
@@ -432,18 +469,29 @@ public sealed partial class MonthViewControl : Page
         border.BorderThickness = new Thickness(0);
         border.Tapped -= TimedEventRow_Tapped;
         border.Tapped += TimedEventRow_Tapped;
+        border.RightTapped -= TimedEventRow_RightTapped;
+        border.RightTapped += TimedEventRow_RightTapped;
         ToolTipService.SetToolTip(border, BuildTooltipText(item, culture));
 
         dot.Fill = ToBrush(item.ColorHex);
         timeTextBlock.Text = item.StartLocal.ToString("h:mm tt", culture);
-        titleTextBlock.Text = item.Title;
+        titleTextBlock.Text = GetDisplayTitle(item);
     }
 
     private void TimedEventRow_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        if (sender is Border { Tag: string gcalEventId })
+        if (sender is Border { Tag: string eventId } && sender is Border { DataContext: CalendarEventDisplayModel item })
         {
-            _selectionService.Select(gcalEventId);
+            _selectionService.Select(eventId, item.SourceKind);
+            e.Handled = true;
+        }
+    }
+
+    private void TimedEventRow_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (sender is Border border && border.DataContext is CalendarEventDisplayModel item)
+        {
+            ShowEventColorPicker(border, item, e.GetPosition(border));
             e.Handled = true;
         }
     }
@@ -456,6 +504,7 @@ public sealed partial class MonthViewControl : Page
         border.BorderThickness = new Thickness(0);
         border.Padding = new Thickness(0);
         border.Tapped -= TimedEventRow_Tapped;
+        border.RightTapped -= TimedEventRow_RightTapped;
         ToolTipService.SetToolTip(border, null);
 
         if (border.Child is not Grid layoutRoot || layoutRoot.Children.Count < 3)
@@ -566,7 +615,7 @@ public sealed partial class MonthViewControl : Page
             Background = ToBrush(item.ColorHex),
             Child = new TextBlock
             {
-                Text = item.Title,
+                Text = GetDisplayTitle(item),
                 Foreground = new SolidColorBrush(Colors.White),
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 MaxLines = 1
@@ -576,8 +625,13 @@ public sealed partial class MonthViewControl : Page
         AttachInstantTooltip(block, BuildTooltipText(item, culture));
         block.Tapped += (_, e) =>
         {
-            _selectionService.Select(item.GcalEventId);
+            _selectionService.Select(item.EventId, item.SourceKind);
             CloseMoreEventsPopup();
+            e.Handled = true;
+        };
+        block.RightTapped += (_, e) =>
+        {
+            ShowEventColorPicker(block, item, e.GetPosition(block));
             e.Handled = true;
         };
         return block;
@@ -618,7 +672,7 @@ public sealed partial class MonthViewControl : Page
 
         var titleText = new TextBlock
         {
-            Text = item.Title,
+            Text = GetDisplayTitle(item),
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxLines = 1,
             VerticalAlignment = VerticalAlignment.Center
@@ -631,11 +685,27 @@ public sealed partial class MonthViewControl : Page
         AttachInstantTooltip(row, BuildTooltipText(item, culture));
         row.Tapped += (_, e) =>
         {
-            _selectionService.Select(item.GcalEventId);
+            _selectionService.Select(item.EventId, item.SourceKind);
             CloseMoreEventsPopup();
             e.Handled = true;
         };
+        row.RightTapped += (_, e) =>
+        {
+            ShowEventColorPicker(row, item, e.GetPosition(row));
+            e.Handled = true;
+        };
         return row;
+    }
+
+    private void ShowEventColorPicker(FrameworkElement target, CalendarEventDisplayModel item)
+    {
+        ShowEventColorPicker(target, item, new Point(0, 0));
+    }
+
+    private void ShowEventColorPicker(FrameworkElement target, CalendarEventDisplayModel item, Point position)
+    {
+        _activeColorTarget = new ColorPickerTarget(item.EventId, item.SourceKind, item.ColorKey, item.IsPending);
+        _eventColorPicker.ShowAt(target, position);
     }
 
     private void CloseMoreEventsPopup()
@@ -763,7 +833,7 @@ public sealed partial class MonthViewControl : Page
 
     private void OnEventSelected(EventSelectedMessage message)
     {
-        _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.GcalEventId));
+        _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.EventId));
     }
 
     private void OnSyncCompleted()
@@ -771,12 +841,12 @@ public sealed partial class MonthViewControl : Page
         _ = DispatcherQueue.TryEnqueue(Rebuild);
     }
 
-    private void ApplySelectionVisualState(string? selectedGcalEventId)
+    private void ApplySelectionVisualState(string? selectedEventId)
     {
-        foreach (var (gcalEventId, registrations) in _eventBorders)
+        foreach (var (eventId, registrations) in _eventBorders)
         {
-            var isSelected = selectedGcalEventId is not null &&
-                string.Equals(gcalEventId, selectedGcalEventId, StringComparison.Ordinal);
+            var isSelected = selectedEventId is not null &&
+                string.Equals(eventId, selectedEventId, StringComparison.Ordinal);
 
             foreach (var registration in registrations)
             {
@@ -785,21 +855,21 @@ public sealed partial class MonthViewControl : Page
         }
     }
 
-    private void RegisterEventBorder(string gcalEventId, Border border)
+    private void RegisterEventBorder(string eventId, Border border)
     {
-        if (!_eventBorders.TryGetValue(gcalEventId, out var registrations))
+        if (!_eventBorders.TryGetValue(eventId, out var registrations))
         {
             registrations = [];
-            _eventBorders[gcalEventId] = registrations;
+            _eventBorders[eventId] = registrations;
         }
 
         registrations.RemoveAll(registration => ReferenceEquals(registration.Border, border));
         registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness, border.Padding));
     }
 
-    private void UnregisterEventBorder(string gcalEventId, Border border)
+    private void UnregisterEventBorder(string eventId, Border border)
     {
-        if (!_eventBorders.TryGetValue(gcalEventId, out var registrations))
+        if (!_eventBorders.TryGetValue(eventId, out var registrations))
         {
             return;
         }
@@ -807,7 +877,7 @@ public sealed partial class MonthViewControl : Page
         registrations.RemoveAll(registration => ReferenceEquals(registration.Border, border));
         if (registrations.Count == 0)
         {
-            _eventBorders.Remove(gcalEventId);
+            _eventBorders.Remove(eventId);
         }
     }
 
@@ -818,9 +888,21 @@ public sealed partial class MonthViewControl : Page
 
     private static string BuildTooltipText(CalendarEventDisplayModel item, CultureInfo culture)
     {
-        return item.IsAllDay
-            ? $"{item.Title}\nAll day"
-            : $"{item.Title}\n{item.StartLocal.ToString("g", culture)} - {item.EndLocal.ToString("g", culture)}";
+        var title = GetDisplayTitle(item);
+        var scheduleText = item.IsAllDay
+            ? $"{title}\nAll day"
+            : $"{title}\n{item.StartLocal.ToString("g", culture)} - {item.EndLocal.ToString("g", culture)}";
+
+        return string.IsNullOrWhiteSpace(item.StatusLabel)
+            ? scheduleText
+            : $"{scheduleText}\n{item.StatusLabel}";
+    }
+
+    private static string GetDisplayTitle(CalendarEventDisplayModel item)
+    {
+        return item.SourceKind == CalendarEventSourceKind.Pending
+            ? $"Draft: {item.Title}"
+            : item.Title;
     }
 
     private static SolidColorBrush ToBrush(string hex)
@@ -901,4 +983,6 @@ public sealed partial class MonthViewControl : Page
         Brush? DefaultBorderBrush,
         Thickness DefaultBorderThickness,
         Thickness DefaultPadding);
+
+    private sealed record ColorPickerTarget(string EventId, CalendarEventSourceKind SourceKind, string ColorKey, bool IsPending);
 }

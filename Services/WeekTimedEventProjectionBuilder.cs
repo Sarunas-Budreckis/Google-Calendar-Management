@@ -73,12 +73,13 @@ public static class WeekTimedEventProjectionBuilder
         {
             var centeredTopPadding = Math.Max(0, (eventHeight - ShortEventContentHeightEstimate) / 2);
             return new WeekTimedEventLayoutItem(
-                segment.Item.GcalEventId,
+                segment.Item.EventId,
                 segment.Item.Title,
                 $"{segment.Item.Title}, {displayStart.ToString("t", culture)}",
                 null,
                 BuildTooltipText(segment.Item, culture),
                 segment.Item.ColorHex,
+                segment.Item.SourceKind,
                 dayOffset,
                 gridRow,
                 Math.Max(1, Math.Min(gridRowSpan, 24 - gridRow)),
@@ -97,12 +98,13 @@ public static class WeekTimedEventProjectionBuilder
         var summaryLineCount = 1 + Math.Max(0, (durationInt - 60) / 30);
 
         return new WeekTimedEventLayoutItem(
-            segment.Item.GcalEventId,
+            segment.Item.EventId,
             segment.Item.Title,
             segment.Item.Title,
             $"{displayStart.ToString("t", culture)} - {displayEnd.ToString("t", culture)}",
             BuildTooltipText(segment.Item, culture),
             segment.Item.ColorHex,
+            segment.Item.SourceKind,
             dayOffset,
             gridRow,
             Math.Max(1, Math.Min(gridRowSpan, 24 - gridRow)),

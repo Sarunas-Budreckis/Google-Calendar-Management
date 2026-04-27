@@ -1,10 +1,14 @@
+using GoogleCalendarManagement.Models;
+
 namespace GoogleCalendarManagement.Services;
 
 public interface ICalendarSelectionService
 {
-    string? SelectedGcalEventId { get; }
+    string? SelectedEventId { get; }
 
-    void Select(string gcalEventId);
+    CalendarEventSourceKind? SelectedSourceKind { get; }
+
+    void Select(string eventId, CalendarEventSourceKind sourceKind, bool openInEditMode = false);
 
     void ClearSelection();
 }

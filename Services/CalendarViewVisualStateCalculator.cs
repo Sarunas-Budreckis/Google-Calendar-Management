@@ -61,7 +61,8 @@ public static class CalendarViewVisualStateCalculator
         }
 
         segment = new VisibleTimedEventSegment(
-            calendarEvent.GcalEventId,
+            calendarEvent.EventId,
+            calendarEvent.SourceKind,
             calendarEvent.Title,
             calendarEvent.ColorHex,
             calendarEvent.StartLocal,
@@ -73,7 +74,8 @@ public static class CalendarViewVisualStateCalculator
 }
 
 public readonly record struct VisibleTimedEventSegment(
-    string GcalEventId,
+    string EventId,
+    CalendarEventSourceKind SourceKind,
     string Title,
     string ColorHex,
     DateTime OriginalStart,

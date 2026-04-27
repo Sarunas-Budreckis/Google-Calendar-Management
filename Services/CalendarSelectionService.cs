@@ -1,36 +1,42 @@
 using CommunityToolkit.Mvvm.Messaging;
 using GoogleCalendarManagement.Messages;
+using GoogleCalendarManagement.Models;
 
 namespace GoogleCalendarManagement.Services;
 
 public sealed class CalendarSelectionService : ICalendarSelectionService
 {
-    public string? SelectedGcalEventId { get; private set; }
+    public string? SelectedEventId { get; private set; }
 
-    public void Select(string gcalEventId)
+    public CalendarEventSourceKind? SelectedSourceKind { get; private set; }
+
+    public void Select(string eventId, CalendarEventSourceKind sourceKind, bool openInEditMode = false)
     {
-        if (string.IsNullOrWhiteSpace(gcalEventId))
+        if (string.IsNullOrWhiteSpace(eventId))
         {
-            throw new ArgumentException("Event ID must be a non-empty, non-whitespace string.", nameof(gcalEventId));
+            throw new ArgumentException("Event ID must be a non-empty, non-whitespace string.", nameof(eventId));
         }
 
-        if (string.Equals(SelectedGcalEventId, gcalEventId, StringComparison.Ordinal))
+        if (string.Equals(SelectedEventId, eventId, StringComparison.Ordinal) &&
+            SelectedSourceKind == sourceKind)
         {
             return;
         }
 
-        SelectedGcalEventId = gcalEventId;
-        WeakReferenceMessenger.Default.Send(new EventSelectedMessage(gcalEventId));
+        SelectedEventId = eventId;
+        SelectedSourceKind = sourceKind;
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage(eventId, sourceKind, openInEditMode));
     }
 
     public void ClearSelection()
     {
-        if (SelectedGcalEventId is null)
+        if (SelectedEventId is null)
         {
             return;
         }
 
-        SelectedGcalEventId = null;
+        SelectedEventId = null;
+        SelectedSourceKind = null;
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage(null));
     }
 }

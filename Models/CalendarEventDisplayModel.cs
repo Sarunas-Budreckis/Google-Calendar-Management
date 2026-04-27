@@ -1,7 +1,8 @@
 namespace GoogleCalendarManagement.Models;
 
 public sealed record CalendarEventDisplayModel(
-    string GcalEventId,
+    string EventId,
+    CalendarEventSourceKind SourceKind,
     string Title,
     DateTime StartUtc,
     DateTime EndUtc,
@@ -15,4 +16,6 @@ public sealed record CalendarEventDisplayModel(
     DateTime? LastSyncedAt,
     bool IsPending = false,
     double Opacity = 1.0,
-    DateTime? PendingUpdatedAt = null);
+    DateTime? PendingUpdatedAt = null,
+    string StatusLabel = "",
+    string ColorKey = "azure");

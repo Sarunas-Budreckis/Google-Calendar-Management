@@ -24,6 +24,10 @@
             <Grid x:Name="DayTimelineSurface">
                 <Grid x:Name="DayGrid" Margin="12,0,20,12" />
                 <Canvas
+                    x:Name="CreationOverlayCanvas"
+                    Margin="12,0,20,12"
+                    IsHitTestVisible="False" />
+                <Canvas
                     x:Name="CurrentTimeOverlayCanvas"
                     Margin="12,0,20,12"
                     IsHitTestVisible="False" />

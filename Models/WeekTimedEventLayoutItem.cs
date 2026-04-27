@@ -1,12 +1,13 @@
 namespace GoogleCalendarManagement.Models;
 
 public sealed record WeekTimedEventLayoutItem(
-    string GcalEventId,
+    string EventId,
     string Title,
     string PrimaryText,
     string? SecondaryText,
     string TooltipText,
     string ColorHex,
+    CalendarEventSourceKind SourceKind,
     int DayOffset,
     int GridRow,
     int GridRowSpan,

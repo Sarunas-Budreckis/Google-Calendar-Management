@@ -30,6 +30,8 @@ public sealed partial class MainPage : Page
     private readonly Brush _selectorSelectedForeground;
     private readonly Brush _selectorUnselectedForeground;
     private readonly ICalendarSelectionService _selectionService;
+    private readonly IPendingEventDraftService _pendingEventDraftService;
+    private readonly TimeProvider _timeProvider;
     private readonly TranslateTransform _selectionIndicatorTransform = new();
     private Storyboard? _detailsPanelWidthStoryboard;
     private Storyboard? _selectionIndicatorStoryboard;
@@ -41,11 +43,18 @@ public sealed partial class MainPage : Page
     private ViewMode? _pendingViewMode;
     private ViewMode _selectionIndicatorMode;
 
-    public MainPage(MainViewModel viewModel, ICalendarSelectionService selectionService, EventDetailsPanelControl eventDetailsPanel)
+    public MainPage(
+        MainViewModel viewModel,
+        ICalendarSelectionService selectionService,
+        EventDetailsPanelControl eventDetailsPanel,
+        IPendingEventDraftService pendingEventDraftService,
+        TimeProvider timeProvider)
     {
         ViewModel = viewModel;
         _selectionService = selectionService;
         _eventDetailsPanel = eventDetailsPanel;
+        _pendingEventDraftService = pendingEventDraftService;
+        _timeProvider = timeProvider;
         InitializeComponent();
         EventDetailsPanel.Content = eventDetailsPanel;
         _selectorHoverBackground = (Brush)Application.Current.Resources["CalendarSelectorHoverBrush"];
@@ -506,11 +515,11 @@ public sealed partial class MainPage : Page
 
         // When switching to week or day view, navigate to the selected event's date
         // so the user lands on the period containing the event they just tapped.
-        var selectedId = _selectionService.SelectedGcalEventId;
+        var selectedId = _selectionService.SelectedEventId;
         if (selectedId is not null && mode is ViewMode.Week or ViewMode.Day)
         {
             var selectedEvent = ViewModel.CurrentEvents
-                .FirstOrDefault(e => string.Equals(e.GcalEventId, selectedId, StringComparison.Ordinal));
+                .FirstOrDefault(e => string.Equals(e.EventId, selectedId, StringComparison.Ordinal));
             if (selectedEvent is not null)
             {
                 await ViewModel.NavigateToAsync(DateOnly.FromDateTime(selectedEvent.StartLocal.Date), mode);
@@ -743,5 +752,92 @@ public sealed partial class MainPage : Page
     {
         var localDateTime = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local);
         return new DateTimeOffset(localDateTime);
+    }
+
+    private async void AddEventButton_Click(object sender, RoutedEventArgs e)
+    {
+        var (defaultStart, defaultEnd) = CalendarDraftTiming.GetButtonDefaults(_timeProvider);
+
+        var datePicker = new DatePicker
+        {
+            Header = "Date",
+            Date = new DateTimeOffset(DateTime.SpecifyKind(defaultStart.Date, DateTimeKind.Local))
+        };
+        var startTimePicker = new TimePicker
+        {
+            Header = "Start time",
+            MinuteIncrement = 15,
+            Time = defaultStart.TimeOfDay
+        };
+        var endTimePicker = new TimePicker
+        {
+            Header = "End time",
+            MinuteIncrement = 15,
+            Time = defaultEnd.TimeOfDay
+        };
+        var validationText = new TextBlock
+        {
+            Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+            Text = "End time must be after start time.",
+            Visibility = Visibility.Collapsed
+        };
+
+        var content = new StackPanel
+        {
+            Spacing = 12,
+            Children =
+            {
+                datePicker,
+                startTimePicker,
+                endTimePicker,
+                validationText
+            }
+        };
+
+        var dialog = new ContentDialog
+        {
+            Title = "Add event",
+            PrimaryButtonText = "Create",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            Content = content,
+            XamlRoot = XamlRoot
+        };
+
+        void UpdateValidation()
+        {
+            var selectedDate = DateOnly.FromDateTime(datePicker.Date.Date);
+            var startLocal = DateTime.SpecifyKind(selectedDate.ToDateTime(TimeOnly.FromTimeSpan(startTimePicker.Time)), DateTimeKind.Local);
+            var endLocal = DateTime.SpecifyKind(selectedDate.ToDateTime(TimeOnly.FromTimeSpan(endTimePicker.Time)), DateTimeKind.Local);
+            var isValid = endLocal > startLocal;
+            validationText.Visibility = isValid ? Visibility.Collapsed : Visibility.Visible;
+            dialog.IsPrimaryButtonEnabled = isValid;
+        }
+
+        datePicker.DateChanged += (_, _) => UpdateValidation();
+        startTimePicker.TimeChanged += (_, _) => UpdateValidation();
+        endTimePicker.TimeChanged += (_, _) => UpdateValidation();
+        UpdateValidation();
+
+        ContentDialogResult result;
+        try
+        {
+            result = await dialog.ShowAsync();
+        }
+        catch (Exception ex) when (ex is COMException or TaskCanceledException)
+        {
+            return;
+        }
+
+        if (result != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        var date = DateOnly.FromDateTime(datePicker.Date.Date);
+        var startLocal = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.FromTimeSpan(startTimePicker.Time)), DateTimeKind.Local);
+        var endLocal = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.FromTimeSpan(endTimePicker.Time)), DateTimeKind.Local);
+        var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal);
+        _selectionService.Select(draft.PendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
     }
 }

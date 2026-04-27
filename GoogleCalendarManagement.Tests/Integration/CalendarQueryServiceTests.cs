@@ -55,7 +55,7 @@ public sealed class CalendarQueryServiceTests : IDisposable
             new DateOnly(2026, 01, 31));
 
         events.Should().HaveCount(8);
-        events.Should().NotContain(evt => evt.GcalEventId.EndsWith("-deleted", StringComparison.Ordinal));
+        events.Should().NotContain(evt => evt.EventId.EndsWith("-deleted", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -85,6 +85,7 @@ public sealed class CalendarQueryServiceTests : IDisposable
         events.Should().ContainSingle();
         events[0].Title.Should().BeEmpty();
         events[0].ColorHex.Should().Be("#0088CC");
+        events[0].ColorKey.Should().Be("azure");
     }
 
     [Fact]
@@ -138,13 +139,18 @@ public sealed class CalendarQueryServiceTests : IDisposable
             });
             context.PendingEvents.Add(new PendingEvent
             {
-                Id = Guid.NewGuid(),
+                PendingEventId = "pending_overlay_1",
                 GcalEventId = "event-pending",
+                CalendarId = "primary",
                 Summary = "Pending title",
                 Description = "Pending description",
                 StartDatetime = new DateTime(2026, 01, 15, 11, 0, 0, DateTimeKind.Utc),
                 EndDatetime = new DateTime(2026, 01, 15, 12, 0, 0, DateTimeKind.Utc),
+                IsAllDay = false,
                 ColorId = "4",
+                AppCreated = false,
+                SourceSystem = "google-overlay",
+                ReadyToPublish = false,
                 CreatedAt = new DateTime(2026, 01, 15, 8, 30, 0, DateTimeKind.Utc),
                 UpdatedAt = new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc)
             });
@@ -161,9 +167,59 @@ public sealed class CalendarQueryServiceTests : IDisposable
         events[0].Title.Should().Be("Pending title");
         events[0].Description.Should().Be("Pending description");
         events[0].ColorName.Should().Be("Flamingo");
+        events[0].ColorKey.Should().Be("flamingo");
         events[0].IsPending.Should().BeTrue();
         events[0].Opacity.Should().Be(0.6);
         events[0].PendingUpdatedAt.Should().Be(new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task GetEventsForRangeAsync_IncludesStandalonePendingDraftsAlongsideSyncedEvents()
+    {
+        await using (var context = await _contextFactory.CreateDbContextAsync())
+        {
+            context.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "event-synced",
+                CalendarId = "primary",
+                Summary = "Synced event",
+                StartDatetime = new DateTime(2026, 01, 15, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 15, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "1",
+                CreatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc)
+            });
+            context.PendingEvents.Add(new PendingEvent
+            {
+                PendingEventId = "pending_manual_1",
+                CalendarId = "primary",
+                Summary = "Draft event",
+                Description = "Local draft",
+                StartDatetime = new DateTime(2026, 01, 15, 11, 15, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 15, 12, 15, 0, DateTimeKind.Utc),
+                IsAllDay = false,
+                ColorId = "azure",
+                AppCreated = true,
+                SourceSystem = "manual",
+                ReadyToPublish = false,
+                CreatedAt = new DateTime(2026, 01, 15, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
+
+        var events = await service.GetEventsForRangeAsync(
+            new DateOnly(2026, 01, 15),
+            new DateOnly(2026, 01, 15));
+
+        events.Select(evt => evt.EventId).Should().Equal("event-synced", "pending_manual_1");
+        events[1].SourceKind.Should().Be(CalendarEventSourceKind.Pending);
+        events[1].ColorKey.Should().Be("azure");
+        events[1].IsPending.Should().BeTrue();
+        events[1].StatusLabel.Should().Be("Not yet published to Google Calendar");
+        events[1].Opacity.Should().Be(0.6);
     }
 
     public void Dispose()

@@ -7,8 +7,6 @@ public sealed class ColorMappingServiceTests
 {
     private readonly ColorMappingService _sut = new();
 
-    // ── Fallback ─────────────────────────────────────────────────────────────
-
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -19,98 +17,85 @@ public sealed class ColorMappingServiceTests
         _sut.GetHexColor(colorId).Should().Be("#0088CC");
     }
 
-    // ── Alias lookups (case-insensitive) ──────────────────────────────────────
-
     [Theory]
-    [InlineData("lavender", "#7986CB")]
-    [InlineData("LAVENDER", "#7986CB")]
-    [InlineData("Lavender", "#7986CB")]
-    [InlineData("azure",    "#0088CC")]
-    [InlineData("AZURE",    "#0088CC")]
-    [InlineData("purple",   "#3F51B5")]
-    [InlineData("PURPLE",   "#3F51B5")]
-    [InlineData("grey",     "#616161")]
-    [InlineData("GREY",     "#616161")]
-    [InlineData("yellow",   "#F6BF26")]
-    [InlineData("navy",     "#33B679")]
-    [InlineData("sage",     "#0B8043")]
+    [InlineData("azure", "#0088CC")]
+    [InlineData("purple", "#3F51B5")]
+    [InlineData("grey", "#616161")]
+    [InlineData("yellow", "#F6BF26")]
+    [InlineData("navy", "#33B679")]
+    [InlineData("sage", "#0B8043")]
     [InlineData("flamingo", "#E67C73")]
-    [InlineData("orange",   "#F4511E")]
-    public void GetHexColor_AliasInput_ReturnsMappedHex(string alias, string expectedHex)
+    [InlineData("orange", "#F4511E")]
+    [InlineData("lavender", "#8E24AA")]
+    public void GetHexColor_CanonicalKey_ReturnsMappedHex(string colorId, string expectedHex)
     {
-        _sut.GetHexColor(alias).Should().Be(expectedHex);
+        _sut.GetHexColor(colorId).Should().Be(expectedHex);
     }
-
-    // ── Numeric ID lookups ────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData("1",  "#7986CB")]   // lavender  (GCal event colorId 1 = Lavender)
-    [InlineData("9",  "#3F51B5")]   // purple
-    [InlineData("8",  "#616161")]   // grey
-    [InlineData("5",  "#F6BF26")]   // yellow
-    [InlineData("2",  "#33B679")]   // navy
-    [InlineData("10", "#0B8043")]   // sage
-    [InlineData("4",  "#E67C73")]   // flamingo
-    [InlineData("6",  "#F4511E")]   // orange
-    [InlineData("3",  "#8E24AA")]   // grape
-    public void GetHexColor_NumericIdInput_ReturnsMappedHex(string id, string expectedHex)
+    [InlineData("1", "azure")]
+    [InlineData("9", "purple")]
+    [InlineData("8", "grey")]
+    [InlineData("5", "yellow")]
+    [InlineData("2", "navy")]
+    [InlineData("10", "sage")]
+    [InlineData("4", "flamingo")]
+    [InlineData("6", "orange")]
+    [InlineData("3", "lavender")]
+    public void NormalizeColorKey_GoogleAlias_ReturnsCanonicalKey(string rawColorId, string expectedKey)
     {
-        _sut.GetHexColor(id).Should().Be(expectedHex);
+        _sut.NormalizeColorKey(rawColorId).Should().Be(expectedKey);
     }
-
-    // ── GetColorName ─────────────────────────────────────────────────────────
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("unknown")]
     [InlineData("99")]
-    public void GetColorName_UnknownOrEmpty_ReturnsFallbackAzure(string? colorId)
+    public void GetDisplayName_UnknownOrEmpty_ReturnsFallbackAzure(string? colorId)
     {
-        _sut.GetColorName(colorId).Should().Be("Azure");
+        _sut.GetDisplayName(colorId).Should().Be("Azure");
     }
 
     [Theory]
-    [InlineData("1",        "Lavender")]
-    [InlineData("lavender", "Lavender")]
-    [InlineData("LAVENDER", "Lavender")]
-    [InlineData("2",        "Navy")]
-    [InlineData("navy",     "Navy")]
-    [InlineData("3",        "Grape")]
-    [InlineData("4",        "Flamingo")]
-    [InlineData("flamingo", "Flamingo")]
-    [InlineData("5",        "Yellow")]
-    [InlineData("yellow",   "Yellow")]
-    [InlineData("6",        "Orange")]
-    [InlineData("orange",   "Orange")]
-    [InlineData("8",        "Grey")]
-    [InlineData("grey",     "Grey")]
-    [InlineData("9",        "Purple")]
-    [InlineData("purple",   "Purple")]
-    [InlineData("10",       "Sage")]
-    [InlineData("sage",     "Sage")]
-    [InlineData("azure",    "Azure")]
-    public void GetColorName_KnownId_ReturnsMappedName(string colorId, string expectedName)
+    [InlineData("1", "Azure")]
+    [InlineData("azure", "Azure")]
+    [InlineData("9", "Purple")]
+    [InlineData("8", "Grey")]
+    [InlineData("5", "Yellow")]
+    [InlineData("2", "Navy")]
+    [InlineData("10", "Sage")]
+    [InlineData("4", "Flamingo")]
+    [InlineData("6", "Orange")]
+    [InlineData("3", "Lavender")]
+    public void GetDisplayName_KnownId_ReturnsMappedName(string colorId, string expectedName)
     {
-        _sut.GetColorName(colorId).Should().Be(expectedName);
+        _sut.GetDisplayName(colorId).Should().Be(expectedName);
     }
 
-    // ── AllColors ─────────────────────────────────────────────────────────────
+    [Fact]
+    public void PickerColors_ContainsExactlyNineOrderedOptions()
+    {
+        _sut.PickerColors.Select(option => option.Key).Should().Equal(
+            "azure",
+            "purple",
+            "grey",
+            "yellow",
+            "navy",
+            "sage",
+            "flamingo",
+            "orange",
+            "lavender");
+        _sut.PickerColors.Should().OnlyContain(option => option.ContrastTextHex == "#FFFFFF");
+    }
 
     [Fact]
-    public void AllColors_Contains18Entries_AliasAndNumericForEach()
+    public void AllColors_ContainsCanonicalAndNumericAliases()
     {
-        // 9 categories × 2 keys each (alias + numeric ID)
         _sut.AllColors.Should().HaveCount(18);
-    }
-
-    [Fact]
-    public void AllColors_ValuesAreValidSixDigitHex()
-    {
         foreach (var hex in _sut.AllColors.Values)
         {
-            hex.Should().MatchRegex(@"^#[0-9A-Fa-f]{6}$",
-                because: $"'{hex}' must be a valid #RRGGBB hex colour");
+            hex.Should().MatchRegex("^#[0-9A-Fa-f]{6}$");
         }
     }
 }

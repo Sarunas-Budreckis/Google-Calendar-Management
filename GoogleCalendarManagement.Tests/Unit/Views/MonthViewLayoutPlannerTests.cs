@@ -119,18 +119,19 @@ public sealed class MonthViewLayoutPlannerTests
         var start = startDate.ToDateTime(TimeOnly.MinValue);
         var end = exclusiveEndDate.ToDateTime(TimeOnly.MinValue);
         return new CalendarEventDisplayModel(
-            id,
-            title,
-            DateTime.SpecifyKind(start, DateTimeKind.Utc),
-            DateTime.SpecifyKind(end, DateTimeKind.Utc),
-            start,
-            end,
-            true,
-            "#0088CC",
-            "Azure",
-            false,
-            null,
-            null);
+            EventId: id,
+            SourceKind: CalendarEventSourceKind.Google,
+            Title: title,
+            StartUtc: DateTime.SpecifyKind(start, DateTimeKind.Utc),
+            EndUtc: DateTime.SpecifyKind(end, DateTimeKind.Utc),
+            StartLocal: start,
+            EndLocal: end,
+            IsAllDay: true,
+            ColorHex: "#0088CC",
+            ColorName: "Azure",
+            IsRecurringInstance: false,
+            Description: null,
+            LastSyncedAt: null);
     }
 
     private static CalendarEventDisplayModel CreateTimedEvent(
@@ -143,17 +144,18 @@ public sealed class MonthViewLayoutPlannerTests
         var start = date.ToDateTime(new TimeOnly(hour, minute));
         var end = start.AddHours(1);
         return new CalendarEventDisplayModel(
-            id,
-            title,
-            DateTime.SpecifyKind(start, DateTimeKind.Utc),
-            DateTime.SpecifyKind(end, DateTimeKind.Utc),
-            start,
-            end,
-            false,
-            "#33B679",
-            "Navy",
-            false,
-            null,
-            null);
+            EventId: id,
+            SourceKind: CalendarEventSourceKind.Google,
+            Title: title,
+            StartUtc: DateTime.SpecifyKind(start, DateTimeKind.Utc),
+            EndUtc: DateTime.SpecifyKind(end, DateTimeKind.Utc),
+            StartLocal: start,
+            EndLocal: end,
+            IsAllDay: false,
+            ColorHex: "#33B679",
+            ColorName: "Navy",
+            IsRecurringInstance: false,
+            Description: null,
+            LastSyncedAt: null);
     }
 }

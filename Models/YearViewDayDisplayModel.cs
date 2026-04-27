@@ -8,13 +8,14 @@ public enum YearViewSyncDotPlacement
 }
 
 public sealed record YearViewPreviewBarDisplayModel(
-    string? GcalEventId,
+    string? EventId,
+    CalendarEventSourceKind? SourceKind,
     string? ColorHex,
     string? SummaryText,
     int SpanDays,
     double Opacity = 1.0)
 {
-    public static YearViewPreviewBarDisplayModel Empty { get; } = new(null, null, null, 0);
+    public static YearViewPreviewBarDisplayModel Empty { get; } = new(null, null, null, null, 0);
 
     public bool HasContent => !string.IsNullOrWhiteSpace(ColorHex);
 }
@@ -27,7 +28,7 @@ public sealed record YearViewDayDisplayModel(
     YearViewPreviewBarDisplayModel MultiDayAllDayBar);
 
 public sealed record YearViewMultiDaySegmentDisplayModel(
-    string GcalEventId,
+    string EventId,
     DateOnly StartDate,
     DateOnly EndDate,
     int StartColumn,

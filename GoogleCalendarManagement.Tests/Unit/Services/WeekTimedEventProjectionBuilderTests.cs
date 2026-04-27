@@ -21,7 +21,7 @@ public sealed class WeekTimedEventProjectionBuilderTests
 
         items.Should().ContainSingle();
         var item = items[0];
-        item.GcalEventId.Should().Be("evt-1");
+        item.EventId.Should().Be("evt-1");
         item.Title.Should().Be("Planning");
         item.ColorHex.Should().Be("#336699");
         item.DayOffset.Should().Be(0);
@@ -106,7 +106,7 @@ public sealed class WeekTimedEventProjectionBuilderTests
         var items = WeekTimedEventProjectionBuilder.Build(weekStart, events, 120, CultureInfo.CurrentCulture);
 
         items.Should().HaveCount(210);
-        items.Select(static item => item.GcalEventId).Should().OnlyHaveUniqueItems();
+        items.Select(static item => item.EventId).Should().OnlyHaveUniqueItems();
         items.Should().OnlyContain(static item => item.Width > 0);
     }
 
@@ -175,18 +175,19 @@ public sealed class WeekTimedEventProjectionBuilderTests
         var end = date.ToDateTime(endTime);
 
         return new CalendarEventDisplayModel(
-            id,
-            title,
-            DateTime.SpecifyKind(start, DateTimeKind.Utc),
-            DateTime.SpecifyKind(end, DateTimeKind.Utc),
-            start,
-            end,
-            false,
-            colorHex,
-            "Azure",
-            false,
-            null,
-            null);
+            EventId: id,
+            SourceKind: CalendarEventSourceKind.Google,
+            Title: title,
+            StartUtc: DateTime.SpecifyKind(start, DateTimeKind.Utc),
+            EndUtc: DateTime.SpecifyKind(end, DateTimeKind.Utc),
+            StartLocal: start,
+            EndLocal: end,
+            IsAllDay: false,
+            ColorHex: colorHex,
+            ColorName: "Azure",
+            IsRecurringInstance: false,
+            Description: null,
+            LastSyncedAt: null);
     }
 
     private static CalendarEventDisplayModel CreateTimedEvent(
@@ -197,18 +198,19 @@ public sealed class WeekTimedEventProjectionBuilderTests
         string colorHex)
     {
         return new CalendarEventDisplayModel(
-            id,
-            title,
-            DateTime.SpecifyKind(start, DateTimeKind.Utc),
-            DateTime.SpecifyKind(end, DateTimeKind.Utc),
-            start,
-            end,
-            false,
-            colorHex,
-            "Azure",
-            false,
-            null,
-            null);
+            EventId: id,
+            SourceKind: CalendarEventSourceKind.Google,
+            Title: title,
+            StartUtc: DateTime.SpecifyKind(start, DateTimeKind.Utc),
+            EndUtc: DateTime.SpecifyKind(end, DateTimeKind.Utc),
+            StartLocal: start,
+            EndLocal: end,
+            IsAllDay: false,
+            ColorHex: colorHex,
+            ColorName: "Azure",
+            IsRecurringInstance: false,
+            Description: null,
+            LastSyncedAt: null);
     }
 
     private sealed class CultureScope : IDisposable

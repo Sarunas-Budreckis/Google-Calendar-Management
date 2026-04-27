@@ -2,72 +2,90 @@ namespace GoogleCalendarManagement.Services;
 
 public sealed class ColorMappingService : IColorMappingService
 {
+    private const string FallbackKey = "azure";
     private const string FallbackHex = "#0088CC";
     private const string FallbackName = "Azure";
+    private const string ContrastTextHex = "#FFFFFF";
+
+    private static readonly IReadOnlyList<CalendarColorOption> OrderedPickerColors =
+    [
+        new("azure", "Azure", "#0088CC", ContrastTextHex),
+        new("purple", "Purple", "#3F51B5", ContrastTextHex),
+        new("grey", "Grey", "#616161", ContrastTextHex),
+        new("yellow", "Yellow", "#F6BF26", ContrastTextHex),
+        new("navy", "Navy", "#33B679", ContrastTextHex),
+        new("sage", "Sage", "#0B8043", ContrastTextHex),
+        new("flamingo", "Flamingo", "#E67C73", ContrastTextHex),
+        new("orange", "Orange", "#F4511E", ContrastTextHex),
+        new("lavender", "Lavender", "#8E24AA", ContrastTextHex)
+    ];
+
+    private static readonly IReadOnlyDictionary<string, CalendarColorOption> PickerColorMap =
+        OrderedPickerColors.ToDictionary(option => option.Key, StringComparer.OrdinalIgnoreCase);
+
+    private static readonly IReadOnlyDictionary<string, string> AliasToCanonicalKeyMap =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "azure",    "azure" },
+            { "1",        "azure" },
+            { "purple",   "purple" },
+            { "9",        "purple" },
+            { "grey",     "grey" },
+            { "8",        "grey" },
+            { "yellow",   "yellow" },
+            { "5",        "yellow" },
+            { "navy",     "navy" },
+            { "2",        "navy" },
+            { "sage",     "sage" },
+            { "10",       "sage" },
+            { "flamingo", "flamingo" },
+            { "4",        "flamingo" },
+            { "orange",   "orange" },
+            { "6",        "orange" },
+            { "lavender", "lavender" },
+            { "3",        "lavender" }
+        };
 
     private static readonly IReadOnlyDictionary<string, string> ColorMap =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            // GCal event colorId "1" = Lavender (#7986CB).
-            // "azure" is kept as a legacy string alias only; numeric ID 1 is lavender.
-            { "lavender", "#7986CB" },
-            { "1",        "#7986CB" },
-            { "purple",   "#3F51B5" },
-            { "9",        "#3F51B5" },
-            { "grey",     "#616161" },
-            { "8",        "#616161" },
-            { "yellow",   "#F6BF26" },
-            { "5",        "#F6BF26" },
-            { "navy",     "#33B679" },
-            { "2",        "#33B679" },
-            { "sage",     "#0B8043" },
-            { "10",       "#0B8043" },
-            { "flamingo", "#E67C73" },
-            { "4",        "#E67C73" },
-            { "orange",   "#F4511E" },
-            { "6",        "#F4511E" },
-            { "azure",    "#0088CC" },
-            { "3",        "#8E24AA" },
-        };
+        AliasToCanonicalKeyMap.ToDictionary(
+            entry => entry.Key,
+            entry => PickerColorMap[entry.Value].Hex,
+            StringComparer.OrdinalIgnoreCase);
 
-    private static readonly IReadOnlyDictionary<string, string> NameMap =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "1",        "Lavender" },
-            { "lavender", "Lavender" },
-            { "2",        "Navy" },
-            { "navy",     "Navy" },
-            { "3",        "Grape" },
-            { "4",        "Flamingo" },
-            { "flamingo", "Flamingo" },
-            { "5",        "Yellow" },
-            { "yellow",   "Yellow" },
-            { "6",        "Orange" },
-            { "orange",   "Orange" },
-            { "8",        "Grey" },
-            { "grey",     "Grey" },
-            { "9",        "Purple" },
-            { "purple",   "Purple" },
-            { "10",       "Sage" },
-            { "sage",     "Sage" },
-            { "azure",    "Azure" },
-        };
+    public IReadOnlyList<CalendarColorOption> PickerColors => OrderedPickerColors;
 
     public IReadOnlyDictionary<string, string> AllColors => ColorMap;
 
     public string GetHexColor(string? colorId)
     {
-        if (string.IsNullOrEmpty(colorId))
-            return FallbackHex;
+        var colorKey = NormalizeColorKey(colorId);
+        return PickerColorMap.TryGetValue(colorKey, out var option)
+            ? option.Hex
+            : FallbackHex;
+    }
 
-        return ColorMap.TryGetValue(colorId, out var hex) ? hex : FallbackHex;
+    public string GetDisplayName(string? colorId)
+    {
+        var colorKey = NormalizeColorKey(colorId);
+        return PickerColorMap.TryGetValue(colorKey, out var option)
+            ? option.DisplayName
+            : FallbackName;
+    }
+
+    public string NormalizeColorKey(string? colorId)
+    {
+        if (string.IsNullOrWhiteSpace(colorId))
+        {
+            return FallbackKey;
+        }
+
+        return AliasToCanonicalKeyMap.TryGetValue(colorId, out var normalizedKey)
+            ? normalizedKey
+            : FallbackKey;
     }
 
     public string GetColorName(string? colorId)
     {
-        if (string.IsNullOrEmpty(colorId))
-            return FallbackName;
-
-        return NameMap.TryGetValue(colorId, out var name) ? name : FallbackName;
+        return GetDisplayName(colorId);
     }
 }

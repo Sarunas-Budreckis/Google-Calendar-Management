@@ -2,4 +2,4 @@ using GoogleCalendarManagement.Models;
 
 namespace GoogleCalendarManagement.Messages;
 
-public sealed record EventUpdatedMessage(string GcalEventId, CalendarEventDisplayModel? PreviewEvent = null);
+public sealed record EventUpdatedMessage(string EventId, CalendarEventDisplayModel? PreviewEvent = null);

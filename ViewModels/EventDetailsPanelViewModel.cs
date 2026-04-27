@@ -18,6 +18,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private const string EndBeforeStartMessage = "End time must be after start time";
     private const string DefaultSourceDisplay = "From Google Calendar";
     private const string PendingSourceDisplay = "Local changes, pending push to GCal";
+    private const string DraftSourceDisplay = "Not yet published to Google Calendar";
     private const string NoDescriptionPlaceholder = "No description provided.";
     private const string UndoFieldEditTitle = nameof(EditTitle);
     private const string UndoFieldEditSingleDate = nameof(EditSingleDate);
@@ -31,13 +32,15 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     private readonly ICalendarQueryService _queryService;
     private readonly ICalendarSelectionService _selectionService;
+    private readonly IColorMappingService _colorMappingService;
     private readonly IGcalEventRepository _gcalEventRepository;
     private readonly IPendingEventRepository _pendingEventRepository;
     private readonly DispatcherQueue? _dispatcherQueue;
     private readonly TimeProvider _timeProvider;
     private CancellationTokenSource _loadCts = new();
 
-    private string? _currentGcalEventId;
+    private string? _currentEventId;
+    private CalendarEventSourceKind? _currentSourceKind;
     private CalendarEventDisplayModel? _currentEvent;
     private bool _isPanelVisible;
     private string _title = string.Empty;
@@ -56,6 +59,9 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private DateOnly _editEndDate = DateOnly.FromDateTime(DateTime.Today);
     private TimeOnly _editEndTime = TimeOnly.MinValue;
     private string _editDescription = string.Empty;
+    private string _editColorId = "azure";
+    private string _editColorName = "Azure";
+    private string _editColorHex = "#0088CC";
     private string _titleError = string.Empty;
     private string _dateTimeError = string.Empty;
     private string _saveStatusText = string.Empty;
@@ -68,21 +74,25 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     public EventDetailsPanelViewModel(
         ICalendarQueryService queryService,
         ICalendarSelectionService selectionService,
+        IColorMappingService colorMappingService,
         IGcalEventRepository gcalEventRepository,
         IPendingEventRepository pendingEventRepository,
         TimeProvider? timeProvider = null)
     {
         _queryService = queryService;
         _selectionService = selectionService;
+        _colorMappingService = colorMappingService;
         _gcalEventRepository = gcalEventRepository;
         _pendingEventRepository = pendingEventRepository;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _timeProvider = timeProvider ?? TimeProvider.System;
 
+        AvailableColors = _colorMappingService.PickerColors;
         CloseCommand = new AsyncRelayCommand(ClosePanelAsync);
         EnterEditModeCommand = new RelayCommand(EnterEditMode);
         SaveAndExitEditModeCommand = new AsyncRelayCommand(SaveAndExitEditModeAsync);
         RevertPendingChangesCommand = new AsyncRelayCommand(RevertPendingChangesAsync);
+        SelectColorCommand = new AsyncRelayCommand<string?>(SelectColorAsync);
 
         WeakReferenceMessenger.Default.Register<EventDetailsPanelViewModel, EventSelectedMessage>(
             this,
@@ -243,6 +253,26 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         set => SetEditableProperty(ref _editDescription, value, UndoFieldEditDescription);
     }
 
+    public string EditColorId
+    {
+        get => _editColorId;
+        private set => SetProperty(ref _editColorId, value);
+    }
+
+    public string EditColorName
+    {
+        get => _editColorName;
+        private set => SetProperty(ref _editColorName, value);
+    }
+
+    public string EditColorHex
+    {
+        get => _editColorHex;
+        private set => SetProperty(ref _editColorHex, value);
+    }
+
+    public IReadOnlyList<CalendarColorOption> AvailableColors { get; }
+
     public DateOnly EditSingleDate
     {
         get => _editStartDate;
@@ -255,7 +285,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         IsEditMode &&
         _currentEvent is not null &&
         !_currentEvent.IsAllDay &&
-        _currentGcalEventId is not null;
+        _currentEventId is not null;
 
     public string TitleError
     {
@@ -313,6 +343,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     public IAsyncRelayCommand RevertPendingChangesCommand { get; }
 
+    public IAsyncRelayCommand<string?> SelectColorCommand { get; }
+
     public void EnterEditMode()
     {
         if (!IsPanelVisible || _currentEvent is null)
@@ -332,6 +364,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         EditEndDate = DateOnly.FromDateTime(_currentEvent.EndLocal.Date);
         EditEndTime = TimeOnly.FromDateTime(_currentEvent.EndLocal);
         EditDescription = _currentEvent.Description ?? string.Empty;
+        ApplyEditColor(_currentEvent.ColorKey);
         _isInitializingEditFields = false;
 
         ValidateFields();
@@ -429,7 +462,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     public async Task<bool> SaveNowAsync(bool keepEditMode = true, CancellationToken ct = default)
     {
-        if (_isSaving || _currentGcalEventId is null)
+        if (_isSaving || _currentEventId is null || _currentSourceKind is null)
         {
             return false;
         }
@@ -446,47 +479,77 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         try
         {
-            var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(_currentGcalEventId, ct);
-            if (gcalEvent is null)
-            {
-                SaveStatusText = string.Empty;
-                return false;
-            }
-
-            var pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(_currentGcalEventId, ct);
-            var (startUtc, endUtc, _, _) = BuildEditDateTimes();
             var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
+            PendingEvent? pendingEvent;
 
-            if (pendingEvent is null)
+            if (_currentSourceKind == CalendarEventSourceKind.Pending)
             {
-                pendingEvent = new PendingEvent
+                pendingEvent = await _pendingEventRepository.GetByPendingEventIdAsync(_currentEventId, ct);
+                if (pendingEvent is null)
                 {
-                    Id = Guid.NewGuid(),
-                    GcalEventId = _currentGcalEventId,
-                    Summary = EditTitle.Trim(),
-                    Description = NormalizeDescription(EditDescription),
-                    StartDatetime = startUtc,
-                    EndDatetime = endUtc,
-                    ColorId = gcalEvent.ColorId ?? "azure",
-                    CreatedAt = utcNow,
-                    UpdatedAt = utcNow
-                };
+                    SaveStatusText = string.Empty;
+                    return false;
+                }
+
+                var (draftStartUtc, draftEndUtc, _, _) = BuildEditDateTimes();
+                pendingEvent.Summary = EditTitle.Trim();
+                pendingEvent.Description = NormalizeDescription(EditDescription);
+                pendingEvent.StartDatetime = draftStartUtc;
+                pendingEvent.EndDatetime = draftEndUtc;
+                pendingEvent.ColorId = EditColorId;
+                pendingEvent.UpdatedAt = utcNow;
+                await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
             }
             else
             {
-                pendingEvent.Summary = EditTitle.Trim();
-                pendingEvent.Description = NormalizeDescription(EditDescription);
-                pendingEvent.StartDatetime = startUtc;
-                pendingEvent.EndDatetime = endUtc;
-                pendingEvent.UpdatedAt = utcNow;
+                var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
+                if (gcalEvent is null)
+                {
+                    SaveStatusText = string.Empty;
+                    return false;
+                }
+
+                pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
+                var (startUtc, endUtc, _, _) = BuildEditDateTimes();
+
+                if (pendingEvent is null)
+                {
+                    pendingEvent = new PendingEvent
+                    {
+                        PendingEventId = $"pending_{Guid.NewGuid():N}",
+                        GcalEventId = _currentEventId,
+                        CalendarId = gcalEvent.CalendarId,
+                        Summary = EditTitle.Trim(),
+                        Description = NormalizeDescription(EditDescription),
+                        StartDatetime = startUtc,
+                        EndDatetime = endUtc,
+                        IsAllDay = gcalEvent.IsAllDay,
+                        ColorId = EditColorId,
+                        AppCreated = false,
+                        SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
+                        ReadyToPublish = false,
+                        CreatedAt = utcNow,
+                        UpdatedAt = utcNow
+                    };
+                }
+                else
+                {
+                    pendingEvent.Summary = EditTitle.Trim();
+                    pendingEvent.Description = NormalizeDescription(EditDescription);
+                    pendingEvent.StartDatetime = startUtc;
+                    pendingEvent.EndDatetime = endUtc;
+                    pendingEvent.IsAllDay = gcalEvent.IsAllDay;
+                    pendingEvent.ColorId = EditColorId;
+                    pendingEvent.UpdatedAt = utcNow;
+                }
+
+                await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
             }
 
-            await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
-
-            var refreshedEvent = await _queryService.GetEventByGcalIdAsync(_currentGcalEventId, ct);
+            var refreshedEvent = await _queryService.GetEventByIdAsync(_currentEventId, ct);
             if (refreshedEvent is not null)
             {
-                RunOnUiThread(() => ApplyEventDetails(refreshedEvent, _currentGcalEventId!, keepEditMode));
+                RunOnUiThread(() => ApplyEventDetails(refreshedEvent, _currentEventId!, keepEditMode));
             }
             else if (!keepEditMode)
             {
@@ -495,7 +558,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
             _hasPendingLocalChanges = false;
             SaveStatusText = SavedStatusText;
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(_currentGcalEventId));
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(_currentEventId));
             return true;
         }
         finally
@@ -554,35 +617,218 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         }
     }
 
-    public async Task RevertPendingChangesAsync()
+    public async Task SelectColorAsync(string? selectedColorId, CancellationToken ct = default)
     {
-        if (_currentGcalEventId is null || !IsPendingEvent)
+        if (!IsEditMode || _currentEventId is null)
         {
             return;
         }
 
-        StopDebounce();
-        await _pendingEventRepository.DeleteByGcalEventIdAsync(_currentGcalEventId);
+        var normalizedColorKey = _colorMappingService.NormalizeColorKey(selectedColorId);
+        if (string.Equals(EditColorId, normalizedColorKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
 
-        var refreshedEvent = await _queryService.GetEventByGcalIdAsync(_currentGcalEventId);
+        ApplyEditColor(normalizedColorKey);
+        _hasPendingLocalChanges = true;
+        PublishOptimisticEventUpdate();
+
+        var saved = await SaveNowAsync(keepEditMode: true, ct);
+        if (saved)
+        {
+            return;
+        }
+
+        var eventId = _currentEventId;
+        var refreshedEvent = await _queryService.GetEventByIdAsync(eventId, ct);
         if (refreshedEvent is not null)
         {
-            RunOnUiThread(() => ApplyEventDetails(refreshedEvent, _currentGcalEventId!, keepEditMode: false));
+            RunOnUiThread(() => ApplyEventDetails(refreshedEvent, eventId, keepEditMode: true));
+        }
+    }
+
+    public async Task ApplyColorToEventAsync(
+        string eventId,
+        CalendarEventSourceKind sourceKind,
+        string? selectedColorId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return;
+        }
+
+        if (IsEditMode &&
+            string.Equals(_currentEventId, eventId, StringComparison.Ordinal) &&
+            _currentSourceKind == sourceKind)
+        {
+            await SelectColorAsync(selectedColorId, ct);
+            return;
+        }
+
+        var normalizedColorKey = _colorMappingService.NormalizeColorKey(selectedColorId);
+        var currentDisplayEvent = await _queryService.GetEventByIdAsync(eventId, ct);
+        if (currentDisplayEvent is null ||
+            string.Equals(currentDisplayEvent.ColorKey, normalizedColorKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
+        switch (sourceKind)
+        {
+            case CalendarEventSourceKind.Pending:
+            {
+                var pendingDraft = await _pendingEventRepository.GetByPendingEventIdAsync(eventId, ct);
+                if (pendingDraft is null)
+                {
+                    return;
+                }
+
+                pendingDraft.ColorId = normalizedColorKey;
+                pendingDraft.UpdatedAt = utcNow;
+                await _pendingEventRepository.UpsertAsync(pendingDraft, ct);
+                break;
+            }
+
+            case CalendarEventSourceKind.Google:
+            {
+                var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(eventId, ct);
+                if (gcalEvent is null)
+                {
+                    return;
+                }
+
+                var pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(eventId, ct);
+                if (pendingEvent is null)
+                {
+                    pendingEvent = new PendingEvent
+                    {
+                        PendingEventId = $"pending_{Guid.NewGuid():N}",
+                        GcalEventId = eventId,
+                        CalendarId = gcalEvent.CalendarId,
+                        Summary = currentDisplayEvent.Title,
+                        Description = NormalizeDescription(currentDisplayEvent.Description),
+                        StartDatetime = currentDisplayEvent.StartUtc,
+                        EndDatetime = currentDisplayEvent.EndUtc,
+                        IsAllDay = currentDisplayEvent.IsAllDay,
+                        ColorId = normalizedColorKey,
+                        AppCreated = false,
+                        SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
+                        ReadyToPublish = false,
+                        CreatedAt = utcNow,
+                        UpdatedAt = utcNow
+                    };
+                }
+                else
+                {
+                    pendingEvent.ColorId = normalizedColorKey;
+                    pendingEvent.UpdatedAt = utcNow;
+                }
+
+                await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
+                break;
+            }
+        }
+
+        if (string.Equals(_currentEventId, eventId, StringComparison.Ordinal))
+        {
+            var refreshedEvent = await _queryService.GetEventByIdAsync(eventId, ct);
+            if (refreshedEvent is not null)
+            {
+                RunOnUiThread(() => ApplyEventDetails(refreshedEvent, eventId, keepEditMode: false));
+            }
+        }
+
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(eventId));
+    }
+
+    public async Task RevertPendingChangesAsync()
+    {
+        if (_currentEventId is null || _currentSourceKind is null || !IsPendingEvent)
+        {
+            return;
+        }
+
+        await RevertPendingChangesForEventAsync(_currentEventId, _currentSourceKind.Value);
+    }
+
+    public async Task RevertPendingChangesForEventAsync(
+        string eventId,
+        CalendarEventSourceKind sourceKind,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return;
+        }
+
+        var isCurrentEvent = string.Equals(_currentEventId, eventId, StringComparison.Ordinal) &&
+            _currentSourceKind == sourceKind;
+
+        if (isCurrentEvent)
+        {
+            StopDebounce();
+        }
+
+        switch (sourceKind)
+        {
+            case CalendarEventSourceKind.Pending:
+                await _pendingEventRepository.DeleteByPendingEventIdAsync(eventId, ct);
+                break;
+
+            case CalendarEventSourceKind.Google:
+            {
+                var currentDisplayEvent = isCurrentEvent
+                    ? _currentEvent
+                    : await _queryService.GetEventByIdAsync(eventId, ct);
+                if (currentDisplayEvent is null || !currentDisplayEvent.IsPending)
+                {
+                    return;
+                }
+
+                await _pendingEventRepository.DeleteByGcalEventIdAsync(eventId, ct);
+                break;
+            }
+
+            default:
+                return;
+        }
+
+        if (isCurrentEvent)
+        {
+            if (sourceKind == CalendarEventSourceKind.Pending)
+            {
+                RunOnUiThread(HidePanel);
+            }
+            else
+            {
+                var refreshedEvent = await _queryService.GetEventByIdAsync(eventId, ct);
+                if (refreshedEvent is not null)
+                {
+                    RunOnUiThread(() => ApplyEventDetails(refreshedEvent, eventId, keepEditMode: false));
+                }
+                else
+                {
+                    RunOnUiThread(HidePanel);
+                }
+            }
         }
 
         SaveStatusText = string.Empty;
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(_currentGcalEventId));
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(eventId));
     }
 
-    public bool IsEditingSelectedTimedEvent(string? gcalEventId)
+    public bool IsEditingSelectedTimedEvent(string? eventId)
     {
         return CanInteractivelyAdjustSelectedTimedEvent &&
-            string.Equals(_currentGcalEventId, gcalEventId, StringComparison.Ordinal);
+            string.Equals(_currentEventId, eventId, StringComparison.Ordinal);
     }
 
-    public bool TryGetEditableTimedRange(string? gcalEventId, out DateTime startLocal, out DateTime endLocal)
+    public bool TryGetEditableTimedRange(string? eventId, out DateTime startLocal, out DateTime endLocal)
     {
-        if (!IsEditingSelectedTimedEvent(gcalEventId))
+        if (!IsEditingSelectedTimedEvent(eventId))
         {
             startLocal = default;
             endLocal = default;
@@ -593,9 +839,9 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         return true;
     }
 
-    public void ApplyDraggedTimeRange(string? gcalEventId, DateTime startLocal, DateTime endLocal)
+    public void ApplyDraggedTimeRange(string? eventId, DateTime startLocal, DateTime endLocal)
     {
-        if (!IsEditingSelectedTimedEvent(gcalEventId))
+        if (!IsEditingSelectedTimedEvent(eventId))
         {
             return;
         }
@@ -608,9 +854,9 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         TriggerValidationAndSaveState();
     }
 
-    public void ApplyResizedEndTime(string? gcalEventId, DateTime endLocal)
+    public void ApplyResizedEndTime(string? eventId, DateTime endLocal)
     {
-        if (!IsEditingSelectedTimedEvent(gcalEventId))
+        if (!IsEditingSelectedTimedEvent(eventId))
         {
             return;
         }
@@ -634,21 +880,21 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         _loadCts.Cancel();
         _loadCts = new CancellationTokenSource();
 
-        if (message.GcalEventId is null)
+        if (message.EventId is null)
         {
             RunOnUiThread(HidePanel);
             return;
         }
 
-        _ = LoadEventAsync(message.GcalEventId, _loadCts.Token);
+        _ = LoadEventAsync(message, _loadCts.Token);
     }
 
-    private async Task LoadEventAsync(string gcalEventId, CancellationToken ct)
+    private async Task LoadEventAsync(EventSelectedMessage message, CancellationToken ct)
     {
         CalendarEventDisplayModel? evt;
         try
         {
-            evt = await _queryService.GetEventByGcalIdAsync(gcalEventId, ct).ConfigureAwait(false);
+            evt = await _queryService.GetEventByIdAsync(message.EventId!, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -671,15 +917,20 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         {
             if (!ct.IsCancellationRequested)
             {
-                ApplyEventDetails(loadedEvent, gcalEventId);
+                ApplyEventDetails(loadedEvent, message.EventId!, keepEditMode: false);
+                if (message.OpenInEditMode)
+                {
+                    EnterEditMode();
+                }
             }
         });
     }
 
-    private void ApplyEventDetails(CalendarEventDisplayModel evt, string gcalEventId, bool keepEditMode = false)
+    private void ApplyEventDetails(CalendarEventDisplayModel evt, string eventId, bool keepEditMode = false)
     {
-        var isSameEvent = string.Equals(_currentGcalEventId, gcalEventId, StringComparison.Ordinal);
-        _currentGcalEventId = gcalEventId;
+        var isSameEvent = string.Equals(_currentEventId, eventId, StringComparison.Ordinal);
+        _currentEventId = eventId;
+        _currentSourceKind = evt.SourceKind;
         _currentEvent = evt;
 
         Title = evt.Title;
@@ -689,7 +940,11 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             ? NoDescriptionPlaceholder
             : evt.Description;
         IsPendingEvent = evt.IsPending;
-        SourceDisplay = evt.IsPending ? PendingSourceDisplay : DefaultSourceDisplay;
+        SourceDisplay = evt.SourceKind == CalendarEventSourceKind.Pending
+            ? DraftSourceDisplay
+            : evt.IsPending
+                ? PendingSourceDisplay
+                : DefaultSourceDisplay;
         LastSyncedDisplay = evt.LastSyncedAt.HasValue
             ? evt.LastSyncedAt.Value.ToLocalTime().ToString("g")
             : "Never";
@@ -703,18 +958,22 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         {
             ResetEditSession();
         }
+        else
+        {
+            ApplyEditColor(evt.ColorKey);
+        }
     }
 
     private void OnSyncCompleted()
     {
-        if (_currentGcalEventId is null || IsEditMode)
+        if (_currentEventId is null || IsEditMode)
         {
             return;
         }
 
         _loadCts.Cancel();
         _loadCts = new CancellationTokenSource();
-        _ = LoadEventAsync(_currentGcalEventId, _loadCts.Token);
+        _ = LoadEventAsync(new EventSelectedMessage(_currentEventId, _currentSourceKind), _loadCts.Token);
     }
 
     private async Task ClosePanelAsync()
@@ -724,7 +983,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     private void HidePanel()
     {
-        _currentGcalEventId = null;
+        _currentEventId = null;
+        _currentSourceKind = null;
         _currentEvent = null;
         IsPanelVisible = false;
         Title = string.Empty;
@@ -750,6 +1010,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         EditEndDate = DateOnly.FromDateTime(DateTime.Today);
         EditEndTime = TimeOnly.MinValue;
         EditDescription = string.Empty;
+        ApplyEditColor("azure");
         _isInitializingEditFields = false;
         NotifyDateEditorShapeChanged();
         TitleError = string.Empty;
@@ -957,15 +1218,16 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         return string.IsNullOrWhiteSpace(description) ? null : description;
     }
 
-    private void PublishOptimisticEventUpdate(DateTime startLocal, DateTime endLocal)
+    private void PublishOptimisticEventUpdate(DateTime? startLocalOverride = null, DateTime? endLocalOverride = null)
     {
-        if (_currentEvent is null || _currentGcalEventId is null)
+        if (_currentEvent is null || _currentEventId is null)
         {
             return;
         }
 
-        var startLocalWithKind = DateTime.SpecifyKind(startLocal, DateTimeKind.Local);
-        var endLocalWithKind = DateTime.SpecifyKind(endLocal, DateTimeKind.Local);
+        var (_, _, editStartLocal, editEndLocal) = BuildEditDateTimes();
+        var startLocalWithKind = DateTime.SpecifyKind(startLocalOverride ?? editStartLocal, DateTimeKind.Local);
+        var endLocalWithKind = DateTime.SpecifyKind(endLocalOverride ?? editEndLocal, DateTimeKind.Local);
         var previewEvent = _currentEvent with
         {
             Title = string.IsNullOrWhiteSpace(EditTitle) ? _currentEvent.Title : EditTitle.Trim(),
@@ -974,16 +1236,36 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             StartUtc = startLocalWithKind.ToUniversalTime(),
             EndUtc = endLocalWithKind.ToUniversalTime(),
             Description = NormalizeDescription(EditDescription),
+            ColorHex = EditColorHex,
+            ColorName = EditColorName,
+            ColorKey = EditColorId,
             IsPending = true,
             Opacity = 0.6,
-            PendingUpdatedAt = _currentEvent.PendingUpdatedAt ?? _timeProvider.GetUtcNow().UtcDateTime
+            PendingUpdatedAt = _timeProvider.GetUtcNow().UtcDateTime,
+            StatusLabel = _currentEvent.SourceKind == CalendarEventSourceKind.Pending
+                ? DraftSourceDisplay
+                : PendingSourceDisplay
         };
 
         _currentEvent = previewEvent;
+        Title = previewEvent.Title;
+        ColorHex = previewEvent.ColorHex;
+        ColorName = previewEvent.ColorName;
+        DescriptionDisplay = string.IsNullOrEmpty(previewEvent.Description)
+            ? NoDescriptionPlaceholder
+            : previewEvent.Description;
         IsPendingEvent = true;
-        SourceDisplay = PendingSourceDisplay;
+        SourceDisplay = previewEvent.StatusLabel;
         StartEndDisplay = BuildStartEndDisplay(previewEvent.StartLocal, previewEvent.EndLocal, previewEvent.IsAllDay);
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(_currentGcalEventId, previewEvent));
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(_currentEventId, previewEvent));
+    }
+
+    private void ApplyEditColor(string? colorId)
+    {
+        var normalizedColorKey = _colorMappingService.NormalizeColorKey(colorId);
+        EditColorId = normalizedColorKey;
+        EditColorName = _colorMappingService.GetDisplayName(normalizedColorKey);
+        EditColorHex = _colorMappingService.GetHexColor(normalizedColorKey);
     }
 
     private void RunOnUiThread(Action action)

@@ -19,7 +19,7 @@ public sealed class CalendarViewVisualStateCalculatorTests
         var result = CalendarViewVisualStateCalculator.TryClipTimedEventToDay(calendarEvent, visibleDate, out var segment);
 
         result.Should().BeTrue();
-        segment.GcalEventId.Should().Be("evt-overnight");
+        segment.EventId.Should().Be("evt-overnight");
         segment.VisibleStart.Should().Be(new DateTime(2026, 4, 6, 22, 0, 0));
         segment.VisibleEnd.Should().Be(new DateTime(2026, 4, 7, 0, 0, 0));
     }
@@ -103,17 +103,18 @@ public sealed class CalendarViewVisualStateCalculatorTests
         DateTime end)
     {
         return new CalendarEventDisplayModel(
-            id,
-            title,
-            DateTime.SpecifyKind(start, DateTimeKind.Utc),
-            DateTime.SpecifyKind(end, DateTimeKind.Utc),
-            start,
-            end,
-            false,
-            "#336699",
-            "Azure",
-            false,
-            null,
-            null);
+            EventId: id,
+            SourceKind: CalendarEventSourceKind.Google,
+            Title: title,
+            StartUtc: DateTime.SpecifyKind(start, DateTimeKind.Utc),
+            EndUtc: DateTime.SpecifyKind(end, DateTimeKind.Utc),
+            StartLocal: start,
+            EndLocal: end,
+            IsAllDay: false,
+            ColorHex: "#336699",
+            ColorName: "Azure",
+            IsRecurringInstance: false,
+            Description: null,
+            LastSyncedAt: null);
     }
 }

@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using Windows.Foundation;
 using Windows.UI;
 
 namespace GoogleCalendarManagement.Views;
@@ -35,10 +36,13 @@ public sealed partial class YearViewControl : Page
     private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
+    private readonly EventDetailsPanelViewModel _eventDetailsViewModel;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<YearViewControl> _logger;
+    private readonly EventColorPickerFlyoutController _eventColorPicker;
     private readonly SharedTooltipManager _tooltipManager;
     private Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
+    private ColorPickerTarget? _activeColorTarget;
     private readonly Dictionary<int, ProjectionCacheEntry> _projectionCache = [];
     private long _projectionCacheAccessSequence;
     private readonly Dictionary<int, RenderCacheEntry> _renderCache = [];
@@ -52,8 +56,37 @@ public sealed partial class YearViewControl : Page
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
         _selectionService = App.GetRequiredService<ICalendarSelectionService>();
+        _eventDetailsViewModel = App.GetRequiredService<EventDetailsPanelViewModel>();
         _timeProvider = App.GetRequiredService<TimeProvider>();
         _logger = App.GetRequiredService<ILogger<YearViewControl>>();
+        _eventColorPicker = new EventColorPickerFlyoutController(
+            _eventDetailsViewModel.AvailableColors,
+            () => _activeColorTarget?.ColorKey,
+            async colorKey =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
+                await _eventDetailsViewModel.ApplyColorToEventAsync(
+                    _activeColorTarget.EventId,
+                    _activeColorTarget.SourceKind,
+                    colorKey);
+                _activeColorTarget = _activeColorTarget with { ColorKey = colorKey };
+            },
+            () => new EventColorPickerMenuState(_activeColorTarget?.IsPending == true),
+            async () =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
+                await _eventDetailsViewModel.RevertPendingChangesForEventAsync(
+                    _activeColorTarget.EventId,
+                    _activeColorTarget.SourceKind);
+            });
         InitializeComponent();
         _tooltipManager = new SharedTooltipManager(DispatcherQueue);
         MonthsGrid.Background = TransparentPanelBrush;
@@ -117,7 +150,7 @@ public sealed partial class YearViewControl : Page
 
     private void OnEventSelected(EventSelectedMessage message)
     {
-        _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.GcalEventId));
+        _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.EventId));
     }
 
     private void Rebuild()
@@ -133,7 +166,7 @@ public sealed partial class YearViewControl : Page
                 "YearViewControl render cache hit for year {Year}. Reattach completed in {ElapsedMs}ms.",
                 ViewModel.CurrentDate.Year,
                 totalTimer.ElapsedMilliseconds);
-            ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
+            ApplySelectionVisualState(_selectionService.SelectedEventId);
             ScheduleRenderPrewarm();
             return;
         }
@@ -174,7 +207,7 @@ public sealed partial class YearViewControl : Page
             buildTimer.ElapsedMilliseconds,
             totalTimer.ElapsedMilliseconds);
 
-        ApplySelectionVisualState(_selectionService.SelectedGcalEventId);
+        ApplySelectionVisualState(_selectionService.SelectedEventId);
         ScheduleRenderPrewarm();
     }
 
@@ -676,9 +709,9 @@ public sealed partial class YearViewControl : Page
             };
         }
 
-        if (bar.HasContent && bar.GcalEventId is not null)
+        if (bar.HasContent && bar.EventId is not null && bar.SourceKind is not null)
         {
-            RegisterEventBorder(bar.GcalEventId, previewBar, renderContext);
+            RegisterEventBorder(bar.EventId, previewBar, renderContext);
             ConfigurePreviewBarInteractions(previewBar, bar, renderContext);
         }
 
@@ -720,7 +753,7 @@ public sealed partial class YearViewControl : Page
             if (date.Month != activeMonth ||
                 !dayLookup.TryGetValue(date, out var dayDisplay) ||
                 !dayDisplay.MultiDayAllDayBar.HasContent ||
-                dayDisplay.MultiDayAllDayBar.GcalEventId is null)
+                dayDisplay.MultiDayAllDayBar.EventId is null)
             {
                 continue;
             }
@@ -733,7 +766,7 @@ public sealed partial class YearViewControl : Page
                 if (nextDate.Month != activeMonth ||
                     !dayLookup.TryGetValue(nextDate, out var nextDayDisplay) ||
                     !nextDayDisplay.MultiDayAllDayBar.HasContent ||
-                    !string.Equals(nextDayDisplay.MultiDayAllDayBar.GcalEventId, bar.GcalEventId, StringComparison.Ordinal))
+                    !string.Equals(nextDayDisplay.MultiDayAllDayBar.EventId, bar.EventId, StringComparison.Ordinal))
                 {
                     break;
                 }
@@ -742,7 +775,7 @@ public sealed partial class YearViewControl : Page
             }
 
             segments.Add(new YearViewMultiDaySegmentDisplayModel(
-                bar.GcalEventId,
+                bar.EventId,
                 weekStart.AddDays(segmentStartColumn),
                 weekStart.AddDays(column),
                 segmentStartColumn,
@@ -757,9 +790,22 @@ public sealed partial class YearViewControl : Page
     {
         previewBar.Tapped += (_, e) =>
         {
-            if (bar.GcalEventId is not null)
+            if (bar.EventId is not null && bar.SourceKind is not null)
             {
-                _selectionService.Select(bar.GcalEventId);
+                _selectionService.Select(bar.EventId, bar.SourceKind.Value);
+                e.Handled = true;
+            }
+        };
+        previewBar.RightTapped += (_, e) =>
+        {
+            if (bar.EventId is not null && bar.SourceKind is not null)
+            {
+                _activeColorTarget = new ColorPickerTarget(
+                    bar.EventId,
+                    bar.SourceKind.Value,
+                    ResolveColorKey(bar.EventId),
+                    ResolveIsPending(bar.EventId));
+                _eventColorPicker.ShowAt(previewBar, e.GetPosition(previewBar));
                 e.Handled = true;
             }
         };
@@ -817,12 +863,12 @@ public sealed partial class YearViewControl : Page
         Rebuild();
     }
 
-    private void ApplySelectionVisualState(string? selectedGcalEventId)
+    private void ApplySelectionVisualState(string? selectedEventId)
     {
-        foreach (var (gcalEventId, registrations) in _eventBorders)
+        foreach (var (eventId, registrations) in _eventBorders)
         {
-            var isSelected = selectedGcalEventId is not null &&
-                string.Equals(gcalEventId, selectedGcalEventId, StringComparison.Ordinal);
+            var isSelected = selectedEventId is not null &&
+                string.Equals(eventId, selectedEventId, StringComparison.Ordinal);
 
             foreach (var registration in registrations)
             {
@@ -831,15 +877,31 @@ public sealed partial class YearViewControl : Page
         }
     }
 
-    private static void RegisterEventBorder(string gcalEventId, Border border, RenderBuildContext renderContext)
+    private static void RegisterEventBorder(string eventId, Border border, RenderBuildContext renderContext)
     {
-        if (!renderContext.EventBorders.TryGetValue(gcalEventId, out var registrations))
+        if (!renderContext.EventBorders.TryGetValue(eventId, out var registrations))
         {
             registrations = [];
-            renderContext.EventBorders[gcalEventId] = registrations;
+            renderContext.EventBorders[eventId] = registrations;
         }
 
         registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness, border.Padding));
+    }
+
+    private string ResolveColorKey(string eventId)
+    {
+        return ViewModel.CurrentEvents
+            .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.Ordinal))
+            ?.ColorKey
+            ?? "azure";
+    }
+
+    private bool ResolveIsPending(string eventId)
+    {
+        return ViewModel.CurrentEvents
+            .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.Ordinal))
+            ?.IsPending
+            ?? false;
     }
 
     private static DateOnly StartOfWeek(DateOnly date)
@@ -890,6 +952,8 @@ public sealed partial class YearViewControl : Page
         Brush? DefaultBorderBrush,
         Thickness DefaultBorderThickness,
         Thickness DefaultPadding);
+
+    private sealed record ColorPickerTarget(string EventId, CalendarEventSourceKind SourceKind, string ColorKey, bool IsPending);
 
     private sealed class ProjectionCacheEntry
     {

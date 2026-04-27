@@ -41,7 +41,7 @@ public static class YearViewDayProjectionBuilder
                 {
                     singleDayAssignments.TryAdd(
                         date,
-                        new YearViewPreviewBarDisplayModel(span.GcalEventId, span.ColorHex, span.Title, span.SpanDays, span.Opacity));
+                        new YearViewPreviewBarDisplayModel(span.EventId, span.SourceKind, span.ColorHex, span.Title, span.SpanDays, span.Opacity));
                     continue;
                 }
 
@@ -70,7 +70,7 @@ public static class YearViewDayProjectionBuilder
                     .OrderByDescending(static candidate => candidate.SpanDays)
                     .ThenBy(static candidate => candidate.StartDay)
                     .ThenBy(static candidate => candidate.InputOrder)
-                    .ThenBy(static candidate => candidate.GcalEventId, StringComparer.Ordinal)
+                    .ThenBy(static candidate => candidate.EventId, StringComparer.Ordinal)
                     .FirstOrDefault();
             }
 
@@ -79,7 +79,8 @@ public static class YearViewDayProjectionBuilder
             var multiDayBar = activeMultiDaySpan is null
                 ? YearViewPreviewBarDisplayModel.Empty
                 : new YearViewPreviewBarDisplayModel(
-                    activeMultiDaySpan.GcalEventId,
+                    activeMultiDaySpan.EventId,
+                    activeMultiDaySpan.SourceKind,
                     activeMultiDaySpan.ColorHex,
                     activeMultiDaySpan.Title,
                     activeMultiDaySpan.SpanDays,
@@ -121,7 +122,7 @@ public static class YearViewDayProjectionBuilder
             for (var index = 0; index < weekDates.Count; index++)
             {
                 var date = weekDates[index];
-                if (!multiDayAssignments.TryGetValue(date, out var bar) || !bar.HasContent || bar.GcalEventId is null)
+                if (!multiDayAssignments.TryGetValue(date, out var bar) || !bar.HasContent || bar.EventId is null)
                 {
                     continue;
                 }
@@ -130,13 +131,13 @@ public static class YearViewDayProjectionBuilder
                 while (index + 1 < weekDates.Count &&
                        multiDayAssignments.TryGetValue(weekDates[index + 1], out var nextBar) &&
                        nextBar.HasContent &&
-                       string.Equals(nextBar.GcalEventId, bar.GcalEventId, StringComparison.Ordinal))
+                       string.Equals(nextBar.EventId, bar.EventId, StringComparison.Ordinal))
                 {
                     index++;
                 }
 
                 segments.Add(new YearViewMultiDaySegmentDisplayModel(
-                    bar.GcalEventId,
+                    bar.EventId,
                     weekDates[segmentStartIndex],
                     weekDates[index],
                     GetColumnIndex(weekDates[segmentStartIndex]),
@@ -172,7 +173,8 @@ public static class YearViewDayProjectionBuilder
             }
 
             yield return new AllDayEventSpan(
-                evt.GcalEventId,
+                evt.EventId,
+                evt.SourceKind,
                 evt.Title,
                 evt.ColorHex,
                 startDay,
@@ -213,7 +215,8 @@ public static class YearViewDayProjectionBuilder
     }
 
     private sealed record AllDayEventSpan(
-        string GcalEventId,
+        string EventId,
+        CalendarEventSourceKind SourceKind,
         string Title,
         string ColorHex,
         DateOnly StartDay,

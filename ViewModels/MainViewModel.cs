@@ -466,18 +466,18 @@ public sealed class MainViewModel : ObservableObject
 
     private void OnEventUpdated(EventUpdatedMessage message)
     {
-        if (string.IsNullOrWhiteSpace(message.GcalEventId))
+        if (string.IsNullOrWhiteSpace(message.EventId))
         {
             return;
         }
 
         if (message.PreviewEvent is not null)
         {
-            ApplyAffectedEventUpdate(message.GcalEventId, message.PreviewEvent);
+            ApplyAffectedEventUpdate(message.EventId, message.PreviewEvent);
             return;
         }
 
-        _ = RefreshAffectedEventAsync(message.GcalEventId);
+        _ = RefreshAffectedEventAsync(message.EventId);
     }
 
     private async Task RefreshStatusAsync()
@@ -624,12 +624,12 @@ public sealed class MainViewModel : ObservableObject
         IsNotificationOpen = true;
     }
 
-    private async Task RefreshAffectedEventAsync(string gcalEventId)
+    private async Task RefreshAffectedEventAsync(string eventId)
     {
         try
         {
-            var refreshedEvent = await _calendarQueryService.GetEventByGcalIdAsync(gcalEventId);
-            ApplyAffectedEventUpdate(gcalEventId, refreshedEvent);
+            var refreshedEvent = await _calendarQueryService.GetEventByIdAsync(eventId);
+            ApplyAffectedEventUpdate(eventId, refreshedEvent);
         }
         catch (OperationCanceledException)
         {
@@ -637,15 +637,15 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unable to refresh calendar event {GcalEventId} after a local edit.", gcalEventId);
+            _logger.LogError(ex, "Unable to refresh calendar event {EventId} after a local edit.", eventId);
         }
     }
 
-    private void ApplyAffectedEventUpdate(string gcalEventId, CalendarEventDisplayModel? refreshedEvent)
+    private void ApplyAffectedEventUpdate(string eventId, CalendarEventDisplayModel? refreshedEvent)
     {
         var updatedEvents = CurrentEvents.ToList();
         var existingIndex = updatedEvents.FindIndex(
-            item => string.Equals(item.GcalEventId, gcalEventId, StringComparison.Ordinal));
+            item => string.Equals(item.EventId, eventId, StringComparison.Ordinal));
         var (from, to) = GetVisibleDateRange();
         var isVisibleInCurrentRange = refreshedEvent is not null && OverlapsVisibleRange(refreshedEvent, from, to);
 

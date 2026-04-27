@@ -13,6 +13,7 @@ namespace GoogleCalendarManagement.Tests.Unit.ViewModels;
 public sealed class EventDetailsPanelViewModelTests : IDisposable
 {
     private static readonly DateTime UtcBase = new(2026, 4, 4, 9, 0, 0, DateTimeKind.Utc);
+    private static readonly IColorMappingService ColorMappingService = new ColorMappingService();
 
     private readonly Mock<ICalendarQueryService> _queryServiceMock = new();
     private readonly Mock<ICalendarSelectionService> _selectionServiceMock = new();
@@ -48,7 +49,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1", title: "Team Meeting");
         _queryServiceMock
-            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
 
         var sut = CreateSut();
@@ -67,7 +68,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
         var sut = CreateSut();
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
@@ -83,7 +84,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1", title: "Draft title", description: "Draft description");
         _queryServiceMock
-            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
         var sut = CreateSut();
 
@@ -104,7 +105,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
         var sut = CreateSut();
 
@@ -127,7 +128,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1", title: "Before");
         _queryServiceMock
-            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
         var sut = CreateSut();
 
@@ -146,7 +147,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
         var sut = CreateSut();
 
@@ -164,7 +165,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .SetupSequence(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .SetupSequence(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt)
             .ReturnsAsync(evt with
             {
@@ -196,10 +197,94 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
                 It.IsAny<CancellationToken>()),
             Times.Once);
         _lastPublishedMessage.Should().NotBeNull();
-        _lastPublishedMessage!.GcalEventId.Should().Be("evt-1");
+        _lastPublishedMessage!.EventId.Should().Be("evt-1");
         sut.SaveStatusText.Should().Be("Saved");
         sut.SourceDisplay.Should().Be("Local changes, pending push to GCal");
         sut.LastSavedLocallyDisplay.Should().NotBe("No local changes");
+    }
+
+    [Fact]
+    public async Task SelectColorAsync_SavesImmediatelyWithoutWaitingForDebounce()
+    {
+        var evt = MakeEvent("evt-1", colorKey: "azure", colorName: "Azure", colorHex: "#0088CC");
+        _queryServiceMock
+            .SetupSequence(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt)
+            .ReturnsAsync(evt with
+            {
+                ColorKey = "purple",
+                ColorName = "Purple",
+                ColorHex = "#3F51B5",
+                IsPending = true,
+                Opacity = 0.6,
+                PendingUpdatedAt = UtcBase.AddMinutes(30)
+            });
+        _pendingEventRepositoryMock
+            .Setup(repo => repo.GetByGcalEventIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PendingEvent?)null);
+
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+
+        await sut.SelectColorAsync("purple");
+
+        _pendingEventRepositoryMock.Verify(
+            repo => repo.UpsertAsync(
+                It.Is<PendingEvent>(pending => pending.GcalEventId == "evt-1" && pending.ColorId == "purple"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        sut.ColorName.Should().Be("Purple");
+        sut.ColorHex.Should().Be("#3F51B5");
+        sut.EditColorId.Should().Be("purple");
+    }
+
+    [Fact]
+    public async Task SelectColorAsync_SameColor_DoesNotWritePendingEvent()
+    {
+        var evt = MakeEvent("evt-1", colorKey: "azure", colorName: "Azure", colorHex: "#0088CC");
+        _queryServiceMock
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt);
+
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-1"));
+        await WaitUntilAsync(() => sut.IsPanelVisible);
+        sut.EnterEditMode();
+
+        await sut.SelectColorAsync("1");
+
+        _pendingEventRepositoryMock.Verify(
+            repo => repo.UpsertAsync(It.IsAny<PendingEvent>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ApplyColorToEventAsync_WhenNotInEditMode_CreatesPendingEventForGoogleEvent()
+    {
+        var evt = MakeEvent("evt-1", colorKey: "azure", colorName: "Azure", colorHex: "#0088CC");
+        _queryServiceMock
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(evt);
+        _pendingEventRepositoryMock
+            .Setup(repo => repo.GetByGcalEventIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PendingEvent?)null);
+
+        var sut = CreateSut();
+
+        await sut.ApplyColorToEventAsync("evt-1", CalendarEventSourceKind.Google, "purple");
+
+        _pendingEventRepositoryMock.Verify(
+            repo => repo.UpsertAsync(
+                It.Is<PendingEvent>(pending =>
+                    pending.GcalEventId == "evt-1" &&
+                    pending.ColorId == "purple" &&
+                    pending.Summary == "Test Event"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -207,7 +292,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .SetupSequence(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .SetupSequence(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt)
             .ReturnsAsync(evt with { IsPending = true, Opacity = 0.6 });
         _pendingEventRepositoryMock
@@ -233,7 +318,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .SetupSequence(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .SetupSequence(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt)
             .ReturnsAsync(evt with
             {
@@ -272,7 +357,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         var originalEvent = MakeEvent("evt-1", title: "Original title", description: "Original description");
 
         _queryServiceMock
-            .SetupSequence(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .SetupSequence(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(pendingEvent)
             .ReturnsAsync(originalEvent);
 
@@ -291,11 +376,23 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task RevertPendingChangesForEventAsync_WhenPendingDraft_DeletesPendingDraft()
+    {
+        var sut = CreateSut();
+
+        await sut.RevertPendingChangesForEventAsync("pending-1", CalendarEventSourceKind.Pending);
+
+        _pendingEventRepositoryMock.Verify(
+            repo => repo.DeleteByPendingEventIdAsync("pending-1", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task ApplyDraggedTimeRange_UpdatesStartAndEndTogether()
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
         var sut = CreateSut();
 
@@ -319,7 +416,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     {
         var evt = MakeEvent("evt-1");
         _queryServiceMock
-            .Setup(service => service.GetEventByGcalIdAsync("evt-1", It.IsAny<CancellationToken>()))
+            .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
         var sut = CreateSut();
 
@@ -349,6 +446,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         return new EventDetailsPanelViewModel(
             _queryServiceMock.Object,
             _selectionServiceMock.Object,
+            ColorMappingService,
             _gcalEventRepositoryMock.Object,
             _pendingEventRepositoryMock.Object,
             new FixedTimeProvider(new DateTimeOffset(UtcBase)));
@@ -359,25 +457,30 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         string title = "Test Event",
         string? description = "A test description",
         bool isPending = false,
-        DateTime? pendingUpdatedAt = null)
+        DateTime? pendingUpdatedAt = null,
+        string colorKey = "lavender",
+        string colorName = "Lavender",
+        string colorHex = "#7986CB")
     {
         var startUtc = UtcBase;
         var endUtc = UtcBase.AddHours(1);
         return new CalendarEventDisplayModel(
-            GcalEventId: id,
+            EventId: id,
+            SourceKind: CalendarEventSourceKind.Google,
             Title: title,
             StartUtc: startUtc,
             EndUtc: endUtc,
             StartLocal: startUtc.ToLocalTime(),
             EndLocal: endUtc.ToLocalTime(),
             IsAllDay: false,
-            ColorHex: "#7986CB",
-            ColorName: "Lavender",
+            ColorHex: colorHex,
+            ColorName: colorName,
             IsRecurringInstance: false,
             Description: description,
             LastSyncedAt: null,
             IsPending: isPending,
-            PendingUpdatedAt: pendingUpdatedAt);
+            PendingUpdatedAt: pendingUpdatedAt,
+            ColorKey: colorKey);
     }
 
     private static async Task WaitUntilAsync(Func<bool> predicate, int timeoutMs = 500)

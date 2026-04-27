@@ -619,7 +619,7 @@ public sealed class MainViewModelTests : IDisposable
         public List<(DateOnly From, DateOnly To)> RequestedRanges { get; } = [];
         public Dictionary<(DateOnly From, DateOnly To), int> CallsByRange { get; } = [];
 
-        public Task<CalendarEventDisplayModel?> GetEventByGcalIdAsync(string gcalEventId, CancellationToken ct = default)
+        public Task<CalendarEventDisplayModel?> GetEventByIdAsync(string eventId, CancellationToken ct = default)
         {
             return Task.FromResult<CalendarEventDisplayModel?>(null);
         }

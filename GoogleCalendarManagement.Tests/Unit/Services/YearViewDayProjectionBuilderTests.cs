@@ -73,9 +73,9 @@ public sealed class YearViewDayProjectionBuilderTests
 
         var projection = YearViewDayProjectionBuilder.Build(VisibleDates(start, start.AddDays(2)), events, new Dictionary<DateOnly, SyncStatus>());
 
-        projection.DayLookup[start].MultiDayAllDayBar.GcalEventId.Should().Be("carry");
-        projection.DayLookup[start.AddDays(1)].MultiDayAllDayBar.GcalEventId.Should().Be("carry");
-        projection.DayLookup[start.AddDays(2)].MultiDayAllDayBar.GcalEventId.Should().Be("longer");
+        projection.DayLookup[start].MultiDayAllDayBar.EventId.Should().Be("carry");
+        projection.DayLookup[start.AddDays(1)].MultiDayAllDayBar.EventId.Should().Be("carry");
+        projection.DayLookup[start.AddDays(2)].MultiDayAllDayBar.EventId.Should().Be("longer");
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class YearViewDayProjectionBuilderTests
 
         var projection = YearViewDayProjectionBuilder.Build(VisibleDates(date, date), events, new Dictionary<DateOnly, SyncStatus>());
 
-        projection.DayLookup[date].MultiDayAllDayBar.GcalEventId.Should().Be("long");
+        projection.DayLookup[date].MultiDayAllDayBar.EventId.Should().Be("long");
         projection.DayLookup[date].MultiDayAllDayBar.ColorHex.Should().Be("#200000");
     }
 
@@ -130,7 +130,7 @@ public sealed class YearViewDayProjectionBuilderTests
 
         var segments = projection.MultiDaySegmentsByWeekStart[monday];
         segments.Should().ContainSingle();
-        segments[0].GcalEventId.Should().Be("multi");
+        segments[0].EventId.Should().Be("multi");
         segments[0].StartColumn.Should().Be(1);
         segments[0].ColumnSpan.Should().Be(3);
         segments[0].Bar.SummaryText.Should().Be("Multi");
@@ -152,18 +152,19 @@ public sealed class YearViewDayProjectionBuilderTests
         string colorHex)
     {
         return new CalendarEventDisplayModel(
-            id,
-            title,
-            startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
-            inclusiveEndDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
-            startDate.ToDateTime(TimeOnly.MinValue),
-            inclusiveEndDate.AddDays(1).ToDateTime(TimeOnly.MinValue),
-            true,
-            colorHex,
-            "Azure",
-            false,
-            null,
-            null);
+            EventId: id,
+            SourceKind: CalendarEventSourceKind.Google,
+            Title: title,
+            StartUtc: startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+            EndUtc: inclusiveEndDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+            StartLocal: startDate.ToDateTime(TimeOnly.MinValue),
+            EndLocal: inclusiveEndDate.AddDays(1).ToDateTime(TimeOnly.MinValue),
+            IsAllDay: true,
+            ColorHex: colorHex,
+            ColorName: "Azure",
+            IsRecurringInstance: false,
+            Description: null,
+            LastSyncedAt: null);
     }
 
     private static CalendarEventDisplayModel CreateTimedEvent(string id, string title, DateOnly date, string colorHex)
@@ -172,17 +173,18 @@ public sealed class YearViewDayProjectionBuilderTests
         var end = date.ToDateTime(new TimeOnly(10, 0));
 
         return new CalendarEventDisplayModel(
-            id,
-            title,
-            DateTime.SpecifyKind(start, DateTimeKind.Utc),
-            DateTime.SpecifyKind(end, DateTimeKind.Utc),
-            start,
-            end,
-            false,
-            colorHex,
-            "Azure",
-            false,
-            null,
-            null);
+            EventId: id,
+            SourceKind: CalendarEventSourceKind.Google,
+            Title: title,
+            StartUtc: DateTime.SpecifyKind(start, DateTimeKind.Utc),
+            EndUtc: DateTime.SpecifyKind(end, DateTimeKind.Utc),
+            StartLocal: start,
+            EndLocal: end,
+            IsAllDay: false,
+            ColorHex: colorHex,
+            ColorName: "Azure",
+            IsRecurringInstance: false,
+            Description: null,
+            LastSyncedAt: null);
     }
 }
