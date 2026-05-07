@@ -1,6 +1,6 @@
 # Story 4.4: Push Pending Events to Google Calendar
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -218,41 +218,41 @@ Add or extend tests in the existing xUnit style. Minimum expected coverage:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Verify and land prerequisite contracts from Stories 4.2 and 4.3** (AC: 4.4.1, 4.4.4, 4.4.6)
-  - [ ] Confirm `PendingEvent` includes nullable `GcalEventId`, publish metadata, and post-4.2 creation fields
-  - [ ] Confirm source-agnostic event identity is available end-to-end (`EventId`, `SourceKind`) before starting publish UI work
-  - [ ] Confirm `IColorMappingService` can map canonical keys back to Google `colorId` values
+- [x] **Task 1: Verify and land prerequisite contracts from Stories 4.2 and 4.3** (AC: 4.4.1, 4.4.4, 4.4.6)
+  - [x] Confirm `PendingEvent` includes nullable `GcalEventId`, publish metadata, and post-4.2 creation fields
+  - [x] Confirm source-agnostic event identity is available end-to-end (`EventId`, `SourceKind`) before starting publish UI work
+  - [x] Confirm `IColorMappingService` can map canonical keys back to Google `colorId` values
 
-- [ ] **Task 2: Add Google Calendar write operations and payload mapping** (AC: 4.4.4, 4.4.5, 4.4.6, 4.4.7, 4.4.8)
-  - [ ] Extend `IGoogleCalendarApiClient` and `IGoogleCalendarService` with insert, get, and update support needed for publish
-  - [ ] Use full-resource update semantics plus ETag conditional requests
-  - [ ] Build timed/all-day request payloads correctly
-  - [ ] Keep recurring-instance publish scoped to the instance ID only
+- [x] **Task 2: Add Google Calendar write operations and payload mapping** (AC: 4.4.4, 4.4.5, 4.4.6, 4.4.7, 4.4.8)
+  - [x] Extend `IGoogleCalendarApiClient` and `IGoogleCalendarService` with insert, get, and update support needed for publish
+  - [x] Use full-resource update semantics plus ETag conditional requests
+  - [x] Build timed/all-day request payloads correctly
+  - [x] Keep recurring-instance publish scoped to the instance ID only
 
-- [ ] **Task 3: Implement batch publish orchestration service** (AC: 4.4.4, 4.4.5, 4.4.7, 4.4.9, 4.4.11)
-  - [ ] Add `IPendingEventPublishService` / `PendingEventPublishService`
-  - [ ] Query selected pending rows in deterministic order
-  - [ ] For inserts: call Google, upsert live row, delete pending row
-  - [ ] For edits: snapshot `gcal_event_version`, update Google, update live row, delete pending row
-  - [ ] Persist per-item `publish_attempted_at` / `publish_error` on failure
+- [x] **Task 3: Implement batch publish orchestration service** (AC: 4.4.4, 4.4.5, 4.4.7, 4.4.9, 4.4.11)
+  - [x] Add `IPendingEventPublishService` / `PendingEventPublishService`
+  - [x] Query selected pending rows in deterministic order
+  - [x] For inserts: call Google, upsert live row, delete pending row
+  - [x] For edits: snapshot `gcal_event_version`, update Google, update live row, delete pending row
+  - [x] Persist per-item `publish_attempted_at` / `publish_error` on failure
 
-- [ ] **Task 4: Add top-bar publish UI and selection workflow** (AC: 4.4.1, 4.4.2, 4.4.3, 4.4.11)
-  - [ ] Add `Push to GCal` control with badge to `Views/MainPage.xaml`
-  - [ ] Add pending-list selection state, `Select All`, and publish command handling in `MainViewModel`
-  - [ ] Show confirmation dialog before the batch starts
-  - [ ] Disable duplicate publish actions while the batch is running
+- [x] **Task 4: Add top-bar publish UI and selection workflow** (AC: 4.4.1, 4.4.2, 4.4.3, 4.4.11)
+  - [x] Add `Push to GCal` control with badge to `Views/MainPage.xaml`
+  - [x] Add pending-list selection state, `Select All`, and publish command handling in `MainViewModel`
+  - [x] Show confirmation dialog before the batch starts
+  - [x] Disable duplicate publish actions while the batch is running
 
-- [ ] **Task 5: Update UI state after publish results** (AC: 4.4.8, 4.4.9, 4.4.10, 4.4.11)
-  - [ ] Refresh visible events after each success without requiring full app restart
-  - [ ] Remove successful rows from the pending list and keep failed rows visible
-  - [ ] Add the `300 ms` pending-to-published opacity transition
-  - [ ] Surface completion summary and conflict/failure messages clearly
+- [x] **Task 5: Update UI state after publish results** (AC: 4.4.8, 4.4.9, 4.4.10, 4.4.11)
+  - [x] Refresh visible events after each success without requiring full app restart
+  - [x] Remove successful rows from the pending list and keep failed rows visible
+  - [x] Add the `300 ms` pending-to-published opacity transition
+  - [x] Surface completion summary and conflict/failure messages clearly
 
-- [ ] **Task 6: Add automated tests and local verification** (AC: 4.4.12)
-  - [ ] Unit tests for payload mapping and conflict resolution
-  - [ ] Integration tests for insert, update, failure retention, and version-history writes
-  - [ ] `dotnet build -p:Platform=x64`
-  - [ ] `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64`
+- [x] **Task 6: Add automated tests and local verification** (AC: 4.4.12)
+  - [x] Unit tests for payload mapping and conflict resolution
+  - [x] Integration tests for insert, update, failure retention, and version-history writes
+  - [x] `dotnet build -p:Platform=x64`
+  - [x] `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64`
 
 ## References
 
@@ -274,16 +274,59 @@ Add or extend tests in the existing xUnit style. Minimum expected coverage:
 
 ### Agent Model Used
 
-<!-- to be filled by dev agent -->
+- GPT-5 Codex
 
 ### Debug Log References
 
-<!-- to be filled by dev agent -->
+- `dotnet build -p:Platform=x64`
+- `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64`
 
 ### Completion Notes List
 
-<!-- to be filled by dev agent -->
+- Added pending publish metadata, reverse canonical-to-Google colour mapping, and an EF migration for `pending_event.publish_attempted_at` / `publish_error`.
+- Extended Google Calendar services with authenticated get/insert/update write paths, timed/all-day payload shaping, and precondition-failure signalling for ETag conflict handling.
+- Implemented `PendingEventPublishService` with deterministic batch ordering, per-item success/failure isolation, insert/update persistence rules, version snapshot creation, and single-retry MergeTimestamp conflict resolution.
+- Added `Push to GCal` top-bar UI with pending count badge, subset selection, `Select All`, confirmation dialog, progress state, retryable inline failure visibility, and completion summaries.
+- Updated visible calendar refresh behavior so successful publishes immediately remove pending rows, preserve selection through draft promotion, refresh the details panel, and animate pending opacity to published opacity over `300 ms`.
+- Added publish coverage in unit and integration tests for payload mapping, precondition failures, insert/update persistence, mixed-result batches, failure retention, and MainViewModel pending publish state.
+- **Bug fix (2026-05-03):** `GetGoogleColorId` now returns `null` for `azure` and unknown keys so Google Calendar uses the calendar's default colour instead of lavender. Updated `IColorMappingService` signature to `string?` and adjusted `ColorMappingService` accordingly.
+- **Bug fix (2026-05-03):** Error text in the pending-item push list is now tappable and opens the same copyable details popup as the `Details` button. Added `Tapped` handler on the error `TextBlock` in `MainPage.xaml` / `MainPage.xaml.cs`.
+- **Enhancement (2026-05-03):** Right-clicking a pending item in the push dropdown opens a context menu with `Discard draft` / `Revert pending edit` and a `Change color` sub-menu. Added `RevertAsync` and `UpdateColorAsync` to `IPendingEventPublishService` / `PendingEventPublishService`, corresponding `RevertPendingPublishItemAsync` and `ChangePendingPublishItemColorAsync` methods to `MainViewModel`, and a programmatic `MenuFlyout` built in the `PendingPublishItem_RightTapped` handler in `MainPage.xaml.cs`.
 
 ### File List
 
-<!-- to be filled by dev agent -->
+- `App.xaml.cs`
+- `Data/Configurations/PendingEventConfiguration.cs`
+- `Data/Entities/PendingEvent.cs`
+- `Data/Migrations/20260427210803_AddPendingPublishMetadata.cs`
+- `Data/Migrations/20260427210803_AddPendingPublishMetadata.Designer.cs`
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs`
+- `GoogleCalendarManagement.Tests/Integration/PendingEventPublishServiceTests.cs`
+- `GoogleCalendarManagement.Tests/Integration/PendingEventRepositoryTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/GoogleCalendarServiceTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/Services/ColorMappingServiceTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/MainViewModelTests.cs`
+- `Messages/EventUpdatedMessage.cs`
+- `Services/ColorMappingService.cs`
+- `Services/ContentDialogService.cs`
+- `Services/GoogleCalendarApiClient.cs`
+- `Services/GoogleCalendarService.cs`
+- `Services/GoogleCalendarWriteRequest.cs`
+- `Services/GoogleCalendarWriteResult.cs`
+- `Services/IColorMappingService.cs`
+- `Services/IContentDialogService.cs`
+- `Services/IGoogleCalendarService.cs`
+- `Services/IPendingEventPublishService.cs`
+- `Services/PendingEventPublishService.cs`
+- `Services/PendingEventRepository.cs`
+- `ViewModels/EventDetailsPanelViewModel.cs`
+- `ViewModels/MainViewModel.cs`
+- `ViewModels/PendingPublishItemViewModel.cs`
+- `Views/MainPage.xaml`
+- `Views/MainPage.xaml.cs`
+- `docs/sprint-status.yaml`
+
+### Change Log
+
+- 2026-04-27: Implemented Story 4.4 publish workflow, UI, persistence, migration, and automated coverage.
+- 2026-05-03: Bug fixes and enhancements during review — azure colour now maps to null (calendar default) in Google API, error text in push list is tappable to open details popup, right-click context menu added to pending items for revert and color change.

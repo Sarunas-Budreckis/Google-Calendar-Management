@@ -10,26 +10,16 @@
     <Grid x:Name="RootLayout">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="PanelModeStates">
-                <VisualState x:Name="ReadOnlyMode">
+                <VisualState x:Name="EmptyState">
                     <VisualState.Setters>
-                        <Setter Target="ReadOnlyWhenPanel.Visibility" Value="Visible" />
-                        <Setter Target="ReadOnlyColorPanel.Visibility" Value="Visible" />
-                        <Setter Target="ReadOnlyDescriptionPanel.Visibility" Value="Visible" />
-                        <Setter Target="ReadOnlySourcePanel.Visibility" Value="Visible" />
-                        <Setter Target="ReadOnlyLastSyncedPanel.Visibility" Value="Visible" />
-                        <Setter Target="EditButtonHost.Visibility" Value="Visible" />
-                        <Setter Target="EditPanelHost.Visibility" Value="Collapsed" />
+                        <Setter Target="EmptyStatePlaceholder.Visibility" Value="Visible" />
+                        <Setter Target="EventContentArea.Visibility" Value="Collapsed" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="EditMode">
                     <VisualState.Setters>
-                        <Setter Target="ReadOnlyWhenPanel.Visibility" Value="Collapsed" />
-                        <Setter Target="ReadOnlyColorPanel.Visibility" Value="Collapsed" />
-                        <Setter Target="ReadOnlyDescriptionPanel.Visibility" Value="Collapsed" />
-                        <Setter Target="ReadOnlySourcePanel.Visibility" Value="Collapsed" />
-                        <Setter Target="ReadOnlyLastSyncedPanel.Visibility" Value="Collapsed" />
-                        <Setter Target="EditButtonHost.Visibility" Value="Collapsed" />
-                        <Setter Target="EditPanelHost.Visibility" Value="Visible" />
+                        <Setter Target="EmptyStatePlaceholder.Visibility" Value="Collapsed" />
+                        <Setter Target="EventContentArea.Visibility" Value="Visible" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
@@ -43,129 +33,70 @@
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1,0,0,0">
 
-        <Border.RenderTransform>
-            <TranslateTransform x:Name="PanelTranslate" X="380" />
-        </Border.RenderTransform>
-
-        <ScrollViewer
-            HorizontalScrollMode="Disabled"
-            VerticalScrollBarVisibility="Auto"
-            VerticalScrollMode="Auto">
-
-                <StackPanel x:Name="ContentStack" Padding="20,16,20,24" Spacing="16">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <TextBlock
-                        x:Name="HeaderTitleText"
-                        Grid.Column="0"
-                        MaxLines="2"
-                        Style="{StaticResource SubtitleTextBlockStyle}"
-                        Text="{x:Bind ViewModel.Title, Mode=OneWay}"
-                        TextTrimming="CharacterEllipsis"
-                        TextWrapping="WrapWholeWords"
-                        VerticalAlignment="Center" />
-
-                    <Button
-                        x:Name="CloseButton"
-                        Grid.Column="1"
-                        Width="32"
-                        Height="32"
-                        Padding="0"
-                        VerticalAlignment="Top"
-                        Command="{x:Bind ViewModel.CloseCommand}"
-                        Content="&#xE711;"
-                        FontFamily="{StaticResource SymbolThemeFontFamily}"
-                        FontSize="14">
-                        <ToolTipService.ToolTip>Close</ToolTipService.ToolTip>
-                    </Button>
-                </Grid>
-
+            <Grid>
+                <!-- Empty state: shown when no event is selected -->
                 <Border
-                    Height="1"
-                    Background="{ThemeResource CardStrokeColorDefaultBrush}"
-                    Margin="-20,0,-20,0" />
+                    x:Name="EmptyStatePlaceholder"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="24">
+                    <TextBlock
+                        MaxWidth="260"
+                        Opacity="0.5"
+                        Text="Select an event to view and edit"
+                        TextAlignment="Center"
+                        TextWrapping="WrapWholeWords" />
+                </Border>
 
-                <StackPanel x:Name="ReadOnlyWhenPanel" Spacing="4">
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="Date" />
-                    <TextBlock
-                        Text="{x:Bind ViewModel.StartEndDisplay, Mode=OneWay}"
-                        TextWrapping="Wrap" />
-                </StackPanel>
+                <!-- Event edit content: shown when event is selected -->
+                <ScrollViewer
+                    x:Name="EventContentArea"
+                    HorizontalScrollMode="Disabled"
+                    VerticalScrollBarVisibility="Auto"
+                    VerticalScrollMode="Auto"
+                    Visibility="Collapsed">
 
-                <StackPanel x:Name="ReadOnlyColorPanel" Spacing="4">
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="Color" />
-                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <StackPanel x:Name="ContentStack" Padding="20,16,20,24" Spacing="16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock
+                                x:Name="HeaderTitleText"
+                                Grid.Column="0"
+                                MaxLines="2"
+                                Style="{StaticResource SubtitleTextBlockStyle}"
+                                Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="WrapWholeWords"
+                                VerticalAlignment="Center" />
+
+                            <Button
+                                x:Name="CloseButton"
+                                Grid.Column="1"
+                                Width="32"
+                                Height="32"
+                                Padding="0"
+                                VerticalAlignment="Top"
+                                Command="{x:Bind ViewModel.CloseCommand}"
+                                Content="&#xE711;"
+                                FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                FontSize="14">
+                                <ToolTipService.ToolTip>Close</ToolTipService.ToolTip>
+                            </Button>
+                        </Grid>
+
                         <Border
-                            x:Name="ColorSwatch"
-                            Width="16"
-                            Height="16"
-                            CornerRadius="3"
-                            VerticalAlignment="Center" />
-                        <TextBlock
-                            Text="{x:Bind ViewModel.ColorName, Mode=OneWay}"
-                            VerticalAlignment="Center" />
+                            Height="1"
+                            Background="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Margin="-20,0,-20,0" />
+
+                        <StackPanel x:Name="EditPanelHost" />
                     </StackPanel>
-                </StackPanel>
-
-                <StackPanel x:Name="ReadOnlyDescriptionPanel" Spacing="4">
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="Description" />
-                    <TextBlock
-                        Text="{x:Bind ViewModel.DescriptionDisplay, Mode=OneWay}"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-
-                <StackPanel x:Name="ReadOnlySourcePanel" Spacing="4">
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="Source" />
-                    <TextBlock Text="{x:Bind ViewModel.SourceDisplay, Mode=OneWay}" />
-                </StackPanel>
-
-                <StackPanel x:Name="ReadOnlyLastSyncedPanel" Spacing="4">
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="Last synced" />
-                    <TextBlock Text="{x:Bind ViewModel.LastSyncedDisplay, Mode=OneWay}" />
-                </StackPanel>
-
-                <Grid x:Name="EditButtonHost" Margin="0,8,0,0" HorizontalAlignment="Right" ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <Button
-                        x:Name="EditButton"
-                        Grid.Column="0"
-                        Command="{x:Bind ViewModel.EnterEditModeCommand}"
-                        Content="Edit" />
-
-                    <Button
-                        x:Name="RevertButton"
-                        Grid.Column="1"
-                        Command="{x:Bind ViewModel.RevertPendingChangesCommand}"
-                        Content="Revert"
-                        Visibility="{x:Bind ViewModel.RevertButtonVisibility, Mode=OneWay}" />
-                </Grid>
-
-                <StackPanel x:Name="EditPanelHost" Visibility="Collapsed" />
-            </StackPanel>
-        </ScrollViewer>
-    </Border>
-</Grid>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
 </UserControl>

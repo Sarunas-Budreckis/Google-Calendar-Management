@@ -527,6 +527,107 @@ public sealed class MainViewModelTests : IDisposable
         queryService.CallCount.Should().Be(initialCallCount);
     }
 
+    [Fact]
+    public async Task LoadPendingPublishItemsAsync_PopulatesBadgeAndSelectionState()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var publishService = new StubPendingEventPublishService
+        {
+            PendingItems =
+            [
+                new PendingPublishListItem(
+                    "pending-1",
+                    null,
+                    "Draft event",
+                    new DateTime(2026, 04, 05, 15, 0, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 04, 05, 16, 0, 0, DateTimeKind.Utc),
+                    false,
+                    false,
+                    "new draft",
+                    "azure",
+                    "#0088CC",
+                    null)
+            ]
+        };
+
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            pendingEventPublishService: publishService);
+
+        await viewModel.InitializeAsync();
+        await viewModel.LoadPendingPublishItemsAsync();
+
+        viewModel.PendingPublishCount.Should().Be(1);
+        viewModel.PendingPublishBadgeVisibility.Should().Be(Microsoft.UI.Xaml.Visibility.Visible);
+        viewModel.CanPublishSelectedPendingEvents.Should().BeFalse();
+
+        viewModel.PendingPublishItems[0].IsSelected = true;
+
+        viewModel.SelectedPendingPublishCount.Should().Be(1);
+        viewModel.CanPublishSelectedPendingEvents.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task PublishSelectedPendingEventsCommand_PublishesSelectionAndShowsSummary()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
+        var publishService = new StubPendingEventPublishService
+        {
+            PendingItems =
+            [
+                new PendingPublishListItem(
+                    "pending-1",
+                    "evt-1",
+                    "Edited event",
+                    new DateTime(2026, 04, 05, 15, 0, 0, DateTimeKind.Utc),
+                    new DateTime(2026, 04, 05, 16, 0, 0, DateTimeKind.Utc),
+                    false,
+                    false,
+                    "edited event",
+                    "sage",
+                    "#0B8043",
+                    null)
+            ],
+            PublishResultFactory = pendingIds =>
+                new PendingPublishBatchResult(
+                    pendingIds.Count,
+                    pendingIds.Count,
+                    0,
+                    pendingIds.Select(id => new PendingPublishItemResult(id, "evt-1", true, null)).ToList())
+        };
+
+        var dialogService = new Mock<IContentDialogService>();
+        dialogService
+            .Setup(service => service.ShowConfirmationAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(true);
+
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            dialogService: dialogService.Object,
+            pendingEventPublishService: publishService);
+
+        await viewModel.InitializeAsync();
+        await viewModel.LoadPendingPublishItemsAsync();
+        viewModel.PendingPublishItems[0].IsSelected = true;
+
+        await viewModel.PublishSelectedPendingEventsCommand.ExecuteAsync(null);
+
+        publishService.PublishedPendingEventIds.Should().Equal("pending-1");
+        viewModel.NotificationSeverity.Should().Be(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success);
+        viewModel.NotificationMessage.Should().Be("1 event(s) published.");
+        viewModel.PendingPublishSummaryText.Should().Be("1 event(s) published.");
+    }
+
     public void Dispose()
     {
         WeakReferenceMessenger.Default.Reset();
@@ -538,8 +639,11 @@ public sealed class MainViewModelTests : IDisposable
         StubSyncStatusService? syncStatusService = null,
         ISyncManager? syncManager = null,
         IContentDialogService? dialogService = null,
+        IPendingEventPublishService? pendingEventPublishService = null,
+        ICalendarSelectionService? calendarSelectionService = null,
         IIcsExportService? exportService = null,
         IIcsImportService? importService = null,
+        IColorMappingService? colorMappingService = null,
         TimeProvider? timeProvider = null)
     {
         return new MainViewModel(
@@ -548,8 +652,11 @@ public sealed class MainViewModelTests : IDisposable
             syncStatusService ?? new StubSyncStatusService(),
             syncManager ?? Mock.Of<ISyncManager>(),
             dialogService ?? Mock.Of<IContentDialogService>(),
+            pendingEventPublishService ?? Mock.Of<IPendingEventPublishService>(),
+            calendarSelectionService ?? Mock.Of<ICalendarSelectionService>(),
             exportService ?? Mock.Of<IIcsExportService>(),
             importService ?? Mock.Of<IIcsImportService>(),
+            colorMappingService ?? new ColorMappingService(),
             NullLogger<MainViewModel>.Instance,
             timeProvider ?? new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 0, 0, TimeSpan.Zero)));
     }
@@ -679,6 +786,36 @@ public sealed class MainViewModelTests : IDisposable
             _state = state;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class StubPendingEventPublishService : IPendingEventPublishService
+    {
+        public IReadOnlyList<PendingPublishListItem> PendingItems { get; set; } = [];
+
+        public Func<IReadOnlyCollection<string>, PendingPublishBatchResult>? PublishResultFactory { get; set; }
+
+        public List<string> PublishedPendingEventIds { get; } = [];
+
+        public Task<IReadOnlyList<PendingPublishListItem>> GetPendingItemsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult(PendingItems);
+        }
+
+        public Task<PendingPublishBatchResult> PublishAsync(
+            IReadOnlyCollection<string> pendingEventIds,
+            IProgress<PendingPublishProgress>? progress = null,
+            CancellationToken ct = default)
+        {
+            PublishedPendingEventIds.AddRange(pendingEventIds);
+            progress?.Report(new PendingPublishProgress(pendingEventIds.Count, pendingEventIds.Count));
+            return Task.FromResult(
+                PublishResultFactory?.Invoke(pendingEventIds) ??
+                new PendingPublishBatchResult(pendingEventIds.Count, 0, pendingEventIds.Count, []));
+        }
+
+        public Task RevertAsync(string pendingEventId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task UpdateColorAsync(string pendingEventId, string colorKey, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class FixedTimeProvider : TimeProvider

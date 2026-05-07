@@ -28,6 +28,7 @@ public sealed partial class YearViewControl : Page
     private const double PreviewBarHeight = 11;
     private const double PreviewBarFontSize = 8;
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
+    private static readonly Brush SelectedForPushBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4C, 0xAF, 0x50));
     private static readonly Brush TodayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4E, 0x8F, 0xD8));
     private static readonly Brush TodayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x73, 0xA8, 0xE4));
     private static readonly Brush TodayTextBrush = new SolidColorBrush(Colors.White);
@@ -75,7 +76,10 @@ public sealed partial class YearViewControl : Page
                     colorKey);
                 _activeColorTarget = _activeColorTarget with { ColorKey = colorKey };
             },
-            () => new EventColorPickerMenuState(_activeColorTarget?.IsPending == true),
+            () => new EventColorPickerMenuState(
+                ShowRevert: _activeColorTarget?.IsPending == true,
+                ShowPendingPublishSelectionToggle: _activeColorTarget?.IsPending == true,
+                IsSelectedForPush: _activeColorTarget is not null && ViewModel.IsPendingEventSelectedForPush(_activeColorTarget.EventId)),
             async () =>
             {
                 if (_activeColorTarget is null)
@@ -86,6 +90,15 @@ public sealed partial class YearViewControl : Page
                 await _eventDetailsViewModel.RevertPendingChangesForEventAsync(
                     _activeColorTarget.EventId,
                     _activeColorTarget.SourceKind);
+            },
+            async () =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
+                await ViewModel.TogglePendingPublishSelectionForEventAsync(_activeColorTarget.EventId);
             });
         InitializeComponent();
         _tooltipManager = new SharedTooltipManager(DispatcherQueue);
@@ -869,10 +882,11 @@ public sealed partial class YearViewControl : Page
         {
             var isSelected = selectedEventId is not null &&
                 string.Equals(eventId, selectedEventId, StringComparison.Ordinal);
+            var isSelectedForPush = ViewModel.IsPendingEventSelectedForPush(eventId);
 
             foreach (var registration in registrations)
             {
-                ApplySelectionState(registration.Border, registration, isSelected);
+                ApplySelectionState(registration.Border, registration, isSelected, isSelectedForPush);
             }
         }
     }
@@ -928,13 +942,22 @@ public sealed partial class YearViewControl : Page
         return nextMinute - now;
     }
 
-    private static void ApplySelectionState(Border border, EventBorderRegistration registration, bool isSelected)
+    private static void ApplySelectionState(
+        Border border,
+        EventBorderRegistration registration,
+        bool isSelected,
+        bool isSelectedForPush)
     {
-        var selectedThickness = new Thickness(1);
-        border.BorderBrush = isSelected ? SelectedBorderBrush : registration.DefaultBorderBrush;
-        border.BorderThickness = isSelected ? selectedThickness : registration.DefaultBorderThickness;
-        border.Padding = isSelected
-            ? AdjustPaddingForThickness(registration.DefaultPadding, registration.DefaultBorderThickness, selectedThickness)
+        var targetBrush = isSelected
+            ? SelectedBorderBrush
+            : isSelectedForPush
+                ? SelectedForPushBorderBrush
+                : registration.DefaultBorderBrush;
+        var targetThickness = isSelected || isSelectedForPush ? new Thickness(1) : registration.DefaultBorderThickness;
+        border.BorderBrush = targetBrush;
+        border.BorderThickness = targetThickness;
+        border.Padding = isSelected || isSelectedForPush
+            ? AdjustPaddingForThickness(registration.DefaultPadding, registration.DefaultBorderThickness, targetThickness)
             : registration.DefaultPadding;
     }
 

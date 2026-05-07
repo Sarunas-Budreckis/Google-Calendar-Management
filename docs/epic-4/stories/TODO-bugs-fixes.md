@@ -1,0 +1,1 @@
+- [ ] Set up deterministic overlapping event protocol

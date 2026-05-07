@@ -187,6 +187,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton<IGcalEventRepository, GcalEventRepository>();
             services.AddSingleton<IPendingEventRepository, PendingEventRepository>();
             services.AddSingleton<IPendingEventDraftService, PendingEventDraftService>();
+            services.AddSingleton<IPendingEventPublishService, PendingEventPublishService>();
             services.AddSingleton<ISystemStateRepository, SystemStateRepository>();
             services.AddSingleton<IColorMappingService, ColorMappingService>();
             services.AddSingleton<ICalendarQueryService, CalendarQueryService>();

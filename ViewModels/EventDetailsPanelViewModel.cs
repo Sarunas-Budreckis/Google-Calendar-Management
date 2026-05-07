@@ -69,6 +69,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private bool _isInitializingEditFields;
     private bool _hasPendingLocalChanges;
     private bool _isSaving;
+    private bool _isUneditedNewDraft;
     private UndoState? _undoState;
 
     public EventDetailsPanelViewModel(
@@ -101,6 +102,10 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         WeakReferenceMessenger.Default.Register<EventDetailsPanelViewModel, SyncCompletedMessage>(
             this,
             static (recipient, _) => recipient.OnSyncCompleted());
+
+        WeakReferenceMessenger.Default.Register<EventDetailsPanelViewModel, EventUpdatedMessage>(
+            this,
+            static (recipient, message) => recipient.OnEventUpdated(message));
     }
 
     public bool IsPanelVisible
@@ -280,6 +285,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     }
 
     public bool UsesSingleDateEditor => EditStartDate == EditEndDate;
+
+    public bool IsNewUneditedDraft => _isUneditedNewDraft;
 
     public bool CanInteractivelyAdjustSelectedTimedEvent =>
         IsEditMode &&
@@ -631,6 +638,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         }
 
         ApplyEditColor(normalizedColorKey);
+        _isUneditedNewDraft = false;
         _hasPendingLocalChanges = true;
         PublishOptimisticEventUpdate();
 
@@ -918,9 +926,10 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             if (!ct.IsCancellationRequested)
             {
                 ApplyEventDetails(loadedEvent, message.EventId!, keepEditMode: false);
-                if (message.OpenInEditMode)
+                EnterEditMode();
+                if (message.OpenInEditMode && loadedEvent.SourceKind == CalendarEventSourceKind.Pending)
                 {
-                    EnterEditMode();
+                    _isUneditedNewDraft = true;
                 }
             }
         });
@@ -976,6 +985,35 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         _ = LoadEventAsync(new EventSelectedMessage(_currentEventId, _currentSourceKind), _loadCts.Token);
     }
 
+    private void OnEventUpdated(EventUpdatedMessage message)
+    {
+        if (message.PreviewEvent is not null ||
+            _currentEventId is null ||
+            IsEditMode)
+        {
+            return;
+        }
+
+        var matchesCurrentEvent =
+            string.Equals(_currentEventId, message.EventId, StringComparison.Ordinal) ||
+            string.Equals(_currentEventId, message.PreviousEventId, StringComparison.Ordinal);
+
+        if (!matchesCurrentEvent)
+        {
+            return;
+        }
+
+        if (string.Equals(_currentEventId, message.PreviousEventId, StringComparison.Ordinal))
+        {
+            _currentEventId = message.EventId;
+            _currentSourceKind = CalendarEventSourceKind.Google;
+        }
+
+        _loadCts.Cancel();
+        _loadCts = new CancellationTokenSource();
+        _ = LoadEventAsync(new EventSelectedMessage(_currentEventId, _currentSourceKind), _loadCts.Token);
+    }
+
     private async Task ClosePanelAsync()
     {
         await HandleEscapeAsync();
@@ -983,6 +1021,12 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     private void HidePanel()
     {
+        if (_isUneditedNewDraft && _currentEventId is not null)
+        {
+            var idToDelete = _currentEventId;
+            _ = DeleteUneditedDraftAsync(idToDelete);
+        }
+
         _currentEventId = null;
         _currentSourceKind = null;
         _currentEvent = null;
@@ -1002,6 +1046,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private void ResetEditSession()
     {
         StopDebounce();
+        _isUneditedNewDraft = false;
         _isInitializingEditFields = true;
         IsEditMode = false;
         EditTitle = string.Empty;
@@ -1033,6 +1078,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             return true;
         }
 
+        _isUneditedNewDraft = false;
         HandleEditableChange(fieldName, previousValue);
         return true;
     }
@@ -1266,6 +1312,12 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         EditColorId = normalizedColorKey;
         EditColorName = _colorMappingService.GetDisplayName(normalizedColorKey);
         EditColorHex = _colorMappingService.GetHexColor(normalizedColorKey);
+    }
+
+    private async Task DeleteUneditedDraftAsync(string pendingEventId)
+    {
+        await _pendingEventRepository.DeleteByPendingEventIdAsync(pendingEventId);
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(pendingEventId));
     }
 
     private void RunOnUiThread(Action action)

@@ -14,6 +14,8 @@ public class PendingEvent
     public bool AppCreated { get; set; } = true;
     public string? SourceSystem { get; set; } = "manual";
     public bool ReadyToPublish { get; set; }
+    public DateTime? PublishAttemptedAt { get; set; }
+    public string? PublishError { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

@@ -42,6 +42,7 @@ public sealed class ColorMappingServiceTests
     [InlineData("4", "flamingo")]
     [InlineData("6", "orange")]
     [InlineData("3", "lavender")]
+    [InlineData("7", "lavender")]
     public void NormalizeColorKey_GoogleAlias_ReturnsCanonicalKey(string rawColorId, string expectedKey)
     {
         _sut.NormalizeColorKey(rawColorId).Should().Be(expectedKey);
@@ -92,10 +93,34 @@ public sealed class ColorMappingServiceTests
     [Fact]
     public void AllColors_ContainsCanonicalAndNumericAliases()
     {
-        _sut.AllColors.Should().HaveCount(18);
+        _sut.AllColors.Should().HaveCount(19);
         foreach (var hex in _sut.AllColors.Values)
         {
             hex.Should().MatchRegex("^#[0-9A-Fa-f]{6}$");
         }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("azure")]
+    [InlineData("unknown")]
+    public void GetGoogleColorId_AzureOrFallback_ReturnsNull(string? colorId)
+    {
+        _sut.GetGoogleColorId(colorId).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("lavender", "7")]
+    [InlineData("navy", "2")]
+    [InlineData("flamingo", "4")]
+    [InlineData("yellow", "5")]
+    [InlineData("orange", "6")]
+    [InlineData("grey", "8")]
+    [InlineData("purple", "9")]
+    [InlineData("sage", "10")]
+    public void GetGoogleColorId_NonAzureCanonicalKey_ReturnsMappedId(string colorId, string expectedGoogleId)
+    {
+        _sut.GetGoogleColorId(colorId).Should().Be(expectedGoogleId);
     }
 }

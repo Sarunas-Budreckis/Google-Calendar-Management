@@ -19,4 +19,19 @@ public interface IGoogleCalendarService
         string calendarId,
         string syncToken,
         CancellationToken ct = default);
+
+    Task<OperationResult<GcalEventDto>> GetEventAsync(
+        string calendarId,
+        string eventId,
+        CancellationToken ct = default);
+
+    Task<GoogleCalendarWriteResult> InsertEventAsync(
+        GoogleCalendarWriteRequest request,
+        CancellationToken ct = default);
+
+    Task<GoogleCalendarWriteResult> UpdateEventAsync(
+        string eventId,
+        GoogleCalendarWriteRequest request,
+        string? ifMatchEtag,
+        CancellationToken ct = default);
 }

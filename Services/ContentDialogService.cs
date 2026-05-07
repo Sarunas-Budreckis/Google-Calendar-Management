@@ -1,4 +1,6 @@
+using Windows.ApplicationModel.DataTransfer;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
 
 namespace GoogleCalendarManagement.Services;
 
@@ -13,6 +15,11 @@ public sealed class ContentDialogService : IContentDialogService
 
     public async Task ShowErrorAsync(string title, string message)
     {
+        await ShowMessageAsync(title, message);
+    }
+
+    public async Task ShowMessageAsync(string title, string message, string closeButtonText = "OK")
+    {
         var xamlRoot = _windowService.GetXamlRoot();
         if (xamlRoot is null)
         {
@@ -23,10 +30,87 @@ public sealed class ContentDialogService : IContentDialogService
         {
             Title = title,
             Content = message,
-            CloseButtonText = "OK",
+            CloseButtonText = closeButtonText,
             XamlRoot = xamlRoot
         };
 
         await dialog.ShowAsync();
+    }
+
+    public async Task ShowSelectableTextAsync(
+        string title,
+        string message,
+        string closeButtonText = "Close",
+        string copyButtonText = "Copy to clipboard")
+    {
+        var xamlRoot = _windowService.GetXamlRoot();
+        if (xamlRoot is null)
+        {
+            return;
+        }
+
+        var textBox = new TextBox
+        {
+            Text = message,
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            SelectionHighlightColor = (Microsoft.UI.Xaml.Media.SolidColorBrush?)Application.Current.Resources["TextSelectionHighlightColorThemeBrush"],
+            MinWidth = 640,
+            MaxWidth = 820,
+            MinHeight = 280,
+            MaxHeight = 520
+        };
+        ScrollViewer.SetHorizontalScrollBarVisibility(textBox, ScrollBarVisibility.Disabled);
+        ScrollViewer.SetVerticalScrollBarVisibility(textBox, ScrollBarVisibility.Auto);
+
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = textBox,
+            SecondaryButtonText = copyButtonText,
+            CloseButtonText = closeButtonText,
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = xamlRoot
+        };
+
+        while (true)
+        {
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Secondary)
+            {
+                break;
+            }
+
+            var dataPackage = new DataPackage();
+            dataPackage.SetText(message);
+            Clipboard.SetContent(dataPackage);
+            Clipboard.Flush();
+        }
+    }
+
+    public async Task<bool> ShowConfirmationAsync(
+        string title,
+        string message,
+        string primaryButtonText,
+        string closeButtonText = "Cancel")
+    {
+        var xamlRoot = _windowService.GetXamlRoot();
+        if (xamlRoot is null)
+        {
+            return false;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = message,
+            PrimaryButtonText = primaryButtonText,
+            CloseButtonText = closeButtonText,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot
+        };
+
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 }

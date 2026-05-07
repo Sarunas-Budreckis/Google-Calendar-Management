@@ -8,7 +8,6 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using Windows.System;
 using Windows.UI.Core;
 using Windows.UI;
@@ -17,9 +16,6 @@ namespace GoogleCalendarManagement.Views;
 
 public sealed partial class EventDetailsPanelControl : UserControl
 {
-    private const double PanelWidth = 380.0;
-    private Storyboard? _openStoryboard;
-    private Storyboard? _closeStoryboard;
     private bool _isSyncingEditors;
     private StackPanel? _editPanel;
     private TextBlock? _saveStatusTextBlock;
@@ -68,8 +64,6 @@ public sealed partial class EventDetailsPanelControl : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        _openStoryboard?.Stop();
-        _closeStoryboard?.Stop();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -117,26 +111,29 @@ public sealed partial class EventDetailsPanelControl : UserControl
 
     private void SyncVisibility(bool animate)
     {
-        if (ViewModel.IsPanelVisible)
-        {
-            OpenPanel(animate);
-        }
-        else
-        {
-            ClosePanel(animate);
-        }
+        VisualStateManager.GoToState(this, ViewModel.IsPanelVisible ? "EditMode" : "EmptyState", false);
     }
 
     private void SyncEditMode()
     {
-        VisualStateManager.GoToState(this, ViewModel.IsEditMode ? "EditMode" : "ReadOnlyMode", false);
-
-        if (ViewModel.IsEditMode)
+        if (!ViewModel.IsEditMode)
         {
-            EnsureEditPanel();
-            SyncEditPanelFromViewModel();
-            _ = DispatcherQueue.TryEnqueue(() => _editTitleTextBox?.Focus(FocusState.Programmatic));
+            return;
         }
+
+        EnsureEditPanel();
+        SyncEditPanelFromViewModel();
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_editTitleTextBox is not null)
+            {
+                _editTitleTextBox.Focus(FocusState.Programmatic);
+                if (ViewModel.IsNewUneditedDraft)
+                {
+                    _editTitleTextBox.SelectAll();
+                }
+            }
+        });
     }
 
     private void EnsureEditPanel()
@@ -494,67 +491,6 @@ public sealed partial class EventDetailsPanelControl : UserControl
         _isSyncingEditors = false;
     }
 
-    private void OpenPanel(bool animate)
-    {
-        _closeStoryboard?.Stop();
-        Visibility = Visibility.Visible;
-        UpdateColorSwatches();
-
-        if (!animate)
-        {
-            PanelTranslate.X = 0;
-            return;
-        }
-
-        PanelTranslate.X = PanelWidth;
-        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var animation = new DoubleAnimation
-        {
-            From = PanelWidth,
-            To = 0,
-            Duration = TimeSpan.FromMilliseconds(200),
-            EasingFunction = easing
-        };
-        Storyboard.SetTarget(animation, PanelTranslate);
-        Storyboard.SetTargetProperty(animation, nameof(TranslateTransform.X));
-
-        _openStoryboard = new Storyboard();
-        _openStoryboard.Children.Add(animation);
-        _openStoryboard.Begin();
-    }
-
-    private void ClosePanel(bool animate)
-    {
-        _openStoryboard?.Stop();
-
-        if (!animate)
-        {
-            PanelTranslate.X = PanelWidth;
-            Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        var easing = new CubicEase { EasingMode = EasingMode.EaseIn };
-        var animation = new DoubleAnimation
-        {
-            From = 0,
-            To = PanelWidth,
-            Duration = TimeSpan.FromMilliseconds(200),
-            EasingFunction = easing
-        };
-        Storyboard.SetTarget(animation, PanelTranslate);
-        Storyboard.SetTargetProperty(animation, nameof(TranslateTransform.X));
-
-        _closeStoryboard = new Storyboard();
-        _closeStoryboard.Completed += (_, _) =>
-        {
-            Visibility = Visibility.Collapsed;
-            PanelTranslate.X = PanelWidth;
-        };
-        _closeStoryboard.Children.Add(animation);
-        _closeStoryboard.Begin();
-    }
-
     private async void OnPanelKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key == VirtualKey.Escape)
@@ -663,8 +599,6 @@ public sealed partial class EventDetailsPanelControl : UserControl
 
     private void UpdateColorSwatches()
     {
-        UpdateColorSwatch(ColorSwatch, ViewModel.ColorHex);
-
         if (_editColorSwatch is not null)
         {
             UpdateColorSwatch(_editColorSwatch, ViewModel.EditColorHex);

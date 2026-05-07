@@ -228,6 +228,94 @@ public sealed class GoogleCalendarServiceTests : IDisposable
         result.ErrorMessage.Should().Contain("connect");
     }
 
+    [Fact]
+    public async Task InsertEventAsync_MapsAllDayPayloadAndPreservesGoogleColorId()
+    {
+        var tokenStorage = new Mock<ITokenStorageService>();
+        tokenStorage.Setup(mock => mock.LoadTokenAsync()).ReturnsAsync(CreateTokenResponse());
+
+        Event? capturedPayload = null;
+        var apiClient = new Mock<IGoogleCalendarApiClient>();
+        apiClient
+            .Setup(mock => mock.InsertEventAsync(
+                "primary",
+                It.IsAny<Event>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, Event, CancellationToken>((_, payload, _) => capturedPayload = payload)
+            .ReturnsAsync(new Event
+            {
+                Id = "inserted-1",
+                Summary = "All day publish",
+                ColorId = "10",
+                ETag = "\"etag-inserted\"",
+                Start = new EventDateTime { Date = "2026-04-10" },
+                End = new EventDateTime { Date = "2026-04-12" }
+            });
+
+        var factory = new Mock<IGoogleCalendarApiClientFactory>();
+        factory.Setup(mock => mock.CreateAsync(It.IsAny<Google.Apis.Auth.OAuth2.UserCredential>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(apiClient.Object);
+
+        var service = CreateService(tokenStorage.Object, factory.Object);
+
+        var result = await service.InsertEventAsync(new GoogleCalendarWriteRequest(
+            "primary",
+            "All day publish",
+            "Description",
+            new DateTime(2026, 04, 10, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 04, 12, 0, 0, 0, DateTimeKind.Utc),
+            true,
+            "10"));
+
+        result.Success.Should().BeTrue();
+        capturedPayload.Should().NotBeNull();
+        capturedPayload!.Start!.Date.Should().Be("2026-04-10");
+        capturedPayload.Start.DateTimeDateTimeOffset.Should().BeNull();
+        capturedPayload.End!.Date.Should().Be("2026-04-12");
+        capturedPayload.ColorId.Should().Be("10");
+    }
+
+    [Fact]
+    public async Task UpdateEventAsync_WhenPreconditionFails_ReturnsConflictFailureKind()
+    {
+        var tokenStorage = new Mock<ITokenStorageService>();
+        tokenStorage.Setup(mock => mock.LoadTokenAsync()).ReturnsAsync(CreateTokenResponse());
+
+        var apiClient = new Mock<IGoogleCalendarApiClient>();
+        apiClient
+            .Setup(mock => mock.UpdateEventAsync(
+                "primary",
+                "evt-1",
+                It.IsAny<Event>(),
+                "\"etag-1\"",
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Google.GoogleApiException("calendar", "precondition failed")
+            {
+                HttpStatusCode = System.Net.HttpStatusCode.PreconditionFailed
+            });
+
+        var factory = new Mock<IGoogleCalendarApiClientFactory>();
+        factory.Setup(mock => mock.CreateAsync(It.IsAny<Google.Apis.Auth.OAuth2.UserCredential>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(apiClient.Object);
+
+        var service = CreateService(tokenStorage.Object, factory.Object);
+
+        var result = await service.UpdateEventAsync(
+            "evt-1",
+            new GoogleCalendarWriteRequest(
+                "primary",
+                "Edited title",
+                null,
+                new DateTime(2026, 04, 10, 9, 0, 0, DateTimeKind.Utc),
+                new DateTime(2026, 04, 10, 10, 0, 0, DateTimeKind.Utc),
+                false,
+                "9"),
+            "\"etag-1\"");
+
+        result.Success.Should().BeFalse();
+        result.FailureKind.Should().Be(GoogleCalendarWriteFailureKind.PreconditionFailed);
+    }
+
     public void Dispose()
     {
         _connection.Dispose();

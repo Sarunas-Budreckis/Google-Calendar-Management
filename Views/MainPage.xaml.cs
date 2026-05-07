@@ -19,7 +19,6 @@ namespace GoogleCalendarManagement.Views;
 public sealed partial class MainPage : Page
 {
     private static CornerRadius MediumCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusMedium"];
-    private const double DetailsPanelWidth = 380.0;
 
     private readonly EventDetailsPanelControl _eventDetailsPanel;
     private readonly Dictionary<ViewMode, Button> _viewModeButtons;
@@ -33,7 +32,6 @@ public sealed partial class MainPage : Page
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly TimeProvider _timeProvider;
     private readonly TranslateTransform _selectionIndicatorTransform = new();
-    private Storyboard? _detailsPanelWidthStoryboard;
     private Storyboard? _selectionIndicatorStoryboard;
     private DispatcherQueueTimer? _lastSyncRefreshTimer;
     private DispatcherQueueTimer? _notificationAutoDismissTimer;
@@ -82,14 +80,12 @@ public sealed partial class MainPage : Page
     {
         _isLoaded = true;
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
-        _eventDetailsPanel.ViewModel.PropertyChanged += EventDetailsPanelViewModel_PropertyChanged;
         StartLastSyncRefreshTimer();
         ViewModel.RefreshRelativeSyncPresentation();
         _selectionIndicatorMode = ViewModel.CurrentViewMode;
         UpdateViewModeButtons();
         UpdateSelectionIndicator(_selectionIndicatorMode, animate: false);
         NavigateToCurrentView(force: true);
-        SyncDetailsPanelHostWidth(animate: false);
         _isUpdatingPicker = true;
         JumpToDatePicker.Date = ViewModel.CurrentDate.ToDateTime(TimeOnly.MinValue);
         _isUpdatingPicker = false;
@@ -99,8 +95,6 @@ public sealed partial class MainPage : Page
     {
         _isLoaded = false;
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
-        _eventDetailsPanel.ViewModel.PropertyChanged -= EventDetailsPanelViewModel_PropertyChanged;
-        _detailsPanelWidthStoryboard?.Stop();
         StopLastSyncRefreshTimer();
         StopNotificationAutoDismissTimer();
     }
@@ -331,6 +325,98 @@ public sealed partial class MainPage : Page
         ViewModel.RequestSyncFlyoutForVisibleRange();
     }
 
+    private async void PendingPublishFlyout_Opened(object sender, object e)
+    {
+        await ViewModel.LoadPendingPublishItemsAsync();
+    }
+
+    private async void PendingPublishGoToEventButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PendingPublishItemViewModel item })
+        {
+            return;
+        }
+
+        PushToGcalButton.Flyout?.Hide();
+        await ViewModel.GoToPendingPublishItemAsync(item);
+    }
+
+    private async void PendingPublishErrorDetailsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PendingPublishItemViewModel item } ||
+            string.IsNullOrWhiteSpace(item.PublishErrorDetails))
+        {
+            return;
+        }
+
+        await ViewModel.ShowPendingPublishErrorDetailsAsync(item);
+    }
+
+    private async void PendingPublishErrorText_Tapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PendingPublishItemViewModel item } ||
+            string.IsNullOrWhiteSpace(item.PublishErrorDetails))
+        {
+            return;
+        }
+
+        await ViewModel.ShowPendingPublishErrorDetailsAsync(item);
+    }
+
+    private void PendingPublishItem_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PendingPublishItemViewModel item })
+        {
+            return;
+        }
+
+        var menu = new MenuFlyout();
+
+        var revertLabel = item.EventSourceKind == CalendarEventSourceKind.Pending
+            ? "Discard draft"
+            : "Revert pending edit";
+        var revertItem = new MenuFlyoutItem { Text = revertLabel };
+        revertItem.Click += async (_, _) => await ViewModel.RevertPendingPublishItemAsync(item);
+        menu.Items.Add(revertItem);
+
+        menu.Items.Add(new MenuFlyoutSeparator());
+
+        var colorSubItem = new MenuFlyoutSubItem { Text = "Change color" };
+        foreach (var color in ViewModel.AvailableColors)
+        {
+            var colorOption = color;
+            var colorItem = new MenuFlyoutItem { Text = colorOption.DisplayName };
+            colorItem.Icon = new FontIcon
+            {
+                Glyph = "",
+                Foreground = new SolidColorBrush(ParseHexToColor(colorOption.Hex))
+            };
+            colorItem.Click += async (_, _) =>
+                await ViewModel.ChangePendingPublishItemColorAsync(item, colorOption.Key);
+            colorSubItem.Items.Add(colorItem);
+        }
+
+        menu.Items.Add(colorSubItem);
+
+        menu.ShowAt(sender as UIElement, e.GetPosition(sender as UIElement));
+        e.Handled = true;
+    }
+
+    private static Windows.UI.Color ParseHexToColor(string hex)
+    {
+        var normalized = hex.TrimStart('#');
+        if (normalized.Length != 6)
+        {
+            return ColorHelper.FromArgb(0xFF, 0x00, 0x88, 0xCC);
+        }
+
+        return ColorHelper.FromArgb(
+            0xFF,
+            Convert.ToByte(normalized.Substring(0, 2), 16),
+            Convert.ToByte(normalized.Substring(2, 2), 16),
+            Convert.ToByte(normalized.Substring(4, 2), 16));
+    }
+
     private async void ConfirmSyncButton_Click(object sender, RoutedEventArgs e)
     {
         GetSyncFlyout().Hide();
@@ -433,60 +519,6 @@ public sealed partial class MainPage : Page
         _selectionIndicatorStoryboard = storyboard;
         _selectionIndicatorMode = targetMode;
         _hasSelectionIndicatorPosition = true;
-        storyboard.Begin();
-    }
-
-    private void EventDetailsPanelViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName != nameof(EventDetailsPanelViewModel.IsPanelVisible))
-        {
-            return;
-        }
-
-        _ = DispatcherQueue.TryEnqueue(() => SyncDetailsPanelHostWidth(animate: true));
-    }
-
-    private void SyncDetailsPanelHostWidth(bool animate)
-    {
-        var targetWidth = _eventDetailsPanel.ViewModel.IsPanelVisible ? DetailsPanelWidth : 0;
-        _detailsPanelWidthStoryboard?.Stop();
-
-        if (!animate || !_isLoaded)
-        {
-            EventDetailsPanel.Width = targetWidth;
-            EventDetailsPanel.IsHitTestVisible = targetWidth > 0;
-            return;
-        }
-
-        if (targetWidth > 0)
-        {
-            EventDetailsPanel.IsHitTestVisible = true;
-        }
-
-        var easing = new CubicEase
-        {
-            EasingMode = targetWidth > 0
-                ? EasingMode.EaseOut
-                : EasingMode.EaseIn
-        };
-        var animation = new DoubleAnimation
-        {
-            To = targetWidth,
-            Duration = TimeSpan.FromMilliseconds(200),
-            EasingFunction = easing
-        };
-        Storyboard.SetTarget(animation, EventDetailsPanel);
-        Storyboard.SetTargetProperty(animation, nameof(FrameworkElement.Width));
-
-        var storyboard = new Storyboard();
-        storyboard.Children.Add(animation);
-        storyboard.Completed += (_, _) =>
-        {
-            EventDetailsPanel.Width = targetWidth;
-            EventDetailsPanel.IsHitTestVisible = targetWidth > 0;
-        };
-
-        _detailsPanelWidthStoryboard = storyboard;
         storyboard.Begin();
     }
 

@@ -680,6 +680,50 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         liveEvent.SourceSystem.Should().Be("manual");
     }
 
+    [Fact]
+    public async Task SyncAsync_WhenGoogleOmitsColorId_PreservesExistingLocalColor()
+    {
+        var seedTimestamp = new DateTime(2026, 02, 04, 8, 0, 0, DateTimeKind.Utc);
+
+        await SeedEventAsync(new GcalEvent
+        {
+            GcalEventId = "event-color-preserve",
+            CalendarId = "primary",
+            Summary = "Original summary",
+            StartDatetime = seedTimestamp,
+            EndDatetime = seedTimestamp.AddHours(1),
+            ColorId = "lavender",
+            GcalEtag = "\"etag-original\"",
+            GcalUpdatedAt = seedTimestamp,
+            AppCreated = true,
+            AppPublished = true,
+            AppPublishedAt = seedTimestamp,
+            SourceSystem = "manual",
+            CreatedAt = seedTimestamp,
+            UpdatedAt = seedTimestamp
+        });
+
+        var syncManager = CreateSyncManager(new[]
+        {
+            CreateEvent(
+                "event-color-preserve",
+                "Updated summary",
+                start: seedTimestamp,
+                end: seedTimestamp.AddHours(2),
+                colorId: null,
+                etag: "\"etag-updated\"",
+                updatedAt: seedTimestamp.AddDays(1))
+        });
+
+        var result = await syncManager.SyncAsync("primary");
+
+        result.Success.Should().BeTrue();
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-color-preserve");
+        liveEvent.ColorId.Should().Be("lavender");
+    }
+
     public void Dispose()
     {
         _connection.Dispose();

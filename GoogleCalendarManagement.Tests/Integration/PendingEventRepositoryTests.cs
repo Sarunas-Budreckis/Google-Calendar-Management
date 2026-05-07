@@ -162,6 +162,8 @@ public sealed class PendingEventRepositoryTests : IDisposable
                     app_created INTEGER NOT NULL,
                     source_system TEXT NULL,
                     ready_to_publish INTEGER NOT NULL,
+                    publish_attempted_at TEXT NULL,
+                    publish_error TEXT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );

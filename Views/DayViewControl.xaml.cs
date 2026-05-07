@@ -26,6 +26,7 @@ public sealed partial class DayViewControl : Page
     private const double StandardTopPadding = 6.0;
     private const double ShortEventContentHeightEstimate = 16.0;
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
+    private static readonly Brush SelectedForPushBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4C, 0xAF, 0x50));
     private static readonly Brush TodayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4E, 0x8F, 0xD8));
     private static readonly Brush TodayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x73, 0xA8, 0xE4));
     private static readonly Brush TodayTextBrush = new SolidColorBrush(Colors.White);
@@ -72,7 +73,10 @@ public sealed partial class DayViewControl : Page
                     colorKey);
                 _activeColorTarget = _activeColorTarget with { ColorKey = colorKey };
             },
-            () => new EventColorPickerMenuState(_activeColorTarget?.IsPending == true),
+            () => new EventColorPickerMenuState(
+                ShowRevert: _activeColorTarget?.IsPending == true,
+                ShowPendingPublishSelectionToggle: _activeColorTarget?.IsPending == true,
+                IsSelectedForPush: _activeColorTarget is not null && ViewModel.IsPendingEventSelectedForPush(_activeColorTarget.EventId)),
             async () =>
             {
                 if (_activeColorTarget is null)
@@ -83,6 +87,15 @@ public sealed partial class DayViewControl : Page
                 await _eventDetailsViewModel.RevertPendingChangesForEventAsync(
                     _activeColorTarget.EventId,
                     _activeColorTarget.SourceKind);
+            },
+            async () =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
+                await ViewModel.TogglePendingPublishSelectionForEventAsync(_activeColorTarget.EventId);
             });
         InitializeComponent();
         AllDayPanel.Background = TransparentPanelBrush;
@@ -548,10 +561,11 @@ public sealed partial class DayViewControl : Page
         {
             var isSelected = selectedEventId is not null &&
                 string.Equals(eventId, selectedEventId, StringComparison.Ordinal);
+            var isSelectedForPush = ViewModel.IsPendingEventSelectedForPush(eventId);
 
             foreach (var registration in registrations)
             {
-                ApplySelectionState(registration.Border, registration, isSelected);
+                ApplySelectionState(registration.Border, registration, isSelected, isSelectedForPush);
             }
         }
     }
@@ -575,10 +589,15 @@ public sealed partial class DayViewControl : Page
         border.PointerCaptureLost -= TimedEventBlock_PointerCaptureLost;
         border.PointerExited -= TimedEventBlock_PointerExited;
 
+        string? defaultTimeText = null;
+        if (border.Child is StackPanel sp && sp.Children.Count >= 2 && sp.Children[1] is TextBlock timeTextBlock)
+            defaultTimeText = timeTextBlock.Text;
+
         _interactiveTimedEventBorders[border] = new TimedEventInteractionRegistration(
             eventId,
             border.Margin,
-            border.Height);
+            border.Height,
+            defaultTimeText);
 
         border.PointerPressed += TimedEventBlock_PointerPressed;
         border.PointerMoved += TimedEventBlock_PointerMoved;
@@ -617,6 +636,7 @@ public sealed partial class DayViewControl : Page
     private void TimedEventBlock_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not Border border ||
+            !e.GetCurrentPoint(border).Properties.IsLeftButtonPressed ||
             !_interactiveTimedEventBorders.TryGetValue(border, out var registration) ||
             !_eventDetailsViewModel.TryGetEditableTimedRange(registration.EventId, out var startLocal, out var endLocal))
         {
@@ -732,9 +752,9 @@ public sealed partial class DayViewControl : Page
 
         Focus(FocusState.Programmatic);
         var anchorLocal = GetLocalTimeFromPosition(pointerPoint.Position.Y);
-        var previewRectangle = CreateDraftPreviewRectangle();
-        CreationOverlayCanvas.Children.Add(previewRectangle);
-        _activeDraftCreation = new DraftCreationState(e.Pointer.PointerId, anchorLocal, previewRectangle);
+        var (previewBorder, timeLabel) = CreateDraftPreviewElement();
+        CreationOverlayCanvas.Children.Add(previewBorder);
+        _activeDraftCreation = new DraftCreationState(e.Pointer.PointerId, anchorLocal, previewBorder, timeLabel);
         grid.CapturePointer(e.Pointer);
         UpdateDraftPreview(pointerPoint.Position);
         _suppressSurfaceTapOnce = true;
@@ -869,28 +889,38 @@ public sealed partial class DayViewControl : Page
         var height = Math.Max(
             TimeFocusedViewLayoutMetrics.MinDraftPreviewHeight,
             (endLocal - startLocal).TotalMinutes / 60.0 * TimeFocusedViewLayoutMetrics.HourRowHeight);
-        _activeDraftCreation.PreviewRectangle.Width = Math.Max(
+        _activeDraftCreation.PreviewBorder.Width = Math.Max(
             0,
             CreationOverlayCanvas.ActualWidth
                 - TimeFocusedViewLayoutMetrics.TimeColumnWidth
                 - (TimeFocusedViewLayoutMetrics.DraftOverlayInset * 2));
-        _activeDraftCreation.PreviewRectangle.Height = height;
+        _activeDraftCreation.PreviewBorder.Height = height;
+        _activeDraftCreation.TimeLabel.Text = $"{startLocal:t} – {endLocal:t}";
         Canvas.SetLeft(
-            _activeDraftCreation.PreviewRectangle,
+            _activeDraftCreation.PreviewBorder,
             TimeFocusedViewLayoutMetrics.TimeColumnWidth + TimeFocusedViewLayoutMetrics.DraftOverlayInset);
-        Canvas.SetTop(_activeDraftCreation.PreviewRectangle, top);
+        Canvas.SetTop(_activeDraftCreation.PreviewBorder, top);
     }
 
-    private Rectangle CreateDraftPreviewRectangle()
+    private static (Border PreviewBorder, TextBlock TimeLabel) CreateDraftPreviewElement()
     {
-        return new Rectangle
+        var white = new SolidColorBrush(Colors.White);
+        var timeLabel = new TextBlock
         {
-            RadiusX = 6,
-            RadiusY = 6,
-            Fill = new SolidColorBrush(ColorHelper.FromArgb(0x66, 0x00, 0x88, 0xCC)),
-            Stroke = new SolidColorBrush(ColorHelper.FromArgb(0xCC, 0x00, 0x88, 0xCC)),
-            StrokeThickness = 1
+            Foreground = white,
+            FontSize = 11,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Margin = new Thickness(6, 4, 6, 4)
         };
+        var border = new Border
+        {
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(ColorHelper.FromArgb(0x99, 0x00, 0x88, 0xCC)),
+            BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xCC, 0x00, 0x88, 0xCC)),
+            BorderThickness = new Thickness(1),
+            Child = timeLabel
+        };
+        return (border, timeLabel);
     }
 
     private void ClearDraftPreview()
@@ -900,7 +930,7 @@ public sealed partial class DayViewControl : Page
             return;
         }
 
-        CreationOverlayCanvas.Children.Remove(_activeDraftCreation.PreviewRectangle);
+        CreationOverlayCanvas.Children.Remove(_activeDraftCreation.PreviewBorder);
         _activeDraftCreation = null;
         _suppressSurfaceTapOnce = false;
     }
@@ -933,13 +963,22 @@ public sealed partial class DayViewControl : Page
             : segment.VisibleEnd;
     }
 
-    private static void ApplySelectionState(Border border, EventBorderRegistration registration, bool isSelected)
+    private static void ApplySelectionState(
+        Border border,
+        EventBorderRegistration registration,
+        bool isSelected,
+        bool isSelectedForPush)
     {
-        var selectedThickness = new Thickness(2);
-        border.BorderBrush = isSelected ? SelectedBorderBrush : registration.DefaultBorderBrush;
-        border.BorderThickness = isSelected ? selectedThickness : registration.DefaultBorderThickness;
-        border.Padding = isSelected
-            ? AdjustPaddingForThickness(registration.DefaultPadding, registration.DefaultBorderThickness, selectedThickness)
+        var targetBrush = isSelected
+            ? SelectedBorderBrush
+            : isSelectedForPush
+                ? SelectedForPushBorderBrush
+                : registration.DefaultBorderBrush;
+        var targetThickness = isSelected || isSelectedForPush ? new Thickness(2) : registration.DefaultBorderThickness;
+        border.BorderBrush = targetBrush;
+        border.BorderThickness = targetThickness;
+        border.Padding = isSelected || isSelectedForPush
+            ? AdjustPaddingForThickness(registration.DefaultPadding, registration.DefaultBorderThickness, targetThickness)
             : registration.DefaultPadding;
     }
 
@@ -963,6 +1002,7 @@ public sealed partial class DayViewControl : Page
         Point pointerPosition)
     {
         var preview = GetPreviewRange(interaction, pointerPosition);
+        UpdateTimedEventTimeText(interaction.Border, preview.StartLocal, preview.EndLocal);
         if (interaction.Mode == EventInteractionMode.Move)
         {
             interaction.Transform.Y = MinutesToPixels(preview.MinuteDelta);
@@ -974,6 +1014,17 @@ public sealed partial class DayViewControl : Page
             interaction.Border.Height = Math.Max(
                 MinimumEventHeight,
                 registration.BaseHeight + MinutesToPixels(preview.MinuteDelta));
+        }
+    }
+
+    private static void UpdateTimedEventTimeText(Border border, DateTime startLocal, DateTime endLocal)
+    {
+        var timeText = $"{startLocal:t} – {endLocal:t}";
+        if (border.Child is StackPanel sp &&
+            sp.Children.Count >= 2 &&
+            sp.Children[1] is TextBlock timeBlock)
+        {
+            timeBlock.Text = timeText;
         }
     }
 
@@ -1038,6 +1089,14 @@ public sealed partial class DayViewControl : Page
         ProtectedCursor = null;
         border.Margin = registration.BaseMargin;
         border.Height = registration.BaseHeight;
+
+        if (registration.DefaultTimeText is not null &&
+            border.Child is StackPanel sp &&
+            sp.Children.Count >= 2 &&
+            sp.Children[1] is TextBlock timeBlock)
+        {
+            timeBlock.Text = registration.DefaultTimeText;
+        }
     }
 
     private DateOnly GetLocalToday()
@@ -1063,7 +1122,8 @@ public sealed partial class DayViewControl : Page
     private sealed record TimedEventInteractionRegistration(
         string EventId,
         Thickness BaseMargin,
-        double BaseHeight);
+        double BaseHeight,
+        string? DefaultTimeText);
 
     private sealed record EventInteractionState(
         Border Border,
@@ -1079,7 +1139,8 @@ public sealed partial class DayViewControl : Page
     private sealed record DraftCreationState(
         uint PointerId,
         DateTime AnchorLocal,
-        Rectangle PreviewRectangle);
+        Border PreviewBorder,
+        TextBlock TimeLabel);
 
     private sealed record PreviewRangeResult(DateTime StartLocal, DateTime EndLocal, int MinuteDelta);
 

@@ -1,5 +1,8 @@
 using System.Globalization;
 using System.Diagnostics;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -7,6 +10,7 @@ using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage;
 
@@ -20,8 +24,11 @@ public sealed class MainViewModel : ObservableObject
     private readonly ISyncStatusService _syncStatusService;
     private readonly ISyncManager _syncManager;
     private readonly IContentDialogService _dialogService;
+    private readonly IPendingEventPublishService _pendingEventPublishService;
+    private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly IIcsExportService _icsExportService;
     private readonly IIcsImportService _icsImportService;
+    private readonly IColorMappingService _colorMappingService;
     private readonly ILogger<MainViewModel> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly Lock _yearViewCacheGate = new();
@@ -47,6 +54,12 @@ public sealed class MainViewModel : ObservableObject
     private string _notificationMessage = string.Empty;
     private InfoBarSeverity _notificationSeverity = InfoBarSeverity.Informational;
     private bool _isNotificationOpen;
+    private string? _notificationDetails;
+    private readonly ObservableCollection<PendingPublishItemViewModel> _pendingPublishItems = [];
+    private bool _isPublishingPendingEvents;
+    private int _publishCompletedCount;
+    private int _publishTotalCount;
+    private string _pendingPublishSummaryText = string.Empty;
 
     public MainViewModel(
         ICalendarQueryService calendarQueryService,
@@ -54,8 +67,11 @@ public sealed class MainViewModel : ObservableObject
         ISyncStatusService syncStatusService,
         ISyncManager syncManager,
         IContentDialogService dialogService,
+        IPendingEventPublishService pendingEventPublishService,
+        ICalendarSelectionService calendarSelectionService,
         IIcsExportService icsExportService,
         IIcsImportService icsImportService,
+        IColorMappingService colorMappingService,
         ILogger<MainViewModel> logger,
         TimeProvider? timeProvider = null)
     {
@@ -64,8 +80,11 @@ public sealed class MainViewModel : ObservableObject
         _syncStatusService = syncStatusService;
         _syncManager = syncManager;
         _dialogService = dialogService;
+        _pendingEventPublishService = pendingEventPublishService;
+        _calendarSelectionService = calendarSelectionService;
         _icsExportService = icsExportService;
         _icsImportService = icsImportService;
+        _colorMappingService = colorMappingService;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -75,6 +94,13 @@ public sealed class MainViewModel : ObservableObject
         NavigateTodayCommand = new AsyncRelayCommand(NavigateTodayAsync);
         JumpToDateCommand = new AsyncRelayCommand<DateOnly>(JumpToDateAsync);
         RefreshStatusCommand = new AsyncRelayCommand(RefreshStatusAsync);
+        SelectAllPendingPublishCommand = new RelayCommand(ToggleSelectAllPendingPublishItems);
+        PublishSelectedPendingEventsCommand = new AsyncRelayCommand(
+            PublishSelectedPendingEventsAsync,
+            () => CanPublishSelectedPendingEvents);
+        ShowNotificationDetailsCommand = new AsyncRelayCommand(
+            ShowNotificationDetailsAsync,
+            () => !string.IsNullOrWhiteSpace(NotificationDetails));
 
         var (defaultFrom, defaultTo) = GetDefaultSyncRange();
         _selectedSyncFromDate = ToLocalDateOffset(defaultFrom);
@@ -239,6 +265,73 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _isNotificationOpen, value);
     }
 
+    public string? NotificationDetails
+    {
+        get => _notificationDetails;
+        private set
+        {
+            if (SetProperty(ref _notificationDetails, value))
+            {
+                OnPropertyChanged(nameof(NotificationDetailsVisibility));
+                ShowNotificationDetailsCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public Visibility NotificationDetailsVisibility =>
+        string.IsNullOrWhiteSpace(NotificationDetails) ? Visibility.Collapsed : Visibility.Visible;
+
+    public ObservableCollection<PendingPublishItemViewModel> PendingPublishItems => _pendingPublishItems;
+
+    public int PendingPublishCount => _pendingPublishItems.Count;
+
+    public Visibility PendingPublishBadgeVisibility =>
+        PendingPublishCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool CanOpenPendingPublishFlyout => PendingPublishCount > 0 && !IsPublishingPendingEvents;
+
+    public int SelectedPendingPublishCount => _pendingPublishItems.Count(item => item.IsSelected);
+
+    public bool CanPublishSelectedPendingEvents => SelectedPendingPublishCount > 0 && !IsPublishingPendingEvents;
+
+    public bool AllPendingPublishItemsSelected =>
+        PendingPublishCount > 0 && _pendingPublishItems.All(item => item.IsSelected);
+
+    public bool IsPublishingPendingEvents
+    {
+        get => _isPublishingPendingEvents;
+        private set
+        {
+            if (SetProperty(ref _isPublishingPendingEvents, value))
+            {
+                OnPropertyChanged(nameof(CanOpenPendingPublishFlyout));
+                OnPropertyChanged(nameof(CanPublishSelectedPendingEvents));
+                PublishSelectedPendingEventsCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public string PublishProgressText =>
+        IsPublishingPendingEvents ? $"{_publishCompletedCount} / {_publishTotalCount}" : string.Empty;
+
+    public Visibility PublishProgressVisibility =>
+        IsPublishingPendingEvents ? Visibility.Visible : Visibility.Collapsed;
+
+    public string PendingPublishSummaryText
+    {
+        get => _pendingPublishSummaryText;
+        private set
+        {
+            if (SetProperty(ref _pendingPublishSummaryText, value))
+            {
+                OnPropertyChanged(nameof(PendingPublishSummaryVisibility));
+            }
+        }
+    }
+
+    public Visibility PendingPublishSummaryVisibility =>
+        string.IsNullOrWhiteSpace(PendingPublishSummaryText) ? Visibility.Collapsed : Visibility.Visible;
+
     public IAsyncRelayCommand<ViewMode> SwitchViewModeCommand { get; }
 
     public IAsyncRelayCommand NavigatePreviousCommand { get; }
@@ -250,6 +343,12 @@ public sealed class MainViewModel : ObservableObject
     public IAsyncRelayCommand<DateOnly> JumpToDateCommand { get; }
 
     public IAsyncRelayCommand RefreshStatusCommand { get; }
+
+    public IRelayCommand SelectAllPendingPublishCommand { get; }
+
+    public IAsyncRelayCommand PublishSelectedPendingEventsCommand { get; }
+
+    public IAsyncRelayCommand ShowNotificationDetailsCommand { get; }
 
     public Task InitializeAsync()
     {
@@ -312,6 +411,155 @@ public sealed class MainViewModel : ObservableObject
         IsNotificationOpen = false;
     }
 
+    public bool IsPendingEventSelectedForPush(string eventId)
+    {
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return false;
+        }
+
+        return _pendingPublishItems.Any(item =>
+            item.IsSelected &&
+            string.Equals(item.DisplayEventId, eventId, StringComparison.Ordinal));
+    }
+
+    public async Task TogglePendingPublishSelectionForEventAsync(string eventId)
+    {
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return;
+        }
+
+        var matchingItem = _pendingPublishItems.FirstOrDefault(item =>
+            string.Equals(item.DisplayEventId, eventId, StringComparison.Ordinal));
+        if (matchingItem is null)
+        {
+            await LoadPendingPublishItemsAsync();
+            matchingItem = _pendingPublishItems.FirstOrDefault(item =>
+                string.Equals(item.DisplayEventId, eventId, StringComparison.Ordinal));
+        }
+
+        if (matchingItem is null)
+        {
+            return;
+        }
+
+        matchingItem.IsSelected = !matchingItem.IsSelected;
+    }
+
+    public async Task GoToPendingPublishItemAsync(PendingPublishItemViewModel item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        var targetEvent = await _calendarQueryService.GetEventByIdAsync(item.DisplayEventId);
+        if (targetEvent is null)
+        {
+            return;
+        }
+
+        var targetDate = DateOnly.FromDateTime(targetEvent.StartLocal.Date);
+        await NavigateToAsync(targetDate, CurrentViewMode);
+        _calendarSelectionService.Select(item.DisplayEventId, item.EventSourceKind);
+    }
+
+    public async Task ShowPendingPublishErrorDetailsAsync(PendingPublishItemViewModel item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (string.IsNullOrWhiteSpace(item.PublishErrorDetails))
+        {
+            return;
+        }
+
+        await _dialogService.ShowSelectableTextAsync(
+            $"{item.Title} publish failure",
+            item.PublishErrorDetails,
+            "Close");
+    }
+
+    public IReadOnlyList<CalendarColorOption> AvailableColors => _colorMappingService.PickerColors;
+
+    public async Task RevertPendingPublishItemAsync(PendingPublishItemViewModel item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        try
+        {
+            if (string.Equals(_calendarSelectionService.SelectedEventId, item.PendingEventId, StringComparison.Ordinal)
+                && item.EventSourceKind == CalendarEventSourceKind.Pending)
+            {
+                _calendarSelectionService.ClearSelection();
+            }
+
+            await _pendingEventPublishService.RevertAsync(item.PendingEventId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to revert pending event {PendingEventId}.", item.PendingEventId);
+        }
+    }
+
+    public async Task ChangePendingPublishItemColorAsync(PendingPublishItemViewModel item, string colorKey)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        try
+        {
+            await _pendingEventPublishService.UpdateColorAsync(item.PendingEventId, colorKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update color for pending event {PendingEventId}.", item.PendingEventId);
+        }
+    }
+
+    public async Task LoadPendingPublishItemsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var existingSelection = _pendingPublishItems
+                .Where(item => item.IsSelected)
+                .Select(item => item.PendingEventId)
+                .ToHashSet(StringComparer.Ordinal);
+
+            foreach (var existingItem in _pendingPublishItems)
+            {
+                existingItem.PropertyChanged -= PendingPublishItem_PropertyChanged;
+            }
+
+            var pendingItems = await _pendingEventPublishService.GetPendingItemsAsync(ct);
+            _pendingPublishItems.Clear();
+
+            foreach (var item in pendingItems)
+            {
+                var viewModelItem = new PendingPublishItemViewModel(
+                    item.PendingEventId,
+                    item.GcalEventId ?? item.PendingEventId,
+                    item.GcalEventId is null ? CalendarEventSourceKind.Pending : CalendarEventSourceKind.Google,
+                    item.Title,
+                    FormatPendingPublishDateTimeSummary(item.StartDateTimeUtc, item.EndDateTimeUtc, item.IsAllDay),
+                    item.SourceLabel,
+                    item.ColorKey,
+                    item.ColorHex,
+                    item.IsRecurringInstance,
+                    item.PublishError)
+                {
+                    IsSelected = existingSelection.Contains(item.PendingEventId)
+                };
+
+                viewModelItem.PropertyChanged += PendingPublishItem_PropertyChanged;
+                _pendingPublishItems.Add(viewModelItem);
+            }
+
+            UpdatePendingPublishDerivedState();
+            ApplyPendingPublishSelectionStateToCurrentEvents();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unable to load pending publish items.");
+        }
+    }
+
     public async Task ConfirmSyncAsync()
     {
         if (!CanConfirmSync)
@@ -358,6 +606,84 @@ public sealed class MainViewModel : ObservableObject
         finally
         {
             IsSyncing = false;
+        }
+    }
+
+    private async Task PublishSelectedPendingEventsAsync()
+    {
+        var selectedItems = _pendingPublishItems
+            .Where(item => item.IsSelected)
+            .ToList();
+        if (selectedItems.Count == 0 || IsPublishingPendingEvents)
+        {
+            return;
+        }
+
+        var confirmationMessage = BuildPendingPublishConfirmationMessage(selectedItems);
+        var confirmed = await _dialogService.ShowConfirmationAsync(
+            "Push Events to Google Calendar?",
+            confirmationMessage,
+            "Push to GCal");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        if (selectedItems.Any(item => item.IsRecurringInstance))
+        {
+            await _dialogService.ShowMessageAsync(
+                "Recurring Instance",
+                "This publish applies only to the selected recurring instance. Series-wide publish scopes are not included here.");
+        }
+
+        IsPublishingPendingEvents = true;
+        _publishCompletedCount = 0;
+        _publishTotalCount = selectedItems.Count;
+        PendingPublishSummaryText = string.Empty;
+        OnPropertyChanged(nameof(PublishProgressText));
+        OnPropertyChanged(nameof(PublishProgressVisibility));
+
+        try
+        {
+            var progress = new Progress<PendingPublishProgress>(value =>
+            {
+                _publishCompletedCount = value.CompletedCount;
+                _publishTotalCount = value.TotalCount;
+                OnPropertyChanged(nameof(PublishProgressText));
+            });
+
+            var result = await _pendingEventPublishService.PublishAsync(
+                selectedItems.Select(item => item.PendingEventId).ToList(),
+                progress,
+                CancellationToken.None);
+
+            var failureDetails = BuildPendingPublishFailureDetails(result, selectedItems);
+            PendingPublishSummaryText = result.FailureCount == 0
+                ? $"{result.SuccessCount} event(s) published."
+                : BuildPendingPublishFailureSummary(result);
+
+            var severity = result.FailureCount switch
+            {
+                0 => InfoBarSeverity.Success,
+                var failures when failures == result.TotalCount => InfoBarSeverity.Error,
+                _ => InfoBarSeverity.Warning
+            };
+            ShowNotification(PendingPublishSummaryText, severity, failureDetails);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while publishing pending events.");
+            PendingPublishSummaryText = "Unable to publish the selected events. Check the log for details and try again.";
+            ShowNotification(PendingPublishSummaryText, InfoBarSeverity.Error, ex.ToString());
+        }
+        finally
+        {
+            IsPublishingPendingEvents = false;
+            _publishCompletedCount = 0;
+            _publishTotalCount = 0;
+            OnPropertyChanged(nameof(PublishProgressText));
+            OnPropertyChanged(nameof(PublishProgressVisibility));
+            await LoadPendingPublishItemsAsync();
         }
     }
 
@@ -462,6 +788,7 @@ public sealed class MainViewModel : ObservableObject
 
         InvalidateYearViewCache();
         _ = RefreshAsync();
+        _ = LoadPendingPublishItemsAsync();
     }
 
     private void OnEventUpdated(EventUpdatedMessage message)
@@ -474,10 +801,18 @@ public sealed class MainViewModel : ObservableObject
         if (message.PreviewEvent is not null)
         {
             ApplyAffectedEventUpdate(message.EventId, message.PreviewEvent);
+            _ = LoadPendingPublishItemsAsync();
             return;
         }
 
-        _ = RefreshAffectedEventAsync(message.EventId);
+        if (!string.IsNullOrWhiteSpace(message.PreviousEventId) &&
+            string.Equals(_calendarSelectionService.SelectedEventId, message.PreviousEventId, StringComparison.Ordinal))
+        {
+            _calendarSelectionService.Select(message.EventId, CalendarEventSourceKind.Google);
+        }
+
+        _ = RefreshAffectedEventAsync(message.EventId, message.PreviousEventId, message.AnimateOpacityTransition);
+        _ = LoadPendingPublishItemsAsync();
     }
 
     private async Task RefreshStatusAsync()
@@ -564,6 +899,7 @@ public sealed class MainViewModel : ObservableObject
                 CurrentEvents = yearViewData.Events;
                 BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
                 await _navigationStateService.SaveAsync(new NavigationState(CurrentViewMode, CurrentDate), ct);
+                await LoadPendingPublishItemsAsync(ct);
                 StartYearViewPreloads(CurrentDate.Year);
                 return;
             }
@@ -580,6 +916,7 @@ public sealed class MainViewModel : ObservableObject
             CurrentEvents = eventsTask.Result;
             BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
             await _navigationStateService.SaveAsync(new NavigationState(CurrentViewMode, CurrentDate), ct);
+            await LoadPendingPublishItemsAsync(ct);
         }
         catch (OperationCanceledException)
         {
@@ -616,20 +953,81 @@ public sealed class MainViewModel : ObservableObject
         SelectedSyncToDate = ToLocalDateOffset(to);
     }
 
-    private void ShowNotification(string message, InfoBarSeverity severity)
+    private void PendingPublishItem_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PendingPublishItemViewModel.IsSelected))
+        {
+            UpdatePendingPublishDerivedState();
+            ApplyPendingPublishSelectionStateToCurrentEvents();
+        }
+    }
+
+    private void ToggleSelectAllPendingPublishItems()
+    {
+        var selectAll = !AllPendingPublishItemsSelected;
+        foreach (var item in _pendingPublishItems)
+        {
+            item.IsSelected = selectAll;
+        }
+
+        UpdatePendingPublishDerivedState();
+    }
+
+    private void UpdatePendingPublishDerivedState()
+    {
+        OnPropertyChanged(nameof(PendingPublishCount));
+        OnPropertyChanged(nameof(PendingPublishBadgeVisibility));
+        OnPropertyChanged(nameof(CanOpenPendingPublishFlyout));
+        OnPropertyChanged(nameof(SelectedPendingPublishCount));
+        OnPropertyChanged(nameof(CanPublishSelectedPendingEvents));
+        OnPropertyChanged(nameof(AllPendingPublishItemsSelected));
+        PublishSelectedPendingEventsCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ShowNotification(string message, InfoBarSeverity severity, string? details = null)
     {
         IsNotificationOpen = false;
+        NotificationDetails = details;
         NotificationMessage = message;
         NotificationSeverity = severity;
         IsNotificationOpen = true;
     }
 
+    private async Task ShowNotificationDetailsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NotificationDetails))
+        {
+            return;
+        }
+
+        await _dialogService.ShowSelectableTextAsync(
+            "Push failure details",
+            NotificationDetails,
+            "Close");
+    }
+
     private async Task RefreshAffectedEventAsync(string eventId)
+    {
+        await RefreshAffectedEventAsync(eventId, null, animateOpacityTransition: false);
+    }
+
+    private async Task RefreshAffectedEventAsync(
+        string eventId,
+        string? previousEventId,
+        bool animateOpacityTransition)
     {
         try
         {
             var refreshedEvent = await _calendarQueryService.GetEventByIdAsync(eventId);
-            ApplyAffectedEventUpdate(eventId, refreshedEvent);
+            if (animateOpacityTransition &&
+                refreshedEvent is not null &&
+                !refreshedEvent.IsPending)
+            {
+                await AnimatePublishedEventAsync(eventId, previousEventId, refreshedEvent);
+                return;
+            }
+
+            ApplyAffectedEventUpdate(eventId, refreshedEvent, previousEventId);
         }
         catch (OperationCanceledException)
         {
@@ -641,11 +1039,32 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private void ApplyAffectedEventUpdate(string eventId, CalendarEventDisplayModel? refreshedEvent)
+    private async Task AnimatePublishedEventAsync(
+        string eventId,
+        string? previousEventId,
+        CalendarEventDisplayModel refreshedEvent)
+    {
+        var initialOpacity = GetCurrentEventOpacity(previousEventId ?? eventId) ?? 0.6;
+        ApplyAffectedEventUpdate(eventId, refreshedEvent with { Opacity = initialOpacity }, previousEventId);
+
+        const int steps = 5;
+        for (var step = 1; step <= steps; step++)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(60));
+            var nextOpacity = initialOpacity + ((1.0 - initialOpacity) * step / steps);
+            var nextEvent = refreshedEvent with { Opacity = nextOpacity };
+            ApplyAffectedEventUpdate(eventId, nextEvent);
+        }
+    }
+
+    private void ApplyAffectedEventUpdate(
+        string eventId,
+        CalendarEventDisplayModel? refreshedEvent,
+        string? previousEventId = null)
     {
         var updatedEvents = CurrentEvents.ToList();
         var existingIndex = updatedEvents.FindIndex(
-            item => string.Equals(item.EventId, eventId, StringComparison.Ordinal));
+            item => string.Equals(item.EventId, previousEventId ?? eventId, StringComparison.Ordinal));
         var (from, to) = GetVisibleDateRange();
         var isVisibleInCurrentRange = refreshedEvent is not null && OverlapsVisibleRange(refreshedEvent, from, to);
 
@@ -675,7 +1094,131 @@ public sealed class MainViewModel : ObservableObject
             .ThenBy(item => item.Title, StringComparer.CurrentCulture)
             .ToList();
 
+        ApplyPendingPublishSelectionStateToCurrentEvents();
+
         InvalidateYearViewCache();
+    }
+
+    private void ApplyPendingPublishSelectionStateToCurrentEvents()
+    {
+        if (CurrentEvents.Count == 0)
+        {
+            return;
+        }
+
+        var selectedDisplayEventIds = _pendingPublishItems
+            .Where(item => item.IsSelected)
+            .Select(item => item.DisplayEventId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var updatedEvents = CurrentEvents
+            .Select(item => item with
+            {
+                IsSelectedForPush = selectedDisplayEventIds.Contains(item.EventId)
+            })
+            .ToList();
+
+        if (CurrentEvents.SequenceEqual(updatedEvents))
+        {
+            return;
+        }
+
+        CurrentEvents = updatedEvents;
+    }
+
+    private static string BuildPendingPublishConfirmationMessage(
+        IReadOnlyList<PendingPublishItemViewModel> selectedItems)
+    {
+        var lines = selectedItems
+            .Select(item => $"• {item.Title} ({item.DateTimeSummary})")
+            .ToList();
+        return $"You are about to publish {selectedItems.Count} event(s) to Google Calendar.\n\n{string.Join("\n", lines)}";
+    }
+
+    private static string BuildPendingPublishFailureSummary(PendingPublishBatchResult result)
+    {
+        var firstFailureSummary = result.ItemResults
+            .Where(item => !item.Success)
+            .Select(item => ExtractSingleLineErrorSummary(item.ErrorMessage ?? item.ErrorDetails))
+            .FirstOrDefault(summary => !string.IsNullOrWhiteSpace(summary));
+
+        return string.IsNullOrWhiteSpace(firstFailureSummary)
+            ? $"{result.SuccessCount} published, {result.FailureCount} failed."
+            : $"{result.SuccessCount} published, {result.FailureCount} failed. First failure: {firstFailureSummary}";
+    }
+
+    private static string? BuildPendingPublishFailureDetails(
+        PendingPublishBatchResult result,
+        IReadOnlyList<PendingPublishItemViewModel> selectedItems)
+    {
+        var selectedItemsByPendingId = selectedItems.ToDictionary(item => item.PendingEventId, StringComparer.Ordinal);
+        var failureDetails = result.ItemResults
+            .Where(item => !item.Success)
+            .Select(item =>
+            {
+                var title = selectedItemsByPendingId.TryGetValue(item.PendingEventId, out var selectedItem)
+                    ? selectedItem.Title
+                    : item.PendingEventId;
+                var details = item.ErrorDetails ?? item.ErrorMessage;
+                return string.IsNullOrWhiteSpace(details)
+                    ? null
+                    : $"Event: {title}\n{details}";
+            })
+            .Where(detail => !string.IsNullOrWhiteSpace(detail))
+            .ToList();
+
+        return failureDetails.Count == 0
+            ? null
+            : string.Join("\n\n", failureDetails);
+    }
+
+    private static string ExtractSingleLineErrorSummary(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return "Unknown failure.";
+        }
+
+        var firstLine = error
+            .Split(["\r\n", "\n"], StringSplitOptions.None)
+            .FirstOrDefault(line => !string.IsNullOrWhiteSpace(line))
+            ?.Trim();
+
+        return string.IsNullOrWhiteSpace(firstLine)
+            ? "Unknown failure."
+            : firstLine;
+    }
+
+    private static string FormatPendingPublishDateTimeSummary(
+        DateTime? startUtc,
+        DateTime? endUtc,
+        bool isAllDay)
+    {
+        if (!startUtc.HasValue)
+        {
+            return "Time not set";
+        }
+
+        if (isAllDay)
+        {
+            var startDate = DateOnly.FromDateTime(startUtc.Value.Date);
+            var endDateExclusive = DateOnly.FromDateTime((endUtc ?? startUtc.Value.AddDays(1)).Date);
+            var inclusiveEndDate = endDateExclusive > startDate ? endDateExclusive.AddDays(-1) : startDate;
+            return startDate == inclusiveEndDate
+                ? $"{startDate:ddd, MMM d} (all day)"
+                : $"{startDate:ddd, MMM d} - {inclusiveEndDate:ddd, MMM d} (all day)";
+        }
+
+        var startLocal = startUtc.Value.ToLocalTime();
+        var endLocal = (endUtc ?? startUtc.Value).ToLocalTime();
+        return $"{startLocal:ddd, MMM d h:mm tt} - {endLocal:h:mm tt}";
+    }
+
+    private double? GetCurrentEventOpacity(string eventId)
+    {
+        return CurrentEvents
+            .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.Ordinal))
+            ?.Opacity;
     }
 
     private async Task<YearViewCacheEntry> GetYearViewDataAsync(int year, CancellationToken ct)

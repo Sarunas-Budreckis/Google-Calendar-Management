@@ -3,6 +3,7 @@
     x:Class="GoogleCalendarManagement.Views.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:automation="using:Microsoft.UI.Xaml.Automation"
+    xmlns:viewModels="using:GoogleCalendarManagement.ViewModels"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -41,6 +42,160 @@
                             x:Name="AddEventButton"
                             Click="AddEventButton_Click"
                             Content="+ Add Event" />
+
+                        <DropDownButton
+                            x:Name="PushToGcalButton"
+                            IsEnabled="{x:Bind ViewModel.CanOpenPendingPublishFlyout, Mode=OneWay}">
+                            <DropDownButton.Content>
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock
+                                        Grid.Column="0"
+                                        Text="Push to GCal" />
+
+                                    <Border
+                                        Grid.Column="1"
+                                        Padding="6,1"
+                                        Background="{ThemeResource SystemFillColorSuccessBrush}"
+                                        CornerRadius="10"
+                                        Visibility="{x:Bind ViewModel.PendingPublishBadgeVisibility, Mode=OneWay}">
+                                        <TextBlock
+                                            Foreground="{StaticResource WhiteBrush}"
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            Text="{x:Bind ViewModel.PendingPublishCount, Mode=OneWay}" />
+                                    </Border>
+                                </Grid>
+                            </DropDownButton.Content>
+                            <DropDownButton.Flyout>
+                                <Flyout
+                                    Opened="PendingPublishFlyout_Opened"
+                                    Placement="BottomEdgeAlignedRight">
+                                    <StackPanel Width="420" Spacing="12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock
+                                                Grid.Column="0"
+                                                Style="{StaticResource SubtitleTextBlockStyle}"
+                                                Text="Pending publish queue" />
+
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                Text="{x:Bind ViewModel.PublishProgressText, Mode=OneWay}"
+                                                Visibility="{x:Bind ViewModel.PublishProgressVisibility, Mode=OneWay}" />
+                                        </Grid>
+
+                                        <StackPanel
+                                            Orientation="Horizontal"
+                                            Spacing="8">
+                                            <Button
+                                                Command="{x:Bind ViewModel.SelectAllPendingPublishCommand}"
+                                                Content="Select All" />
+                                            <Button
+                                                Command="{x:Bind ViewModel.PublishSelectedPendingEventsCommand}"
+                                                Content="Push Selected"
+                                                IsEnabled="{x:Bind ViewModel.CanPublishSelectedPendingEvents, Mode=OneWay}"
+                                                Style="{StaticResource PrimaryAction}" />
+                                        </StackPanel>
+
+                                        <TextBlock
+                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                            Text="{x:Bind ViewModel.PendingPublishSummaryText, Mode=OneWay}"
+                                            TextWrapping="WrapWholeWords"
+                                            Visibility="{x:Bind ViewModel.PendingPublishSummaryVisibility, Mode=OneWay}" />
+
+                                        <ScrollViewer MaxHeight="320">
+                                            <ItemsControl ItemsSource="{x:Bind ViewModel.PendingPublishItems, Mode=OneWay}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:PendingPublishItemViewModel">
+                                                        <Border
+                                                            Margin="0,0,0,8"
+                                                            Padding="10"
+                                                            Background="{x:Bind CardBackgroundBrush, Mode=OneWay}"
+                                                            BorderBrush="{x:Bind CardBorderBrush, Mode=OneWay}"
+                                                            BorderThickness="{x:Bind CardBorderThickness, Mode=OneWay}"
+                                                            CornerRadius="{StaticResource AppCornerRadiusMedium}"
+                                                            RightTapped="PendingPublishItem_RightTapped">
+                                                            <Grid ColumnSpacing="10">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+
+                                                                <CheckBox
+                                                                    Grid.Column="0"
+                                                                    VerticalAlignment="Top"
+                                                                    IsChecked="{x:Bind IsSelected, Mode=TwoWay}" />
+
+                                                                <Border
+                                                                    Grid.Column="1"
+                                                                    Width="12"
+                                                                    Height="12"
+                                                                    Margin="0,4,0,0"
+                                                                    Background="{x:Bind ColorBrush, Mode=OneWay}"
+                                                                    CornerRadius="2"
+                                                                    VerticalAlignment="Top" />
+
+                                                                <StackPanel
+                                                                    Grid.Column="2"
+                                                                    Spacing="4">
+                                                                    <TextBlock
+                                                                        FontWeight="SemiBold"
+                                                                        Text="{x:Bind Title}" />
+                                                                    <TextBlock
+                                                                        Opacity="0.8"
+                                                                        Text="{x:Bind DateTimeSummary}" />
+                                                                    <TextBlock
+                                                                        Opacity="0.75"
+                                                                        Text="{x:Bind SourceLabel}" />
+                                                                    <TextBlock
+                                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                                        Text="Recurring instance only"
+                                                                        Visibility="{x:Bind RecurringScopeVisibility, Mode=OneWay}" />
+                                                                    <StackPanel
+                                                                        Orientation="Horizontal"
+                                                                        Spacing="8"
+                                                                        Visibility="{x:Bind PublishErrorVisibility, Mode=OneWay}">
+                                                                        <TextBlock
+                                                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                            Text="{x:Bind PublishErrorSummary}"
+                                                                            TextTrimming="CharacterEllipsis"
+                                                                            Tapped="PendingPublishErrorText_Tapped"
+                                                                            IsDoubleTapEnabled="False" />
+                                                                        <Button
+                                                                            Click="PendingPublishErrorDetailsButton_Click"
+                                                                            Content="Details"
+                                                                            Padding="8,2"
+                                                                            Visibility="{x:Bind PublishErrorDetailsVisibility, Mode=OneWay}" />
+                                                                    </StackPanel>
+                                                                </StackPanel>
+
+                                                                <Button
+                                                                    Grid.Column="3"
+                                                                    Click="PendingPublishGoToEventButton_Click"
+                                                                    Content="Go to event"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Top" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Flyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
 
                         <DropDownButton
                             x:Name="MoreActionsButton"
@@ -279,7 +434,14 @@
             IsClosable="True"
             IsOpen="{x:Bind ViewModel.IsNotificationOpen, Mode=OneWay}"
             Message="{x:Bind ViewModel.NotificationMessage, Mode=OneWay}"
-            Severity="{x:Bind ViewModel.NotificationSeverity, Mode=OneWay}" />
+            Severity="{x:Bind ViewModel.NotificationSeverity, Mode=OneWay}">
+            <InfoBar.ActionButton>
+                <Button
+                    Command="{x:Bind ViewModel.ShowNotificationDetailsCommand}"
+                    Content="View details"
+                    Visibility="{x:Bind ViewModel.NotificationDetailsVisibility, Mode=OneWay}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
@@ -325,7 +487,7 @@
             <ContentControl
                 x:Name="EventDetailsPanel"
                 Grid.Column="1"
-                Width="0"
+                Width="380"
                 VerticalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
                 VerticalContentAlignment="Stretch" />

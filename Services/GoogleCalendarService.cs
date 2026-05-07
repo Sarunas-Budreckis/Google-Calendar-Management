@@ -160,6 +160,129 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
             "Incremental sync is not implemented yet."));
     }
 
+    public async Task<OperationResult<GcalEventDto>> GetEventAsync(
+        string calendarId,
+        string eventId,
+        CancellationToken ct = default)
+    {
+        var apiClientResult = await CreateAuthenticatedApiClientAsync(ct);
+        if (!apiClientResult.Success)
+        {
+            return OperationResult<GcalEventDto>.Failure(apiClientResult.ErrorMessage!);
+        }
+
+        try
+        {
+            var googleEvent = await apiClientResult.ApiClient!.GetEventAsync(calendarId, eventId, ct);
+            return OperationResult<GcalEventDto>.Ok(MapEvent(calendarId, googleEvent));
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Google Calendar get event failed due to network error.");
+            return OperationResult<GcalEventDto>.Failure("Unable to reach Google. Check internet connection.");
+        }
+        catch (GoogleApiException ex)
+        {
+            _logger.LogError(ex, "Google Calendar API returned an error while getting event {EventId}.", eventId);
+            return OperationResult<GcalEventDto>.Failure(GetFriendlyWriteApiErrorMessage(ex));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Google Calendar get event failed unexpectedly for {EventId}.", eventId);
+            return OperationResult<GcalEventDto>.Failure("Unable to load the latest Google Calendar event.");
+        }
+    }
+
+    public async Task<GoogleCalendarWriteResult> InsertEventAsync(
+        GoogleCalendarWriteRequest request,
+        CancellationToken ct = default)
+    {
+        var apiClientResult = await CreateAuthenticatedApiClientAsync(ct);
+        if (!apiClientResult.Success)
+        {
+            return GoogleCalendarWriteResult.Failure(apiClientResult.ErrorMessage!);
+        }
+
+        try
+        {
+            var googleEvent = await apiClientResult.ApiClient!.InsertEventAsync(
+                request.CalendarId,
+                BuildEventPayload(request),
+                ct);
+            return GoogleCalendarWriteResult.Ok(MapEvent(request.CalendarId, googleEvent));
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Google Calendar insert failed due to network error.");
+            return GoogleCalendarWriteResult.Failure(
+                "Unable to reach Google. Check internet connection.",
+                GoogleCalendarWriteFailureKind.Network,
+                ex.ToString());
+        }
+        catch (GoogleApiException ex)
+        {
+            _logger.LogError(ex, "Google Calendar API returned an error while inserting an event.");
+            return GoogleCalendarWriteResult.Failure(
+                GetFriendlyWriteApiErrorMessage(ex),
+                MapWriteFailureKind(ex),
+                ex.ToString());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Google Calendar insert failed unexpectedly.");
+            return GoogleCalendarWriteResult.Failure(
+                "Unable to publish the event to Google Calendar.",
+                errorDetails: ex.ToString());
+        }
+    }
+
+    public async Task<GoogleCalendarWriteResult> UpdateEventAsync(
+        string eventId,
+        GoogleCalendarWriteRequest request,
+        string? ifMatchEtag,
+        CancellationToken ct = default)
+    {
+        var apiClientResult = await CreateAuthenticatedApiClientAsync(ct);
+        if (!apiClientResult.Success)
+        {
+            return GoogleCalendarWriteResult.Failure(apiClientResult.ErrorMessage!);
+        }
+
+        try
+        {
+            var googleEvent = await apiClientResult.ApiClient!.UpdateEventAsync(
+                request.CalendarId,
+                eventId,
+                BuildEventPayload(request),
+                ifMatchEtag,
+                ct);
+            return GoogleCalendarWriteResult.Ok(MapEvent(request.CalendarId, googleEvent));
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Google Calendar update failed due to network error for {EventId}.", eventId);
+            return GoogleCalendarWriteResult.Failure(
+                "Unable to reach Google. Check internet connection.",
+                GoogleCalendarWriteFailureKind.Network,
+                ex.ToString());
+        }
+        catch (GoogleApiException ex)
+        {
+            _logger.LogError(ex, "Google Calendar API returned an error while updating event {EventId}.", eventId);
+            return GoogleCalendarWriteResult.Failure(
+                GetFriendlyWriteApiErrorMessage(ex),
+                MapWriteFailureKind(ex),
+                ex.ToString());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Google Calendar update failed unexpectedly for {EventId}.", eventId);
+            return GoogleCalendarWriteResult.Failure(
+                "Unable to publish the event to Google Calendar.",
+                errorDetails: ex.ToString());
+        }
+    }
+
     private UserCredential CreateUserCredential(TokenResponse tokenResponse)
     {
         var clientSecrets = GoogleClientSecrets.FromFile(_options.ClientSecretPath).Secrets;
@@ -171,6 +294,26 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
         });
 
         return _authorizationBroker.CreateUserCredential(flow, "user", tokenResponse);
+    }
+
+    private async Task<AuthenticatedApiClientResult> CreateAuthenticatedApiClientAsync(CancellationToken ct)
+    {
+        if (!File.Exists(_options.ClientSecretPath))
+        {
+            return AuthenticatedApiClientResult.Failure(
+                "client_secret.json not found. See README for setup instructions.");
+        }
+
+        var token = await _tokenStorage.LoadTokenAsync();
+        if (token is null)
+        {
+            return AuthenticatedApiClientResult.Failure(
+                "Google Calendar is not connected. Connect your account and try again.");
+        }
+
+        var credential = CreateUserCredential(token);
+        var apiClient = await _apiClientFactory.CreateAsync(credential, ct);
+        return AuthenticatedApiClientResult.Ok(apiClient);
     }
 
     private async Task WriteAuditLogAsync(string operationType, bool success, string? errorMessage)
@@ -338,6 +481,101 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
         return "Unable to fetch events from Google Calendar.";
     }
 
+    private static string GetFriendlyWriteApiErrorMessage(GoogleApiException ex)
+    {
+        if (ex.HttpStatusCode == HttpStatusCode.Unauthorized)
+        {
+            return "Session expired. Please reconnect Google Calendar.";
+        }
+
+        if (ex.HttpStatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            return "The Google Calendar event changed before this publish completed.";
+        }
+
+        if (ex.HttpStatusCode == HttpStatusCode.Forbidden &&
+            ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Google Calendar quota exceeded. Try again later.";
+        }
+
+        return "Unable to write the event to Google Calendar.";
+    }
+
+    private static GoogleCalendarWriteFailureKind MapWriteFailureKind(GoogleApiException ex)
+    {
+        return ex.HttpStatusCode switch
+        {
+            HttpStatusCode.Unauthorized => GoogleCalendarWriteFailureKind.Authentication,
+            HttpStatusCode.PreconditionFailed => GoogleCalendarWriteFailureKind.PreconditionFailed,
+            _ => GoogleCalendarWriteFailureKind.Unknown
+        };
+    }
+
+    private static Event BuildEventPayload(GoogleCalendarWriteRequest request)
+    {
+        var eventPayload = new Event
+        {
+            Summary = request.Summary,
+            Description = request.Description,
+            ColorId = request.ColorId
+        };
+
+        if (request.IsAllDay)
+        {
+            var startDate = NormalizeAllDayDate(request.StartDateTimeUtc);
+            var endDateExclusive = NormalizeAllDayEndDate(request.StartDateTimeUtc, request.EndDateTimeUtc);
+            eventPayload.Start = new EventDateTime { Date = startDate.ToString("yyyy-MM-dd") };
+            eventPayload.End = new EventDateTime { Date = endDateExclusive.ToString("yyyy-MM-dd") };
+            return eventPayload;
+        }
+
+        eventPayload.Start = new EventDateTime
+        {
+            DateTimeDateTimeOffset = ToUtcOffset(request.StartDateTimeUtc)
+        };
+        eventPayload.End = new EventDateTime
+        {
+            DateTimeDateTimeOffset = ToUtcOffset(request.EndDateTimeUtc ?? request.StartDateTimeUtc)
+        };
+        return eventPayload;
+    }
+
+    private static DateOnly NormalizeAllDayDate(DateTime? utcValue)
+    {
+        var effectiveUtc = DateTime.SpecifyKind(utcValue ?? DateTime.UtcNow.Date, DateTimeKind.Utc);
+        return DateOnly.FromDateTime(effectiveUtc.Date);
+    }
+
+    private static DateOnly NormalizeAllDayEndDate(DateTime? startUtc, DateTime? endUtc)
+    {
+        var normalizedStart = NormalizeAllDayDate(startUtc);
+        var normalizedEnd = endUtc.HasValue
+            ? DateOnly.FromDateTime(DateTime.SpecifyKind(endUtc.Value, DateTimeKind.Utc).Date)
+            : normalizedStart.AddDays(1);
+
+        return normalizedEnd <= normalizedStart
+            ? normalizedStart.AddDays(1)
+            : normalizedEnd;
+    }
+
+    private static DateTimeOffset? ToUtcOffset(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        var normalizedUtc = value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value.Value,
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+        };
+
+        return new DateTimeOffset(normalizedUtc);
+    }
+
     private static string? ExtractEmailAddress(string? idToken)
     {
         if (string.IsNullOrWhiteSpace(idToken))
@@ -369,5 +607,17 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
         {
             return null;
         }
+    }
+
+    private sealed record AuthenticatedApiClientResult(
+        bool Success,
+        IGoogleCalendarApiClient? ApiClient,
+        string? ErrorMessage)
+    {
+        public static AuthenticatedApiClientResult Ok(IGoogleCalendarApiClient apiClient)
+            => new(true, apiClient, null);
+
+        public static AuthenticatedApiClientResult Failure(string message)
+            => new(false, null, message);
     }
 }

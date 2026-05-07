@@ -15,6 +15,7 @@ public sealed record CalendarEventDisplayModel(
     string? Description,
     DateTime? LastSyncedAt,
     bool IsPending = false,
+    bool IsSelectedForPush = false,
     double Opacity = 1.0,
     DateTime? PendingUpdatedAt = null,
     string StatusLabel = "",

@@ -349,6 +349,8 @@ public sealed class SyncManager : ISyncManager
 
     private static bool ShouldSnapshotForUpdate(GcalEvent existingEvent, GcalEventDto incomingEvent)
     {
+        var resolvedIncomingColorId = ResolveIncomingColorId(existingEvent.ColorId, incomingEvent.ColorId);
+
         if (existingEvent.IsDeleted)
         {
             return false;
@@ -367,7 +369,7 @@ public sealed class SyncManager : ISyncManager
                existingEvent.StartDatetime != incomingEvent.StartDateTimeUtc ||
                existingEvent.EndDatetime != incomingEvent.EndDateTimeUtc ||
                existingEvent.IsAllDay != incomingEvent.IsAllDay ||
-               existingEvent.ColorId != incomingEvent.ColorId ||
+               existingEvent.ColorId != resolvedIncomingColorId ||
                existingEvent.GcalEtag != incomingEvent.GcalEtag ||
                existingEvent.GcalUpdatedAt != incomingEvent.GcalUpdatedAtUtc ||
                existingEvent.RecurringEventId != incomingEvent.RecurringEventId ||
@@ -376,6 +378,7 @@ public sealed class SyncManager : ISyncManager
 
     private static bool ApplyIncomingValues(GcalEvent existingEvent, GcalEventDto incomingEvent, DateTime syncedAt)
     {
+        var resolvedIncomingColorId = ResolveIncomingColorId(existingEvent.ColorId, incomingEvent.ColorId);
         var changed =
             existingEvent.CalendarId != incomingEvent.CalendarId ||
             existingEvent.Summary != incomingEvent.Summary ||
@@ -383,7 +386,7 @@ public sealed class SyncManager : ISyncManager
             existingEvent.StartDatetime != incomingEvent.StartDateTimeUtc ||
             existingEvent.EndDatetime != incomingEvent.EndDateTimeUtc ||
             existingEvent.IsAllDay != incomingEvent.IsAllDay ||
-            existingEvent.ColorId != incomingEvent.ColorId ||
+            existingEvent.ColorId != resolvedIncomingColorId ||
             existingEvent.GcalEtag != incomingEvent.GcalEtag ||
             existingEvent.GcalUpdatedAt != incomingEvent.GcalUpdatedAtUtc ||
             existingEvent.IsDeleted != incomingEvent.IsDeleted ||
@@ -396,7 +399,7 @@ public sealed class SyncManager : ISyncManager
         existingEvent.StartDatetime = incomingEvent.StartDateTimeUtc;
         existingEvent.EndDatetime = incomingEvent.EndDateTimeUtc;
         existingEvent.IsAllDay = incomingEvent.IsAllDay;
-        existingEvent.ColorId = incomingEvent.ColorId;
+        existingEvent.ColorId = resolvedIncomingColorId;
         existingEvent.GcalEtag = incomingEvent.GcalEtag;
         existingEvent.GcalUpdatedAt = incomingEvent.GcalUpdatedAtUtc;
         existingEvent.IsDeleted = incomingEvent.IsDeleted;
@@ -406,6 +409,13 @@ public sealed class SyncManager : ISyncManager
         existingEvent.UpdatedAt = syncedAt;
 
         return changed;
+    }
+
+    private static string? ResolveIncomingColorId(string? existingColorId, string? incomingColorId)
+    {
+        return string.IsNullOrWhiteSpace(incomingColorId)
+            ? existingColorId
+            : incomingColorId;
     }
 
     private static void ApplyDeletedValues(GcalEvent existingEvent, GcalEventDto incomingEvent, DateTime syncedAt)

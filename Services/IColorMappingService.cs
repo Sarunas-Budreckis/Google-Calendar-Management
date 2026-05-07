@@ -13,5 +13,6 @@ public interface IColorMappingService
     string GetDisplayName(string? colorId);
     string NormalizeColorKey(string? colorId);
     string GetColorName(string? colorId);
+    string? GetGoogleColorId(string? colorId);
     IReadOnlyDictionary<string, string> AllColors { get; }
 }

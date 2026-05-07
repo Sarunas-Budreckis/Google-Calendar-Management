@@ -73,6 +73,8 @@ public sealed class PendingEventRepository : IPendingEventRepository
             existing.AppCreated = pendingEvent.AppCreated;
             existing.SourceSystem = pendingEvent.SourceSystem;
             existing.ReadyToPublish = pendingEvent.ReadyToPublish;
+            existing.PublishAttemptedAt = pendingEvent.PublishAttemptedAt;
+            existing.PublishError = pendingEvent.PublishError;
             existing.CreatedAt = pendingEvent.CreatedAt;
             existing.UpdatedAt = pendingEvent.UpdatedAt;
         }

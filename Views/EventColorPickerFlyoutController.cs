@@ -22,9 +22,11 @@ public sealed class EventColorPickerFlyoutController
     private readonly Func<EventColorPickerMenuState> _getMenuState;
     private readonly Func<string, Task> _onColorSelectedAsync;
     private readonly Func<Task> _onRevertAsync;
+    private readonly Func<Task> _onTogglePendingPublishSelectionAsync;
     private readonly Dictionary<string, ColorOptionVisual> _optionVisuals = new(StringComparer.OrdinalIgnoreCase);
     private readonly Flyout _flyout;
     private readonly StackPanel _actionPanel;
+    private readonly Button _togglePendingPublishSelectionButton;
     private readonly Button _revertButton;
 
     public EventColorPickerFlyoutController(
@@ -32,24 +34,29 @@ public sealed class EventColorPickerFlyoutController
         Func<string?> getSelectedColorId,
         Func<string, Task> onColorSelectedAsync,
         Func<EventColorPickerMenuState>? getMenuState = null,
-        Func<Task>? onRevertAsync = null)
+        Func<Task>? onRevertAsync = null,
+        Func<Task>? onTogglePendingPublishSelectionAsync = null)
     {
         _getSelectedColorId = getSelectedColorId;
         _getMenuState = getMenuState ?? (() => new EventColorPickerMenuState());
         _onColorSelectedAsync = onColorSelectedAsync;
         _onRevertAsync = onRevertAsync ?? (() => Task.CompletedTask);
+        _onTogglePendingPublishSelectionAsync = onTogglePendingPublishSelectionAsync ?? (() => Task.CompletedTask);
+        _togglePendingPublishSelectionButton = CreateActionButton("Select for Push", TogglePendingPublishSelectionButton_Click);
         _revertButton = CreateActionButton("Revert", RevertButton_Click);
         _actionPanel = new StackPanel
         {
             Spacing = 2,
             Children =
             {
+                _togglePendingPublishSelectionButton,
                 _revertButton,
                 CreateDeleteButton()
             }
         };
         _flyout = new Flyout
         {
+            AreOpenCloseAnimationsEnabled = false,
             Content = BuildContent(colorOptions)
         };
         _flyout.Opened += Flyout_Opened;
@@ -79,6 +86,12 @@ public sealed class EventColorPickerFlyoutController
     public void RefreshVisualState()
     {
         var menuState = _getMenuState();
+        _togglePendingPublishSelectionButton.Visibility = menuState.ShowPendingPublishSelectionToggle
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        _togglePendingPublishSelectionButton.Content = menuState.IsSelectedForPush
+            ? "Deselect from Push"
+            : "Select for Push";
         _revertButton.Visibility = menuState.ShowRevert ? Visibility.Visible : Visibility.Collapsed;
         var selectedColorId = _getSelectedColorId() ?? string.Empty;
         foreach (var (key, visual) in _optionVisuals)
@@ -244,6 +257,13 @@ public sealed class EventColorPickerFlyoutController
         Hide();
     }
 
+    private async void TogglePendingPublishSelectionButton_Click(object sender, RoutedEventArgs e)
+    {
+        await _onTogglePendingPublishSelectionAsync();
+        RefreshVisualState();
+        Hide();
+    }
+
     private void Flyout_Opened(object? sender, object e)
     {
         RefreshVisualState();
@@ -266,4 +286,7 @@ public sealed class EventColorPickerFlyoutController
     private sealed record ColorOptionVisual(Button Button, Border HostBorder, FontIcon CheckIcon);
 }
 
-public sealed record EventColorPickerMenuState(bool ShowRevert = false);
+public sealed record EventColorPickerMenuState(
+    bool ShowRevert = false,
+    bool ShowPendingPublishSelectionToggle = false,
+    bool IsSelectedForPush = false);

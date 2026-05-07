@@ -43,7 +43,8 @@ public sealed class ColorMappingService : IColorMappingService
             { "orange",   "orange" },
             { "6",        "orange" },
             { "lavender", "lavender" },
-            { "3",        "lavender" }
+            { "3",        "lavender" },
+            { "7",        "lavender" }
         };
 
     private static readonly IReadOnlyDictionary<string, string> ColorMap =
@@ -51,6 +52,20 @@ public sealed class ColorMappingService : IColorMappingService
             entry => entry.Key,
             entry => PickerColorMap[entry.Value].Hex,
             StringComparer.OrdinalIgnoreCase);
+
+    private static readonly IReadOnlyDictionary<string, string> CanonicalToGoogleColorIdMap =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "azure", "1" },
+            { "navy", "2" },
+            { "lavender", "7" },
+            { "flamingo", "4" },
+            { "yellow", "5" },
+            { "orange", "6" },
+            { "grey", "8" },
+            { "purple", "9" },
+            { "sage", "10" }
+        };
 
     public IReadOnlyList<CalendarColorOption> PickerColors => OrderedPickerColors;
 
@@ -87,5 +102,19 @@ public sealed class ColorMappingService : IColorMappingService
     public string GetColorName(string? colorId)
     {
         return GetDisplayName(colorId);
+    }
+
+    public string? GetGoogleColorId(string? colorId)
+    {
+        var colorKey = NormalizeColorKey(colorId);
+        // Azure is the calendar's default color — send null so Google uses the calendar color.
+        if (colorKey == FallbackKey)
+        {
+            return null;
+        }
+
+        return CanonicalToGoogleColorIdMap.TryGetValue(colorKey, out var googleColorId)
+            ? googleColorId
+            : null;
     }
 }
