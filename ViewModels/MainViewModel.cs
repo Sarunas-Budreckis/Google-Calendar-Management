@@ -61,6 +61,9 @@ public sealed class MainViewModel : ObservableObject
     private int _publishCompletedCount;
     private int _publishTotalCount;
     private string _pendingPublishSummaryText = string.Empty;
+    private bool _isUndoToastVisible;
+    private string _undoToastMessage = string.Empty;
+    private Func<CancellationToken, Task>? _pendingUndoAction;
 
     public MainViewModel(
         ICalendarQueryService calendarQueryService,
@@ -104,6 +107,7 @@ public sealed class MainViewModel : ObservableObject
         ShowNotificationDetailsCommand = new AsyncRelayCommand(
             ShowNotificationDetailsAsync,
             () => !string.IsNullOrWhiteSpace(NotificationDetails));
+        UndoCommand = new AsyncRelayCommand(ExecuteUndoAsync);
 
         var (defaultFrom, defaultTo) = GetDefaultSyncRange();
         _selectedSyncFromDate = ToLocalDateOffset(defaultFrom);
@@ -116,6 +120,9 @@ public sealed class MainViewModel : ObservableObject
         WeakReferenceMessenger.Default.Register<MainViewModel, EventUpdatedMessage>(
             this,
             static (recipient, message) => recipient.OnEventUpdated(message));
+        WeakReferenceMessenger.Default.Register<MainViewModel, RequestUndoToastMessage>(
+            this,
+            static (recipient, message) => recipient.OnRequestUndoToast(message));
     }
 
     public ViewMode CurrentViewMode
@@ -297,6 +304,27 @@ public sealed class MainViewModel : ObservableObject
     public Visibility NotificationDetailsVisibility =>
         string.IsNullOrWhiteSpace(NotificationDetails) ? Visibility.Collapsed : Visibility.Visible;
 
+    public bool IsUndoToastVisible
+    {
+        get => _isUndoToastVisible;
+        private set
+        {
+            if (SetProperty(ref _isUndoToastVisible, value))
+            {
+                OnPropertyChanged(nameof(UndoToastVisibility));
+            }
+        }
+    }
+
+    public Visibility UndoToastVisibility =>
+        _isUndoToastVisible ? Visibility.Visible : Visibility.Collapsed;
+
+    public string UndoToastMessage
+    {
+        get => _undoToastMessage;
+        private set => SetProperty(ref _undoToastMessage, value);
+    }
+
     public ObservableCollection<PendingPublishItemViewModel> PendingPublishItems => _pendingPublishItems;
 
     public int PendingPublishCount => _pendingPublishItems.Count;
@@ -366,6 +394,8 @@ public sealed class MainViewModel : ObservableObject
 
     public IAsyncRelayCommand ShowNotificationDetailsCommand { get; }
 
+    public IAsyncRelayCommand UndoCommand { get; }
+
     public Task InitializeAsync()
     {
         return _initializationTask ??= InitializeCoreAsync();
@@ -425,6 +455,12 @@ public sealed class MainViewModel : ObservableObject
     public void DismissNotification()
     {
         IsNotificationOpen = false;
+    }
+
+    public void DismissUndoToast()
+    {
+        _pendingUndoAction = null;
+        IsUndoToastVisible = false;
     }
 
     public bool IsPendingEventSelectedForPush(string eventId)
@@ -1023,6 +1059,23 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CanPublishSelectedPendingEvents));
         OnPropertyChanged(nameof(AllPendingPublishItemsSelected));
         PublishSelectedPendingEventsCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnRequestUndoToast(RequestUndoToastMessage message)
+    {
+        _pendingUndoAction = message.OnUndo;
+        UndoToastMessage = message.Message;
+        IsUndoToastVisible = true;
+    }
+
+    private async Task ExecuteUndoAsync()
+    {
+        var action = _pendingUndoAction;
+        DismissUndoToast();
+        if (action is not null)
+        {
+            await action(CancellationToken.None);
+        }
     }
 
     private void ShowNotification(string message, InfoBarSeverity severity, string? details = null)

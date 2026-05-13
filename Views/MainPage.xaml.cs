@@ -42,6 +42,7 @@ public sealed partial class MainPage : Page
     private Storyboard? _selectionIndicatorStoryboard;
     private DispatcherQueueTimer? _lastSyncRefreshTimer;
     private DispatcherQueueTimer? _notificationAutoDismissTimer;
+    private DispatcherQueueTimer? _undoToastTimer;
     private bool _isLoaded;
     private bool _hasSelectionIndicatorPosition;
     private bool _isUpdatingPicker;
@@ -115,6 +116,7 @@ public sealed partial class MainPage : Page
         WeakReferenceMessenger.Default.UnregisterAll(this);
         StopLastSyncRefreshTimer();
         StopNotificationAutoDismissTimer();
+        _undoToastTimer?.Stop();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -147,6 +149,11 @@ public sealed partial class MainPage : Page
         if (e.PropertyName is nameof(MainViewModel.IsNotificationOpen) or nameof(MainViewModel.NotificationSeverity))
         {
             UpdateNotificationAutoDismissTimer();
+        }
+
+        if (e.PropertyName == nameof(MainViewModel.IsUndoToastVisible))
+        {
+            UpdateUndoToastTimer();
         }
     }
 
@@ -715,6 +722,33 @@ public sealed partial class MainPage : Page
     private void StopNotificationAutoDismissTimer()
     {
         _notificationAutoDismissTimer?.Stop();
+    }
+
+    private void UpdateUndoToastTimer()
+    {
+        if (!ViewModel.IsUndoToastVisible)
+        {
+            _undoToastTimer?.Stop();
+            return;
+        }
+
+        _undoToastTimer ??= CreateUndoToastTimer();
+        _undoToastTimer.Stop();
+        _undoToastTimer.Start();
+    }
+
+    private DispatcherQueueTimer CreateUndoToastTimer()
+    {
+        var timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(5);
+        timer.Tick += UndoToastTimer_Tick;
+        return timer;
+    }
+
+    private void UndoToastTimer_Tick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        ViewModel.DismissUndoToast();
     }
 
     private DispatcherQueueTimer CreateNotificationTimer()

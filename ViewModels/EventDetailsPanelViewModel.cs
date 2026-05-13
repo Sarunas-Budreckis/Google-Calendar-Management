@@ -1702,21 +1702,25 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         if (_currentSourceKind == CalendarEventSourceKind.Pending)
         {
-            var confirmed = await _contentDialogService.ShowConfirmationAsync(
-                "Delete Draft",
-                "This local draft will be permanently deleted.",
-                "Delete");
-            if (!confirmed)
-            {
-                return;
-            }
-
             var idToDelete = _currentEventId;
             StopDebounce();
+            var snapshot = await _pendingEventRepository.GetByPendingEventIdAsync(idToDelete, ct);
             await _pendingEventRepository.DeleteByPendingEventIdAsync(idToDelete, ct);
             RunOnUiThread(HidePanel);
             _selectionService.ClearSelection();
             WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(idToDelete));
+
+            if (snapshot is not null)
+            {
+                WeakReferenceMessenger.Default.Send(new RequestUndoToastMessage(
+                    "Draft deleted",
+                    async undoCt =>
+                    {
+                        await _pendingEventRepository.UpsertAsync(snapshot, undoCt);
+                        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(snapshot.PendingEventId));
+                    }));
+            }
+
             return;
         }
 
@@ -1724,15 +1728,6 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         if (pendingEvent is null)
         {
-            var confirmed = await _contentDialogService.ShowConfirmationAsync(
-                "Stage Deletion",
-                "This event will be staged for deletion and removed from Google Calendar when you push your changes.",
-                "Stage Delete");
-            if (!confirmed)
-            {
-                return;
-            }
-
             var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
             if (gcalEvent is null)
             {

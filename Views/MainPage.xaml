@@ -523,6 +523,25 @@
                 VerticalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
                 VerticalContentAlignment="Stretch" />
+
+            <Border
+                Grid.Column="1"
+                Margin="0,0,0,24"
+                Padding="12,8"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Background="{ThemeResource SystemFillColorSolidNeutralBrush}"
+                CornerRadius="{StaticResource AppCornerRadiusMedium}"
+                Visibility="{x:Bind ViewModel.UndoToastVisibility, Mode=OneWay}">
+                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Text="{x:Bind ViewModel.UndoToastMessage, Mode=OneWay}" />
+                    <Button
+                        Command="{x:Bind ViewModel.UndoCommand}"
+                        Content="Undo" />
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </Page>

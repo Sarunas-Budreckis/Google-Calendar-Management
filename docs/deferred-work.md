@@ -35,3 +35,9 @@
 - **No test for carry-forward starting before the visible date range** — All tests seed events whose `StartDay` is within `visibleDates`; there is no coverage for a multi-day event that starts before Jan 1 and extends into the visible year. [`GoogleCalendarManagement.Tests/Unit/Services/YearViewDayProjectionBuilderTests.cs`]
 - **Zero-duration all-day events silently promoted to single-day** — `BuildAllDaySpans` treats `EndLocal == StartLocal` as SpanDays=1; a malformed/API-edge event gets shown as a valid 1-day bar. [`Services/YearViewDayProjectionBuilder.cs:163-167`]
 - **Inverted-date all-day events silently clamped without logging** — When `EndLocal < StartLocal`, the guard clamps `endDay = startDay` silently; a log warning would help diagnose corrupted event data. [`Services/YearViewDayProjectionBuilder.cs:168-170`]
+
+## Deferred from: code review of delete-ux-auto-stage-candidate-undo-toast (2026-05-13)
+
+- **`DeleteUneditedDraftAsync` has no undo** — Called in multiple places to silently discard unedited new drafts with no confirmation or recovery. Inconsistent with the new candidate-delete undo toast. [`ViewModels/EventDetailsPanelViewModel.cs` ~line 1902]
+- **`DeleteEventByIdAsync` still shows a confirmation dialog for Pending events** — Programmatic delete path has a different UX than the user-initiated `DeleteEventAsync`. [`ViewModels/EventDetailsPanelViewModel.cs` ~line 1812]
+- **`RevertPendingChangesForEventAsync` silently deletes pending edits** — No undo offered when reverting a pending edit via the three-choice dialog. Pre-existing behaviour. [`ViewModels/EventDetailsPanelViewModel.cs` ~line 1880]
