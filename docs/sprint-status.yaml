@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-04-27T00:00:00Z
+last_updated: 2026-05-13T13:00:36-05:00
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
@@ -76,9 +76,30 @@ development_status:
   4-2-implement-event-creation-drag-to-create-and-button: in-progress
   4-3-implement-color-picker-for-event-colors: in-progress
   4-4-push-pending-events-to-google-calendar: review
-  4-5-event-deletion-local-drafts-and-published-events: ready-for-dev
+  4-5-event-deletion-local-drafts-and-published-events: review
   4-6-multi-select-and-batch-operations: ready-for-dev
-  4-7-drag-to-reschedule-existing-events: ready-for-dev
+  4-7-drag-to-reschedule-existing-events: in-progress
   4-8-year-view-drag-to-create: ready-for-dev
   4-9-recurring-event-editing-single-instance: backlog
+  4-10-overlapping-event-layout: ready-for-dev
   epic-4-retrospective: optional
+
+  epic-5: contexted  # Data Source Left Panel & Single-Day Select — scope doc at docs/epic-5/epic-overview.md
+  5-1-data-source-infrastructure: review
+  5-2-three-panel-layout-and-left-panel-shell: review
+  5-3-single-day-select: review
+  5-4-left-panel-global-mode: review
+  5-5-left-panel-day-mode: review
+  5-6-toggl-sleep-import: review
+  5-7-toggl-sleep-card-and-drilldown: drafted
+  epic-5-retrospective: optional
+
+  epic-6: backlog  # Batch Day Management — scope doc at docs/epic-6/epic-overview.md
+  6-1-batch-data-model-and-persistence: backlog
+  6-2-batch-tray-ui: backlog
+  6-3-add-remove-days-to-batch: backlog
+  6-4-batch-navigation: backlog
+  6-5-batch-approve-action: backlog
+  6-6-batch-mark-integration-action: backlog
+  6-7-batch-select-events: backlog
+  epic-6-retrospective: optional

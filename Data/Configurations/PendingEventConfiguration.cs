@@ -25,6 +25,7 @@ public class PendingEventConfiguration : IEntityTypeConfiguration<PendingEvent>
         builder.Property(e => e.ReadyToPublish).HasColumnName("ready_to_publish").ValueGeneratedNever();
         builder.Property(e => e.PublishAttemptedAt).HasColumnName("publish_attempted_at");
         builder.Property(e => e.PublishError).HasColumnName("publish_error");
+        builder.Property(e => e.OperationType).HasColumnName("operation_type").IsRequired().HasDefaultValue("edit");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(e => e.UpdatedAt).HasColumnName("updated_at").IsRequired();
 
@@ -34,6 +35,11 @@ public class PendingEventConfiguration : IEntityTypeConfiguration<PendingEvent>
 
         builder.HasIndex(e => new { e.StartDatetime, e.EndDatetime })
             .HasDatabaseName("idx_pending_event_date");
+
+        builder.HasIndex(e => new { e.StartDatetime, e.SourceSystem })
+            .IsUnique()
+            .HasFilter("source_system = 'day_name'")
+            .HasDatabaseName("idx_pending_event_day_name_unique");
 
         builder.HasOne(e => e.GcalEvent)
             .WithOne(e => e.PendingEvent)

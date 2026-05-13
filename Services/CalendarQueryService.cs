@@ -10,6 +10,7 @@ public sealed class CalendarQueryService : ICalendarQueryService
 {
     private const string DraftStatusLabel = "Not yet published to Google Calendar";
     private const string PendingOverlayStatusLabel = "Local changes, pending push to GCal";
+    private const string PendingDeleteStatusLabel = "Pending delete — will be removed from Google Calendar when pushed";
 
     private readonly IDbContextFactory<CalendarDbContext> _dbContextFactory;
     private readonly IColorMappingService _colorMappingService;
@@ -153,6 +154,7 @@ public sealed class CalendarQueryService : ICalendarQueryService
         var effectiveColorId = pendingEvent?.ColorId ?? gcalEvent.ColorId;
         var effectiveColorKey = _colorMappingService.NormalizeColorKey(effectiveColorId);
         var isPending = pendingEvent is not null;
+        var isPendingDelete = pendingEvent?.OperationType == "delete";
 
         var startUtc = NormalizeUtc(effectiveStart.Value);
         var endUtc = NormalizeUtc(effectiveEnd);
@@ -190,8 +192,9 @@ public sealed class CalendarQueryService : ICalendarQueryService
             false,
             isPending ? 0.6 : 1.0,
             pendingEvent?.UpdatedAt,
-            isPending ? PendingOverlayStatusLabel : string.Empty,
-            effectiveColorKey);
+            isPendingDelete ? PendingDeleteStatusLabel : isPending ? PendingOverlayStatusLabel : string.Empty,
+            effectiveColorKey,
+            isPendingDelete);
     }
 
     private CalendarEventDisplayModel? TryMapPendingDraftToDisplayModel(PendingEvent pendingEvent)

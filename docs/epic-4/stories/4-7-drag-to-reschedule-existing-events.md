@@ -1,6 +1,6 @@
 # Story 4.7: Drag-to-Reschedule Existing Events
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -96,39 +96,39 @@ so that **I can reschedule events directly on the calendar without reopening a s
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Align Story 4.7 with source-agnostic event identity** (AC: 4.7.1, 4.7.7, 4.7.8)
-  - [ ] Rebase onto Story 4.2's `EventId` and `SourceKind` contracts, or land the minimum equivalent refactor first
-  - [ ] Update Week and Day interaction registrations so timed blocks carry the identity needed to reschedule synced events and pending drafts through the same path
+- [x] **Task 1: Align Story 4.7 with source-agnostic event identity** (AC: 4.7.1, 4.7.7, 4.7.8)
+  - [x] Rebase onto Story 4.2's `EventId` and `SourceKind` contracts, or land the minimum equivalent refactor first
+  - [x] Update Week and Day interaction registrations so timed blocks carry the identity needed to reschedule synced events and pending drafts through the same path
 
-- [ ] **Task 2: Generalize the drag-reschedule application path** (AC: 4.7.1, 4.7.7, 4.7.8, 4.7.9)
-  - [ ] Replace the current "selected timed event in edit mode only" gate with a source-aware reschedule method that can run whether or not the details panel is already editing that event
-  - [ ] Preserve the selected-panel synchronization path when the dragged event is already open
+- [x] **Task 2: Generalize the drag-reschedule application path** (AC: 4.7.1, 4.7.7, 4.7.8, 4.7.9)
+  - [x] Replace the current "selected timed event in edit mode only" gate with a source-aware reschedule method that can run whether or not the details panel is already editing that event
+  - [x] Preserve the selected-panel synchronization path when the dragged event is already open
 
-- [ ] **Task 3: Preserve move-vs-resize routing in Week and Day controls** (AC: 4.7.2, 4.7.3, 4.7.4, 4.7.6)
-  - [ ] Keep the existing bottom-edge resize affordance intact
-  - [ ] Ensure dragging from the body uses the reschedule path with immediate block movement and no ghost placeholder
-  - [ ] Reject drag attempts that cross the timed/all-day boundary
+- [x] **Task 3: Preserve move-vs-resize routing in Week and Day controls** (AC: 4.7.2, 4.7.3, 4.7.4, 4.7.6)
+  - [x] Keep the existing bottom-edge resize affordance intact
+  - [x] Ensure dragging from the body uses the reschedule path with immediate block movement and no ghost placeholder
+  - [x] Reject drag attempts that cross the timed/all-day boundary
 
-- [ ] **Task 4: Implement Week-view wrap-around drag math** (AC: 4.7.2, 4.7.4, 4.7.5)
-  - [ ] Extend preview and drop calculations so vertical overflow wraps to adjacent days in both directions
-  - [ ] Preserve duration and quarter-hour snapping through the wrap behavior
+- [x] **Task 4: Implement Week-view wrap-around drag math** (AC: 4.7.2, 4.7.4, 4.7.5)
+  - [x] Extend preview and drop calculations so vertical overflow wraps to adjacent days in both directions
+  - [x] Preserve duration and quarter-hour snapping through the wrap behavior
 
-- [ ] **Task 5: Persist drops through `pending_event` and refresh affected views** (AC: 4.7.7, 4.7.8, 4.7.9)
-  - [ ] Upsert pending rows for synced events and update pending rows for pending drafts
-  - [ ] Publish `EventUpdatedMessage` so only the affected display model refreshes
-  - [ ] Keep dragged events rendered at 60% opacity after drop
+- [x] **Task 5: Persist drops through `pending_event` and refresh affected views** (AC: 4.7.7, 4.7.8, 4.7.9)
+  - [x] Upsert pending rows for synced events and update pending rows for pending drafts
+  - [x] Publish `EventUpdatedMessage` so only the affected display model refreshes
+  - [x] Keep dragged events rendered at 60% opacity after drop
 
-- [ ] **Task 6: Extend undo and cancel behavior** (AC: 4.7.9)
-  - [ ] `Esc` during active drag cancels the preview with no persistence
-  - [ ] `Ctrl+Z` after drop restores the pre-drag range, including pending-row rollback behavior
+- [x] **Task 6: Extend undo and cancel behavior** (AC: 4.7.9)
+  - [x] `Esc` during active drag cancels the preview with no persistence
+  - [x] `Ctrl+Z` after drop restores the pre-drag range, including pending-row rollback behavior
 
-- [ ] **Task 7: Add automated coverage** (AC: 4.7.10)
-  - [ ] Unit tests for move-vs-resize routing, snap math, wrap math, and undo
-  - [ ] Integration tests for pending-row persistence and query refresh after drop
+- [x] **Task 7: Add automated coverage** (AC: 4.7.10)
+  - [x] Unit tests for move-vs-resize routing, snap math, wrap math, and undo
+  - [x] Integration tests for pending-row persistence and query refresh after drop
 
 - [ ] **Task 8: Validate locally**
-  - [ ] `dotnet build -p:Platform=x64`
-  - [ ] `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64`
+  - [x] `dotnet build -p:Platform=x64`
+  - [x] `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64`
   - [ ] Manual: drag timed event in Day view, drag timed event across days in Week view, verify resize boundary still works, verify `Esc` cancel, verify `Ctrl+Z` undo, verify no selection side effects
 
 ## References
@@ -141,16 +141,39 @@ so that **I can reschedule events directly on the calendar without reopening a s
 
 ### Agent Model Used
 
-<!-- to be filled by dev agent -->
+GPT-5 Codex
 
 ### Debug Log References
 
-<!-- to be filled by dev agent -->
+- 2026-05-13: `dotnet build -p:Platform=x64` passed.
+- 2026-05-13: `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64` passed: 276 tests.
 
 ### Completion Notes List
 
-<!-- to be filled by dev agent -->
+- Implemented source-aware timed drag registrations for Week and Day view using `EventId` plus `SourceKind`.
+- Added `TimedEventDragMath` for move-vs-resize routing, 15-minute snapping, duration preservation, and Week-view day wrapping.
+- Added source-aware drag drop persistence through `pending_event` for synced events and pending drafts without mutating selection state.
+- Added single-level drag undo that restores the previous pending row or removes a newly-created overlay row.
+- Added `Esc` cancellation for active timed-event drags and wired `Ctrl+Z` to the drag undo path.
+- Automated build and tests pass. Manual UI drag verification remains open.
 
 ### File List
 
-<!-- to be filled by dev agent -->
+- GoogleCalendarManagement.Tests/Integration/CalendarQueryServiceTests.cs
+- GoogleCalendarManagement.Tests/Integration/PendingEventRepositoryTests.cs
+- GoogleCalendarManagement.Tests/Unit/Services/TimedEventDragMathTests.cs
+- GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs
+- Models/WeekTimedEventLayoutItem.cs
+- Services/TimedEventDragMath.cs
+- Services/WeekTimedEventProjectionBuilder.cs
+- ViewModels/EventDetailsPanelViewModel.cs
+- Views/DayViewControl.xaml.cs
+- Views/EventDetailsPanelControl.xaml.cs
+- Views/MainPage.xaml.cs
+- Views/WeekViewControl.xaml.cs
+- docs/epic-4/stories/4-7-drag-to-reschedule-existing-events.md
+- docs/sprint-status.yaml
+
+### Change Log
+
+- 2026-05-13: Implemented drag-to-reschedule existing timed events with pending-event persistence, undo/cancel support, Week wrap math, and automated coverage. Story remains in-progress pending manual UI verification.

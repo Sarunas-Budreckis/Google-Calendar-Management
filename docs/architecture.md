@@ -402,7 +402,7 @@ public DateTime CreatedAt { get; set; }
 // Boolean columns: Descriptive with context
 published_to_gcal (not just "published")
 visible_as_event (not just "visible")
-complete_walkthrough_approval (not just "complete")
+approved (not just "complete")
 
 // Timestamp columns: Suffix with "_at"
 created_at, updated_at, published_at, synced_at
@@ -868,7 +868,7 @@ date_state.date (PK) tracks per-date flags:
 - call_log_data_published
 - youtube_data_published
 - toggl_data_published
-- complete_walkthrough_approval
+- approved
 ```
 
 **4. Version History:**
@@ -1578,7 +1578,7 @@ dotnet publish -c Release -r win-x64 --self-contained -o ./publish
 - "Which data sources am I missing for this date?" → Compare all flags
 - Flexible: User can fill data sources in any order
 
-**Implementation:** `date_state` table with separate flags: `call_log_data_published`, `youtube_data_published`, `toggl_data_published`, `complete_walkthrough_approval`
+**Implementation:** `date_state` table with separate flags: `call_log_data_published`, `youtube_data_published`, `toggl_data_published`, `approved`
 
 **Trade-offs:** More columns in database (acceptable), more complex state management (mitigated by EF Core)
 
@@ -1669,7 +1669,7 @@ dotnet publish -c Release -r win-x64 --self-contained -o ./publish
 |-------|----------|--------------|
 | Tier 1 | GoogleWins | Always (user can't edit, Google is source of truth) |
 | Tier 2 | MergeTimestamp | Compare `gcal_updated_at` vs `app_last_modified_at`, newer wins |
-| Tier 3 | LocalWins | Verified events (`app_created=TRUE` + `complete_walkthrough_approval=TRUE`) take precedence |
+| Tier 3 | LocalWins | Verified events (`app_created=TRUE` + `approved=TRUE`) take precedence |
 
 **Implementation:**
 - All phases use ETags for conflict detection (optimistic concurrency control)

@@ -24,13 +24,17 @@ public sealed partial class WeekViewControl : Page
     private const double MinimumDayColumnWidth = 100;
     private const double HorizontalChromeAllowance = 20;
     private const double WeekGridHorizontalPadding = 24.0;
+    private const double DragThresholdPixels = 4.0;
 
+    private static readonly Brush PendingDeleteBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xC4, 0x2B, 0x1C));
     private static readonly Brush GridLineBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4A, 0x4A, 0x4A));
     private static readonly Brush OverlapOutlineBrush = new SolidColorBrush(Colors.Black);
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
     private static readonly Brush SelectedForPushBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4C, 0xAF, 0x50));
     private static readonly Brush TodayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4E, 0x8F, 0xD8));
     private static readonly Brush TodayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x73, 0xA8, 0xE4));
+    private static readonly Brush SelectedDayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xB9, 0x32, 0x42));
+    private static readonly Brush SelectedDayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xF0, 0x8A, 0x94));
     private static readonly Brush TodayTextBrush = new SolidColorBrush(Colors.White);
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
     private static readonly Brush CurrentTimeIndicatorBrush = new SolidColorBrush(Colors.Red);
@@ -39,11 +43,13 @@ public sealed partial class WeekViewControl : Page
     private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
+    private readonly ICalendarDaySelectionService _daySelectionService;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly EventDetailsPanelViewModel _eventDetailsViewModel;
     private readonly TimeProvider _timeProvider;
     private readonly EventColorPickerFlyoutController _eventColorPicker;
     private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
+    private readonly Dictionary<DateOnly, List<DayNumberRegistration>> _dayNumberRegistrations = [];
     private readonly Dictionary<Border, TimedEventInteractionRegistration> _interactiveTimedEventBorders = new();
     private ColorPickerTarget? _activeColorTarget;
     private IReadOnlyList<WeekTimedEventLayoutItem> _timedEventItems = [];
@@ -61,6 +67,7 @@ public sealed partial class WeekViewControl : Page
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
         _selectionService = App.GetRequiredService<ICalendarSelectionService>();
+        _daySelectionService = App.GetRequiredService<ICalendarDaySelectionService>();
         _pendingEventDraftService = App.GetRequiredService<IPendingEventDraftService>();
         _eventDetailsViewModel = App.GetRequiredService<EventDetailsPanelViewModel>();
         _timeProvider = App.GetRequiredService<TimeProvider>();
@@ -83,7 +90,8 @@ public sealed partial class WeekViewControl : Page
             () => new EventColorPickerMenuState(
                 ShowRevert: _activeColorTarget?.IsPending == true,
                 ShowPendingPublishSelectionToggle: _activeColorTarget?.IsPending == true,
-                IsSelectedForPush: _activeColorTarget is not null && ViewModel.IsPendingEventSelectedForPush(_activeColorTarget.EventId)),
+                IsSelectedForPush: _activeColorTarget is not null && ViewModel.IsPendingEventSelectedForPush(_activeColorTarget.EventId),
+                ShowDelete: _activeColorTarget is not null),
             async () =>
             {
                 if (_activeColorTarget is null)
@@ -103,6 +111,17 @@ public sealed partial class WeekViewControl : Page
                 }
 
                 await ViewModel.TogglePendingPublishSelectionForEventAsync(_activeColorTarget.EventId);
+            },
+            async () =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
+                await _eventDetailsViewModel.DeleteEventByIdAsync(
+                    _activeColorTarget.EventId,
+                    _activeColorTarget.SourceKind);
             });
         InitializeComponent();
 
@@ -133,6 +152,7 @@ public sealed partial class WeekViewControl : Page
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         _eventDetailsViewModel.PropertyChanged += EventDetailsViewModel_PropertyChanged;
         WeakReferenceMessenger.Default.Register<WeekViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
+        WeakReferenceMessenger.Default.Register<WeekViewControl, DaySelectedMessage>(this, static (recipient, message) => recipient.OnDaySelected(message));
         WeakReferenceMessenger.Default.Register<WeekViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
 
         _resizeDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
@@ -156,6 +176,7 @@ public sealed partial class WeekViewControl : Page
         _resizeDebounceTimer = null;
         WeakReferenceMessenger.Default.UnregisterAll(this);
         _eventBorders.Clear();
+        _dayNumberRegistrations.Clear();
         _interactiveTimedEventBorders.Clear();
         _activeInteraction = null;
     }
@@ -201,6 +222,7 @@ public sealed partial class WeekViewControl : Page
         TimedEventsRepeater.ItemsSource = null;
         _timedEventItems = [];
         _eventBorders.Clear();
+        _dayNumberRegistrations.Clear();
         _interactiveTimedEventBorders.Clear();
         _activeInteraction = null;
         _activeDraftCreation = null;
@@ -280,39 +302,58 @@ public sealed partial class WeekViewControl : Page
             };
             ToolTipService.SetToolTip(dot, ViewModel.LastSyncTooltip);
 
+            var dayHighlight = new Ellipse
+            {
+                Fill = isToday ? TodayHighlightBrush : TransparentPanelBrush,
+                Stroke = isToday ? TodayHighlightStrokeBrush : TransparentPanelBrush,
+                StrokeThickness = isToday ? 1.25 : 0,
+                RenderTransformOrigin = new Point(0.5, 0.5)
+            };
+            var selectedOverlay = new Ellipse
+            {
+                Margin = new Thickness(4),
+                Fill = TransparentPanelBrush,
+                Stroke = TransparentPanelBrush,
+                StrokeThickness = 0
+            };
+            var dayLabel = new TextBlock
+            {
+                Text = currentDay.Day.ToString(culture),
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = isToday
+                    ? TodayTextBrush
+                    : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
             var dayNumber = new Border
             {
                 Width = 28,
                 Height = 28,
+                Background = TransparentPanelBrush,
                 VerticalAlignment = VerticalAlignment.Center,
                 Child = new Grid
                 {
                     Children =
                     {
-                        new Ellipse
-                        {
-                            Fill = isToday ? TodayHighlightBrush : TransparentPanelBrush,
-                            Stroke = isToday ? TodayHighlightStrokeBrush : TransparentPanelBrush,
-                            StrokeThickness = isToday ? 1.25 : 0
-                        },
-                        new TextBlock
-                        {
-                            Text = currentDay.Day.ToString(culture),
-                            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                            Foreground = isToday
-                                ? TodayTextBrush
-                                : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
-                            HorizontalAlignment = HorizontalAlignment.Center,
-                            VerticalAlignment = VerticalAlignment.Center
-                        }
+                        dayHighlight,
+                        selectedOverlay,
+                        dayLabel
                     }
                 }
             };
+            dayNumber.Tapped += (_, e) =>
+            {
+                ToggleDaySelection(currentDay);
+                e.Handled = true;
+            };
+            RegisterDayNumber(currentDay, dayHighlight, selectedOverlay, dayLabel, isToday);
 
             var header = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 Margin = new Thickness(4),
+                Background = TransparentPanelBrush,
                 Spacing = 6,
                 Children =
                 {
@@ -325,6 +366,11 @@ public sealed partial class WeekViewControl : Page
                     },
                     dayNumber
                 }
+            };
+            header.Tapped += (_, e) =>
+            {
+                ToggleDaySelection(currentDay);
+                e.Handled = true;
             };
             Grid.SetRow(header, 0);
             Grid.SetColumn(header, column);
@@ -365,6 +411,7 @@ public sealed partial class WeekViewControl : Page
         UpdateCurrentTimeIndicator();
 
         ApplySelectionVisualState(_selectionService.SelectedEventId);
+        ApplyDaySelectionVisualState(_daySelectionService.SelectedDay);
     }
 
     private Border CreateEventChip(CalendarEventDisplayModel item, CultureInfo culture)
@@ -374,9 +421,9 @@ public sealed partial class WeekViewControl : Page
             Padding = new Thickness(4),
             Opacity = item.Opacity,
             CornerRadius = ElementCornerRadius,
-            Background = ToBrush(item.ColorHex),
-            BorderBrush = TransparentPanelBrush,
-            BorderThickness = new Thickness(0),
+            Background = ToBrush(item.DisplayColorHex),
+            BorderBrush = item.IsPendingDelete ? PendingDeleteBorderBrush : TransparentPanelBrush,
+            BorderThickness = item.IsPendingDelete ? new Thickness(2) : new Thickness(0),
             Child = new TextBlock
             {
                     Text = GetDisplayTitle(item),
@@ -396,6 +443,14 @@ public sealed partial class WeekViewControl : Page
         {
             ShowEventColorPicker(border, item, e.GetPosition(border));
             e.Handled = true;
+        };
+        border.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(border).Properties.IsMiddleButtonPressed)
+            {
+                e.Handled = true;
+                _ = _eventDetailsViewModel.DeleteEventByIdAsync(item.EventId, item.SourceKind);
+            }
         };
 
         RegisterEventBorder(item.EventId, border);
@@ -469,8 +524,8 @@ public sealed partial class WeekViewControl : Page
         }
         border.CornerRadius = ElementCornerRadius;
         border.Background = ToBrush(item.ColorHex);
-        border.BorderBrush = item.UseOverlapOutline ? OverlapOutlineBrush : null;
-        border.BorderThickness = item.UseOverlapOutline ? new Thickness(1) : new Thickness(0);
+        border.BorderBrush = item.IsPendingDelete ? PendingDeleteBorderBrush : item.UseOverlapOutline ? OverlapOutlineBrush : null;
+        border.BorderThickness = item.IsPendingDelete || item.UseOverlapOutline ? new Thickness(item.IsPendingDelete ? 2 : 1) : new Thickness(0);
         border.Padding = item.IsCompact
             ? TimeFocusedViewLayoutMetrics.CreateCompactTimedEventPadding(item.CompactTopPadding)
             : new Thickness(TimeFocusedViewLayoutMetrics.StandardTimedEventPadding);
@@ -525,6 +580,11 @@ public sealed partial class WeekViewControl : Page
             ApplySelectionVisualState(message.EventId);
             RefreshInteractiveTimedEventBorders();
         });
+    }
+
+    private void OnDaySelected(DaySelectedMessage message)
+    {
+        _ = DispatcherQueue.TryEnqueue(() => ApplyDaySelectionVisualState(message.SelectedDay));
     }
 
     private void OnSyncCompleted()
@@ -636,6 +696,67 @@ public sealed partial class WeekViewControl : Page
         }
     }
 
+    private void RegisterDayNumber(DateOnly date, Ellipse highlight, Ellipse selectedOverlay, TextBlock label, bool isToday)
+    {
+        if (!_dayNumberRegistrations.TryGetValue(date, out var registrations))
+        {
+            registrations = [];
+            _dayNumberRegistrations[date] = registrations;
+        }
+
+        registrations.Add(new DayNumberRegistration(highlight, selectedOverlay, label, isToday));
+    }
+
+    private void ToggleDaySelection(DateOnly date)
+    {
+        if (_daySelectionService.SelectedDay == date)
+        {
+            _daySelectionService.ClearSelection();
+            return;
+        }
+
+        _daySelectionService.SelectDay(date);
+    }
+
+    private void ApplyDaySelectionVisualState(DateOnly? selectedDay)
+    {
+        foreach (var (date, registrations) in _dayNumberRegistrations)
+        {
+            var isSelected = selectedDay == date;
+            foreach (var registration in registrations)
+            {
+                registration.Highlight.Fill = isSelected
+                    ? registration.IsToday
+                        ? TodayHighlightBrush
+                        : SelectedDayHighlightBrush
+                    : registration.IsToday
+                        ? TodayHighlightBrush
+                        : TransparentPanelBrush;
+                registration.Highlight.Stroke = isSelected
+                    ? registration.IsToday
+                        ? TodayHighlightStrokeBrush
+                        : SelectedDayHighlightStrokeBrush
+                    : registration.IsToday
+                        ? TodayHighlightStrokeBrush
+                        : TransparentPanelBrush;
+                registration.Highlight.StrokeThickness = isSelected || registration.IsToday ? 1.25 : 0;
+                registration.Highlight.RenderTransform = registration.IsToday && isSelected
+                    ? new ScaleTransform { ScaleX = 1.16, ScaleY = 1.16 }
+                    : null;
+                registration.SelectedOverlay.Fill = registration.IsToday && isSelected
+                    ? SelectedDayHighlightBrush
+                    : TransparentPanelBrush;
+                registration.SelectedOverlay.Stroke = registration.IsToday && isSelected
+                    ? SelectedDayHighlightStrokeBrush
+                    : TransparentPanelBrush;
+                registration.SelectedOverlay.StrokeThickness = registration.IsToday && isSelected ? 1 : 0;
+                registration.Label.Foreground = isSelected || registration.IsToday
+                    ? TodayTextBrush
+                    : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
+            }
+        }
+    }
+
     private void RegisterEventBorder(string eventId, Border border)
     {
         if (!_eventBorders.TryGetValue(eventId, out var registrations))
@@ -664,6 +785,10 @@ public sealed partial class WeekViewControl : Page
 
         _interactiveTimedEventBorders[border] = new TimedEventInteractionRegistration(
             item.EventId,
+            item.SourceKind,
+            item.StartLocal,
+            item.EndLocal,
+            item.DayOffset,
             item.Height,
             item.SecondaryText);
 
@@ -691,11 +816,9 @@ public sealed partial class WeekViewControl : Page
             return;
         }
 
-        var isInteractive = _eventDetailsViewModel.IsEditingSelectedTimedEvent(registration.EventId);
         ProtectedCursor = null;
 
-        if (!isInteractive &&
-            (_activeInteraction is null || !ReferenceEquals(_activeInteraction.Border, border)))
+        if (_activeInteraction is null || !ReferenceEquals(_activeInteraction.Border, border))
         {
             ResetInteractivePreview(border, registration);
         }
@@ -744,17 +867,47 @@ public sealed partial class WeekViewControl : Page
 
     private void TimedEventBorder_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (sender is not Border border ||
-            !e.GetCurrentPoint(border).Properties.IsLeftButtonPressed ||
-            !_interactiveTimedEventBorders.TryGetValue(border, out var registration) ||
-            !_eventDetailsViewModel.TryGetEditableTimedRange(registration.EventId, out var startLocal, out var endLocal))
+        if (sender is not Border border)
         {
             return;
         }
 
-        var mode = IsPointerNearResizeBoundary(e.GetCurrentPoint(border).Position, border)
+        if (e.GetCurrentPoint(border).Properties.IsMiddleButtonPressed &&
+            _interactiveTimedEventBorders.TryGetValue(border, out var midReg))
+        {
+            e.Handled = true;
+            _ = _eventDetailsViewModel.DeleteEventByIdAsync(midReg.EventId, midReg.SourceKind);
+            return;
+        }
+
+        if (!e.GetCurrentPoint(border).Properties.IsLeftButtonPressed ||
+            !_interactiveTimedEventBorders.TryGetValue(border, out var registration))
+        {
+            return;
+        }
+
+        var pointerMode = TimedEventDragMath.GetPointerMode(
+            e.GetCurrentPoint(border).Position.Y,
+            border.ActualHeight,
+            TimeFocusedViewLayoutMetrics.ResizeBoundaryThickness);
+        var mode = pointerMode == TimedEventPointerMode.Resize
             ? EventInteractionMode.Resize
             : EventInteractionMode.Move;
+        var startLocal = registration.StartLocal;
+        var endLocal = registration.EndLocal;
+        var selectOnRelease = false;
+        if (mode == EventInteractionMode.Resize)
+        {
+            if (_eventDetailsViewModel.TryGetEditableTimedRange(registration.EventId, registration.SourceKind, out var editStart, out var editEnd))
+            {
+                startLocal = editStart;
+                endLocal = editEnd;
+            }
+            else
+            {
+                selectOnRelease = true;
+            }
+        }
 
         var transform = border.RenderTransform as TranslateTransform ?? new TranslateTransform();
         border.RenderTransform = transform;
@@ -762,13 +915,16 @@ public sealed partial class WeekViewControl : Page
         _activeInteraction = new EventInteractionState(
             border,
             registration.EventId,
+            registration.SourceKind,
             mode,
             e.Pointer.PointerId,
             e.GetCurrentPoint(WeekBodySurface).Position,
             startLocal,
             endLocal,
+            registration.DayOffset,
             registration.BaseHeight,
-            transform);
+            transform,
+            selectOnRelease);
         e.Handled = true;
     }
 
@@ -781,8 +937,7 @@ public sealed partial class WeekViewControl : Page
             !_interactiveTimedEventBorders.TryGetValue(border, out var registration))
         {
             if (sender is Border hoverBorder &&
-                _interactiveTimedEventBorders.TryGetValue(hoverBorder, out var hoverRegistration) &&
-                _eventDetailsViewModel.IsEditingSelectedTimedEvent(hoverRegistration.EventId))
+                _interactiveTimedEventBorders.TryGetValue(hoverBorder, out _))
             {
                 ProtectedCursor = IsPointerNearResizeBoundary(e.GetCurrentPoint(hoverBorder).Position, hoverBorder)
                     ? ResizeVerticalCursor
@@ -797,7 +952,7 @@ public sealed partial class WeekViewControl : Page
         e.Handled = true;
     }
 
-    private void TimedEventBorder_PointerReleased(object sender, PointerRoutedEventArgs e)
+    private async void TimedEventBorder_PointerReleased(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not Border border ||
             _activeInteraction is null ||
@@ -808,14 +963,62 @@ public sealed partial class WeekViewControl : Page
             return;
         }
 
-        var preview = GetPreviewRange(_activeInteraction, e.GetCurrentPoint(WeekBodySurface).Position);
+        var pointerPosition = e.GetCurrentPoint(WeekBodySurface).Position;
+        var preview = GetPreviewRange(_activeInteraction, pointerPosition);
         if (_activeInteraction.Mode == EventInteractionMode.Move)
         {
-            _eventDetailsViewModel.ApplyDraggedTimeRange(_activeInteraction.EventId, preview.StartLocal, preview.EndLocal);
+            var dx = Math.Abs(pointerPosition.X - _activeInteraction.OriginPoint.X);
+            var dy = Math.Abs(pointerPosition.Y - _activeInteraction.OriginPoint.Y);
+            var isClickGesture = dx <= DragThresholdPixels && dy <= DragThresholdPixels;
+
+            if (!isClickGesture && TryGetDayOffset(pointerPosition.X, out _))
+            {
+                await _eventDetailsViewModel.ApplyDroppedTimeRangeAsync(
+                    _activeInteraction.EventId,
+                    _activeInteraction.SourceKind,
+                    preview.StartLocal,
+                    preview.EndLocal);
+            }
+            else
+            {
+                ResetInteractivePreview(border, registration);
+                if (isClickGesture)
+                {
+                    _selectionService.Select(_activeInteraction.EventId, _activeInteraction.SourceKind);
+                }
+            }
         }
         else
         {
-            _eventDetailsViewModel.ApplyResizedEndTime(_activeInteraction.EventId, preview.EndLocal);
+            if (_activeInteraction.SelectOnRelease)
+            {
+                var dy = Math.Abs(pointerPosition.Y - _activeInteraction.OriginPoint.Y);
+                if (dy <= DragThresholdPixels)
+                {
+                    ResetInteractivePreview(border, registration);
+                    _selectionService.Select(_activeInteraction.EventId, _activeInteraction.SourceKind, openInEditMode: true);
+                }
+                else
+                {
+                    var eventId = _activeInteraction.EventId;
+                    var sourceKind = _activeInteraction.SourceKind;
+                    var originalStart = _activeInteraction.OriginalStartLocal;
+                    var succeeded = await _eventDetailsViewModel.ApplyDroppedTimeRangeAsync(
+                        eventId,
+                        sourceKind,
+                        originalStart,
+                        preview.EndLocal);
+                    ResetInteractivePreview(border, registration);
+                    if (succeeded)
+                    {
+                        _selectionService.Select(eventId, sourceKind, openInEditMode: true);
+                    }
+                }
+            }
+            else
+            {
+                _eventDetailsViewModel.ApplyResizedEndTime(_activeInteraction.EventId, preview.EndLocal);
+            }
         }
 
         border.ReleasePointerCaptures();
@@ -916,6 +1119,19 @@ public sealed partial class WeekViewControl : Page
 
     private void WeekViewControl_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (e.Key == Windows.System.VirtualKey.Escape && _activeInteraction is not null)
+        {
+            if (_interactiveTimedEventBorders.TryGetValue(_activeInteraction.Border, out var registration))
+            {
+                ResetInteractivePreview(_activeInteraction.Border, registration);
+            }
+
+            _activeInteraction.Border.ReleasePointerCaptures();
+            _activeInteraction = null;
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Windows.System.VirtualKey.Escape && _activeDraftCreation is not null)
         {
             ClearDraftPreview();
@@ -938,11 +1154,13 @@ public sealed partial class WeekViewControl : Page
 
         if (interaction.Mode == EventInteractionMode.Move)
         {
+            interaction.Transform.X = preview.DayDelta * _renderedDayColumnWidth;
             interaction.Transform.Y = MinutesToPixels(preview.MinuteDelta);
             interaction.Border.Height = double.NaN;
         }
         else
         {
+            interaction.Transform.X = 0;
             interaction.Transform.Y = 0;
             var newHeight = Math.Max(15.0, registration.BaseHeight + MinutesToPixels(preview.MinuteDelta));
             _timedEventLayout.DragEventId = interaction.EventId;
@@ -972,50 +1190,36 @@ public sealed partial class WeekViewControl : Page
         }
     }
 
-    private static PreviewRangeResult GetPreviewRange(EventInteractionState interaction, Point pointerPosition)
+    private PreviewRangeResult GetPreviewRange(EventInteractionState interaction, Point pointerPosition)
     {
-        var minuteDelta = SnapMinutes(
-            (pointerPosition.Y - interaction.OriginPoint.Y) / TimeFocusedViewLayoutMetrics.HourRowHeight * 60.0);
+        var rawMinuteDelta = (pointerPosition.Y - interaction.OriginPoint.Y) / TimeFocusedViewLayoutMetrics.HourRowHeight * 60.0;
         if (interaction.Mode == EventInteractionMode.Move)
         {
+            var dayDelta = TryGetDayOffset(pointerPosition.X, out var pointerDayOffset)
+                ? pointerDayOffset - interaction.OriginalDayOffset
+                : 0;
+            var preview = TimedEventDragMath.GetMovePreview(
+                interaction.OriginalStartLocal,
+                interaction.OriginalEndLocal,
+                rawMinuteDelta,
+                dayDelta);
             return new PreviewRangeResult(
-                interaction.OriginalStartLocal.AddMinutes(minuteDelta),
-                interaction.OriginalEndLocal.AddMinutes(minuteDelta),
-                minuteDelta);
+                preview.StartLocal,
+                preview.EndLocal,
+                preview.VisualMinuteDelta,
+                preview.VisualDayDelta);
         }
 
-        var candidateEnd = RoundToNearestQuarterHour(interaction.OriginalEndLocal.AddMinutes(minuteDelta));
-        var minEnd = interaction.OriginalStartLocal.AddMinutes(15);
-        var maxEnd = interaction.OriginalStartLocal.Date.AddDays(1).AddHours(2);
-        var clampedEnd = candidateEnd < minEnd
-            ? minEnd
-            : candidateEnd > maxEnd
-                ? maxEnd
-                : candidateEnd;
+        var clampedEnd = TimedEventDragMath.GetResizeEndPreview(
+            interaction.OriginalStartLocal,
+            interaction.OriginalEndLocal,
+            rawMinuteDelta);
 
         return new PreviewRangeResult(
             interaction.OriginalStartLocal,
             clampedEnd,
-            (int)Math.Round((clampedEnd - interaction.OriginalEndLocal).TotalMinutes));
-    }
-
-    private static int SnapMinutes(double rawMinutes)
-    {
-        return (int)Math.Round(rawMinutes / 15.0) * 15;
-    }
-
-    private static DateTime RoundToNearestQuarterHour(DateTime value)
-    {
-        var totalMinutes = value.Hour * 60 + value.Minute + (value.Second / 60.0);
-        var snappedMinutes = (int)Math.Round(totalMinutes / 15.0) * 15;
-        var dayOffset = Math.DivRem(snappedMinutes, 24 * 60, out var minuteOfDay);
-        if (minuteOfDay < 0)
-        {
-            minuteOfDay += 24 * 60;
-            dayOffset--;
-        }
-
-        return value.Date.AddDays(dayOffset).AddMinutes(minuteOfDay);
+            (int)Math.Round((clampedEnd - interaction.OriginalEndLocal).TotalMinutes),
+            0);
     }
 
     private static double MinutesToPixels(int minutes)
@@ -1036,6 +1240,7 @@ public sealed partial class WeekViewControl : Page
 
         if (border.RenderTransform is TranslateTransform transform)
         {
+            transform.X = 0;
             transform.Y = 0;
         }
 
@@ -1252,7 +1457,7 @@ public sealed partial class WeekViewControl : Page
         string colorKey,
         Point position)
     {
-        _activeColorTarget = new ColorPickerTarget(eventId, sourceKind, colorKey, ResolveIsPending(eventId));
+        _activeColorTarget = new ColorPickerTarget(eventId, sourceKind, colorKey, ResolveIsPending(eventId), ResolveIsPendingDelete(eventId));
         _eventColorPicker.ShowAt(target, position);
     }
 
@@ -1269,6 +1474,14 @@ public sealed partial class WeekViewControl : Page
         return ViewModel.CurrentEvents
             .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.Ordinal))
             ?.IsPending
+            ?? false;
+    }
+
+    private bool ResolveIsPendingDelete(string eventId)
+    {
+        return ViewModel.CurrentEvents
+            .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.Ordinal))
+            ?.IsPendingDelete
             ?? false;
     }
 
@@ -1319,23 +1532,32 @@ public sealed partial class WeekViewControl : Page
         Thickness DefaultBorderThickness,
         Thickness DefaultPadding);
 
-    private sealed record ColorPickerTarget(string EventId, CalendarEventSourceKind SourceKind, string ColorKey, bool IsPending);
+    private sealed record DayNumberRegistration(Ellipse Highlight, Ellipse SelectedOverlay, TextBlock Label, bool IsToday);
+
+    private sealed record ColorPickerTarget(string EventId, CalendarEventSourceKind SourceKind, string ColorKey, bool IsPending, bool IsPendingDelete = false);
 
     private sealed record TimedEventInteractionRegistration(
         string EventId,
+        CalendarEventSourceKind SourceKind,
+        DateTime StartLocal,
+        DateTime EndLocal,
+        int DayOffset,
         double BaseHeight,
         string? DefaultTimeText);
 
     private sealed record EventInteractionState(
         Border Border,
         string EventId,
+        CalendarEventSourceKind SourceKind,
         EventInteractionMode Mode,
         uint PointerId,
         Point OriginPoint,
         DateTime OriginalStartLocal,
         DateTime OriginalEndLocal,
+        int OriginalDayOffset,
         double BaseHeight,
-        TranslateTransform Transform);
+        TranslateTransform Transform,
+        bool SelectOnRelease = false);
 
     private sealed record DraftCreationState(
         uint PointerId,
@@ -1344,7 +1566,7 @@ public sealed partial class WeekViewControl : Page
         Border PreviewBorder,
         TextBlock TimeLabel);
 
-    private sealed record PreviewRangeResult(DateTime StartLocal, DateTime EndLocal, int MinuteDelta);
+    private sealed record PreviewRangeResult(DateTime StartLocal, DateTime EndLocal, int MinuteDelta, int DayDelta);
 
     private enum EventInteractionMode
     {

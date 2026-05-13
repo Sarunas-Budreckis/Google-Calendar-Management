@@ -54,6 +54,42 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task SwitchViewModeCommand_DayView_AutoSelectsCurrentDate()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 05, 13)));
+        var daySelectionService = new Mock<ICalendarDaySelectionService>();
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            calendarDaySelectionService: daySelectionService.Object);
+
+        await viewModel.InitializeAsync();
+        await viewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Day);
+
+        daySelectionService.Verify(service => service.AutoSelectDay(new DateOnly(2026, 05, 13)), Times.Once);
+    }
+
+    [Fact]
+    public async Task SwitchViewModeCommand_FromDayView_RestoresManualDaySelection()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Day, new DateOnly(2026, 05, 13)));
+        var daySelectionService = new Mock<ICalendarDaySelectionService>();
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            calendarDaySelectionService: daySelectionService.Object);
+
+        await viewModel.InitializeAsync();
+        await viewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Month);
+
+        daySelectionService.Verify(service => service.RestoreManualSelection(), Times.Once);
+    }
+
+    [Fact]
     public async Task NavigatePreviousCommand_MonthView_WrapsJanuaryToPreviousDecember()
     {
         var queryService = new RecordingCalendarQueryService();
@@ -641,6 +677,7 @@ public sealed class MainViewModelTests : IDisposable
         IContentDialogService? dialogService = null,
         IPendingEventPublishService? pendingEventPublishService = null,
         ICalendarSelectionService? calendarSelectionService = null,
+        ICalendarDaySelectionService? calendarDaySelectionService = null,
         IIcsExportService? exportService = null,
         IIcsImportService? importService = null,
         IColorMappingService? colorMappingService = null,
@@ -658,7 +695,8 @@ public sealed class MainViewModelTests : IDisposable
             importService ?? Mock.Of<IIcsImportService>(),
             colorMappingService ?? new ColorMappingService(),
             NullLogger<MainViewModel>.Instance,
-            timeProvider ?? new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 0, 0, TimeSpan.Zero)));
+            timeProvider ?? new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 0, 0, TimeSpan.Zero)),
+            calendarDaySelectionService);
     }
 
     private static async Task<StorageFile> CreateTempStorageFileAsync(string fileName)

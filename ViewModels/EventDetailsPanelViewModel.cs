@@ -18,6 +18,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private const string EndBeforeStartMessage = "End time must be after start time";
     private const string DefaultSourceDisplay = "From Google Calendar";
     private const string PendingSourceDisplay = "Local changes, pending push to GCal";
+    private const string PendingDeleteSourceDisplay = "Pending delete — will be removed from Google Calendar when pushed";
     private const string DraftSourceDisplay = "Not yet published to Google Calendar";
     private const string NoDescriptionPlaceholder = "No description provided.";
     private const string UndoFieldEditTitle = nameof(EditTitle);
@@ -35,6 +36,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private readonly IColorMappingService _colorMappingService;
     private readonly IGcalEventRepository _gcalEventRepository;
     private readonly IPendingEventRepository _pendingEventRepository;
+    private readonly IContentDialogService? _contentDialogService;
     private readonly DispatcherQueue? _dispatcherQueue;
     private readonly TimeProvider _timeProvider;
     private CancellationTokenSource _loadCts = new();
@@ -52,6 +54,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private string _lastSyncedDisplay = string.Empty;
     private string _lastSavedLocallyDisplay = "No local changes";
     private bool _isPendingEvent;
+    private bool _isPendingDeleteEvent;
     private bool _isEditMode;
     private string _editTitle = string.Empty;
     private DateOnly _editStartDate = DateOnly.FromDateTime(DateTime.Today);
@@ -71,6 +74,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private bool _isSaving;
     private bool _isUneditedNewDraft;
     private UndoState? _undoState;
+    private DragRescheduleUndoState? _dragRescheduleUndoState;
 
     public EventDetailsPanelViewModel(
         ICalendarQueryService queryService,
@@ -78,13 +82,15 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         IColorMappingService colorMappingService,
         IGcalEventRepository gcalEventRepository,
         IPendingEventRepository pendingEventRepository,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IContentDialogService? contentDialogService = null)
     {
         _queryService = queryService;
         _selectionService = selectionService;
         _colorMappingService = colorMappingService;
         _gcalEventRepository = gcalEventRepository;
         _pendingEventRepository = pendingEventRepository;
+        _contentDialogService = contentDialogService;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -94,6 +100,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         SaveAndExitEditModeCommand = new AsyncRelayCommand(SaveAndExitEditModeAsync);
         RevertPendingChangesCommand = new AsyncRelayCommand(RevertPendingChangesAsync);
         SelectColorCommand = new AsyncRelayCommand<string?>(SelectColorAsync);
+        DeleteCommand = new AsyncRelayCommand(DeleteEventAsync);
 
         WeakReferenceMessenger.Default.Register<EventDetailsPanelViewModel, EventSelectedMessage>(
             this,
@@ -188,6 +195,12 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
                 OnPropertyChanged(nameof(RevertButtonVisibility));
             }
         }
+    }
+
+    public bool IsPendingDeleteEvent
+    {
+        get => _isPendingDeleteEvent;
+        private set => SetProperty(ref _isPendingDeleteEvent, value);
     }
 
     public Visibility RevertButtonVisibility =>
@@ -352,6 +365,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     public IAsyncRelayCommand<string?> SelectColorCommand { get; }
 
+    public IAsyncRelayCommand DeleteCommand { get; }
+
     public void EnterEditMode()
     {
         if (!IsPanelVisible || _currentEvent is null)
@@ -380,7 +395,9 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     public bool ValidateFields()
     {
-        TitleError = string.IsNullOrWhiteSpace(EditTitle) ? TitleRequiredMessage : string.Empty;
+        TitleError = string.IsNullOrWhiteSpace(EditTitle) && !AllowsBlankDraftTitle()
+            ? TitleRequiredMessage
+            : string.Empty;
 
         var (_, _, startLocal, endLocal) = BuildEditDateTimes();
         DateTimeError = endLocal <= startLocal ? EndBeforeStartMessage : string.Empty;
@@ -587,6 +604,12 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             return true;
         }
 
+        if (_isUneditedNewDraft)
+        {
+            _selectionService.ClearSelection();
+            return true;
+        }
+
         if (_hasPendingLocalChanges)
         {
             if (!ValidateFields())
@@ -637,8 +660,9 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             return;
         }
 
-        ApplyEditColor(normalizedColorKey);
         _isUneditedNewDraft = false;
+        OnPropertyChanged(nameof(IsNewUneditedDraft));
+        ApplyEditColor(normalizedColorKey);
         _hasPendingLocalChanges = true;
         PublishOptimisticEventUpdate();
 
@@ -830,13 +854,28 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     public bool IsEditingSelectedTimedEvent(string? eventId)
     {
+        return IsEditingSelectedTimedEvent(eventId, null);
+    }
+
+    public bool IsEditingSelectedTimedEvent(string? eventId, CalendarEventSourceKind? sourceKind)
+    {
         return CanInteractivelyAdjustSelectedTimedEvent &&
-            string.Equals(_currentEventId, eventId, StringComparison.Ordinal);
+            string.Equals(_currentEventId, eventId, StringComparison.Ordinal) &&
+            (sourceKind is null || _currentSourceKind == sourceKind);
     }
 
     public bool TryGetEditableTimedRange(string? eventId, out DateTime startLocal, out DateTime endLocal)
     {
-        if (!IsEditingSelectedTimedEvent(eventId))
+        return TryGetEditableTimedRange(eventId, null, out startLocal, out endLocal);
+    }
+
+    public bool TryGetEditableTimedRange(
+        string? eventId,
+        CalendarEventSourceKind? sourceKind,
+        out DateTime startLocal,
+        out DateTime endLocal)
+    {
+        if (!IsEditingSelectedTimedEvent(eventId, sourceKind))
         {
             startLocal = default;
             endLocal = default;
@@ -860,6 +899,172 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         _hasPendingLocalChanges = true;
         PublishOptimisticEventUpdate(startLocal, endLocal);
         TriggerValidationAndSaveState();
+    }
+
+    public async Task<bool> ApplyDroppedTimeRangeAsync(
+        string? eventId,
+        CalendarEventSourceKind sourceKind,
+        DateTime startLocal,
+        DateTime endLocal,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(eventId) || endLocal <= startLocal)
+        {
+            return false;
+        }
+
+        var currentDisplayEvent = IsCurrentEvent(eventId, sourceKind)
+            ? _currentEvent
+            : await _queryService.GetEventByIdAsync(eventId, ct);
+        if (currentDisplayEvent is null ||
+            currentDisplayEvent.IsAllDay ||
+            currentDisplayEvent.IsPendingDelete)
+        {
+            return false;
+        }
+
+        var startLocalWithKind = DateTime.SpecifyKind(startLocal, DateTimeKind.Local);
+        var endLocalWithKind = DateTime.SpecifyKind(endLocal, DateTimeKind.Local);
+        var startUtc = startLocalWithKind.ToUniversalTime();
+        var endUtc = endLocalWithKind.ToUniversalTime();
+        var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
+
+        PendingEvent? previousPendingEvent;
+        PendingEvent pendingEvent;
+        switch (sourceKind)
+        {
+            case CalendarEventSourceKind.Pending:
+                previousPendingEvent = await _pendingEventRepository.GetByPendingEventIdAsync(eventId, ct);
+                if (previousPendingEvent is null)
+                {
+                    return false;
+                }
+
+                pendingEvent = ClonePendingEvent(previousPendingEvent);
+                pendingEvent.StartDatetime = startUtc;
+                pendingEvent.EndDatetime = endUtc;
+                pendingEvent.IsAllDay = false;
+                pendingEvent.OperationType = "edit";
+                pendingEvent.UpdatedAt = utcNow;
+                break;
+
+            case CalendarEventSourceKind.Google:
+            {
+                var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(eventId, ct);
+                if (gcalEvent is null || gcalEvent.IsAllDay == true)
+                {
+                    return false;
+                }
+
+                previousPendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(eventId, ct);
+                if (previousPendingEvent?.OperationType == "delete")
+                {
+                    return false;
+                }
+
+                pendingEvent = previousPendingEvent is null
+                    ? new PendingEvent
+                    {
+                        PendingEventId = $"pending_{Guid.NewGuid():N}",
+                        GcalEventId = eventId,
+                        CalendarId = gcalEvent.CalendarId,
+                        Summary = currentDisplayEvent.Title,
+                        Description = NormalizeDescription(currentDisplayEvent.Description),
+                        IsAllDay = false,
+                        ColorId = currentDisplayEvent.ColorKey,
+                        AppCreated = false,
+                        SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
+                        ReadyToPublish = false,
+                        OperationType = "edit",
+                        CreatedAt = utcNow
+                    }
+                    : ClonePendingEvent(previousPendingEvent);
+
+                pendingEvent.StartDatetime = startUtc;
+                pendingEvent.EndDatetime = endUtc;
+                pendingEvent.IsAllDay = false;
+                pendingEvent.OperationType = "edit";
+                pendingEvent.UpdatedAt = utcNow;
+                break;
+            }
+
+            default:
+                return false;
+        }
+
+        _dragRescheduleUndoState = new DragRescheduleUndoState(
+            eventId,
+            sourceKind,
+            previousPendingEvent is null ? null : ClonePendingEvent(previousPendingEvent));
+
+        var previewEvent = BuildReschedulePreviewEvent(currentDisplayEvent, startLocalWithKind, endLocalWithKind, utcNow);
+        ApplyCurrentEventAfterReschedule(eventId, sourceKind, previewEvent);
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(eventId, previewEvent));
+
+        await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(eventId));
+        return true;
+    }
+
+    public async Task<bool> UndoLastDragRescheduleAsync(CancellationToken ct = default)
+    {
+        if (_dragRescheduleUndoState is null)
+        {
+            return false;
+        }
+
+        var undoState = _dragRescheduleUndoState;
+        _dragRescheduleUndoState = null;
+
+        switch (undoState.SourceKind)
+        {
+            case CalendarEventSourceKind.Pending:
+                if (undoState.PreviousPendingEvent is null)
+                {
+                    return false;
+                }
+
+                await _pendingEventRepository.UpsertAsync(ClonePendingEvent(undoState.PreviousPendingEvent), ct);
+                break;
+
+            case CalendarEventSourceKind.Google:
+                if (undoState.PreviousPendingEvent is null)
+                {
+                    await _pendingEventRepository.DeleteByGcalEventIdAsync(undoState.EventId, ct);
+                }
+                else
+                {
+                    await _pendingEventRepository.UpsertAsync(ClonePendingEvent(undoState.PreviousPendingEvent), ct);
+                }
+
+                break;
+
+            default:
+                return false;
+        }
+
+        if (IsCurrentEvent(undoState.EventId, undoState.SourceKind))
+        {
+            var refreshedEvent = await _queryService.GetEventByIdAsync(undoState.EventId, ct);
+            if (refreshedEvent is not null)
+            {
+                RunOnUiThread(() => ApplyCurrentEventAfterReschedule(
+                    undoState.EventId,
+                    undoState.SourceKind,
+                    refreshedEvent));
+            }
+        }
+
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(undoState.EventId));
+        return true;
+    }
+
+    public async Task UndoLastInteractiveChangeAsync(CancellationToken ct = default)
+    {
+        if (!await UndoLastDragRescheduleAsync(ct))
+        {
+            UndoLastChange();
+        }
     }
 
     public void ApplyResizedEndTime(string? eventId, DateTime endLocal)
@@ -887,14 +1092,53 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     {
         _loadCts.Cancel();
         _loadCts = new CancellationTokenSource();
+        _ = HandleEventSelectedAsync(message, _loadCts.Token);
+    }
+
+    private async Task HandleEventSelectedAsync(EventSelectedMessage message, CancellationToken ct)
+    {
+        var previousUneditedDraftId = _isUneditedNewDraft ? _currentEventId : null;
+        var isSwitchingAwayFromUneditedDraft =
+            previousUneditedDraftId is not null &&
+            !string.Equals(previousUneditedDraftId, message.EventId, StringComparison.Ordinal);
+
+        if (isSwitchingAwayFromUneditedDraft)
+        {
+            _isUneditedNewDraft = false;
+            OnPropertyChanged(nameof(IsNewUneditedDraft));
+        }
 
         if (message.EventId is null)
         {
+            if (previousUneditedDraftId is not null)
+            {
+                _ = DeleteUneditedDraftAsync(previousUneditedDraftId);
+            }
+            else if (_hasPendingLocalChanges && _currentSourceKind == CalendarEventSourceKind.Pending)
+            {
+                await SaveNowAsync(keepEditMode: false, ct);
+            }
+
             RunOnUiThread(HidePanel);
             return;
         }
 
-        _ = LoadEventAsync(message, _loadCts.Token);
+        if (!isSwitchingAwayFromUneditedDraft &&
+            _hasPendingLocalChanges &&
+            _currentSourceKind == CalendarEventSourceKind.Pending)
+        {
+            await SaveNowAsync(keepEditMode: false, ct);
+        }
+
+        if (!ct.IsCancellationRequested)
+        {
+            await LoadEventAsync(message, ct);
+        }
+
+        if (previousUneditedDraftId is not null && !ct.IsCancellationRequested)
+        {
+            _ = DeleteUneditedDraftAsync(previousUneditedDraftId);
+        }
     }
 
     private async Task LoadEventAsync(EventSelectedMessage message, CancellationToken ct)
@@ -905,11 +1149,6 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             evt = await _queryService.GetEventByIdAsync(message.EventId!, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
-        {
-            return;
-        }
-
-        if (ct.IsCancellationRequested)
         {
             return;
         }
@@ -926,11 +1165,13 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             if (!ct.IsCancellationRequested)
             {
                 ApplyEventDetails(loadedEvent, message.EventId!, keepEditMode: false);
-                EnterEditMode();
                 if (message.OpenInEditMode && loadedEvent.SourceKind == CalendarEventSourceKind.Pending)
                 {
                     _isUneditedNewDraft = true;
+                    OnPropertyChanged(nameof(IsNewUneditedDraft));
                 }
+
+                EnterEditMode();
             }
         });
     }
@@ -949,11 +1190,14 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             ? NoDescriptionPlaceholder
             : evt.Description;
         IsPendingEvent = evt.IsPending;
+        IsPendingDeleteEvent = evt.IsPendingDelete;
         SourceDisplay = evt.SourceKind == CalendarEventSourceKind.Pending
             ? DraftSourceDisplay
-            : evt.IsPending
-                ? PendingSourceDisplay
-                : DefaultSourceDisplay;
+            : evt.IsPendingDelete
+                ? PendingDeleteSourceDisplay
+                : evt.IsPending
+                    ? PendingSourceDisplay
+                    : DefaultSourceDisplay;
         LastSyncedDisplay = evt.LastSyncedAt.HasValue
             ? evt.LastSyncedAt.Value.ToLocalTime().ToString("g")
             : "Never";
@@ -1037,6 +1281,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         ColorName = string.Empty;
         DescriptionDisplay = string.Empty;
         IsPendingEvent = false;
+        IsPendingDeleteEvent = false;
         SourceDisplay = DefaultSourceDisplay;
         LastSyncedDisplay = string.Empty;
         LastSavedLocallyDisplay = "No local changes";
@@ -1078,9 +1323,46 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             return true;
         }
 
-        _isUneditedNewDraft = false;
+        MarkEditedDraftCandidate(fieldName, value);
         HandleEditableChange(fieldName, previousValue);
         return true;
+    }
+
+    private bool AllowsBlankDraftTitle()
+    {
+        return _currentSourceKind == CalendarEventSourceKind.Pending &&
+            _currentEvent?.IsPending == true;
+    }
+
+    private void MarkEditedDraftCandidate<T>(string fieldName, T value)
+    {
+        if (!_isUneditedNewDraft)
+        {
+            return;
+        }
+
+        if (string.Equals(fieldName, UndoFieldEditTitle, StringComparison.Ordinal) &&
+            value is string title &&
+            !string.IsNullOrWhiteSpace(title))
+        {
+            _isUneditedNewDraft = false;
+            OnPropertyChanged(nameof(IsNewUneditedDraft));
+        }
+    }
+
+    private void DeleteCurrentUneditedDraftIfChangingSelection(string nextEventId)
+    {
+        if (!_isUneditedNewDraft ||
+            _currentEventId is null ||
+            string.Equals(_currentEventId, nextEventId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var pendingEventId = _currentEventId;
+        _isUneditedNewDraft = false;
+        OnPropertyChanged(nameof(IsNewUneditedDraft));
+        _ = DeleteUneditedDraftAsync(pendingEventId);
     }
 
     private void SetEditStartTime(TimeOnly value)
@@ -1306,12 +1588,320 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(_currentEventId, previewEvent));
     }
 
+    private CalendarEventDisplayModel BuildReschedulePreviewEvent(
+        CalendarEventDisplayModel currentDisplayEvent,
+        DateTime startLocal,
+        DateTime endLocal,
+        DateTime utcNow)
+    {
+        var startLocalWithKind = DateTime.SpecifyKind(startLocal, DateTimeKind.Local);
+        var endLocalWithKind = DateTime.SpecifyKind(endLocal, DateTimeKind.Local);
+        return currentDisplayEvent with
+        {
+            StartLocal = startLocalWithKind,
+            EndLocal = endLocalWithKind,
+            StartUtc = startLocalWithKind.ToUniversalTime(),
+            EndUtc = endLocalWithKind.ToUniversalTime(),
+            IsPending = true,
+            Opacity = 0.6,
+            PendingUpdatedAt = utcNow,
+            StatusLabel = currentDisplayEvent.SourceKind == CalendarEventSourceKind.Pending
+                ? DraftSourceDisplay
+                : PendingSourceDisplay
+        };
+    }
+
+    private void ApplyCurrentEventAfterReschedule(
+        string eventId,
+        CalendarEventSourceKind sourceKind,
+        CalendarEventDisplayModel previewEvent)
+    {
+        if (!IsCurrentEvent(eventId, sourceKind))
+        {
+            return;
+        }
+
+        _currentEvent = previewEvent;
+        Title = previewEvent.Title;
+        ColorHex = previewEvent.ColorHex;
+        ColorName = previewEvent.ColorName;
+        DescriptionDisplay = string.IsNullOrEmpty(previewEvent.Description)
+            ? NoDescriptionPlaceholder
+            : previewEvent.Description;
+        IsPendingEvent = previewEvent.IsPending;
+        IsPendingDeleteEvent = previewEvent.IsPendingDelete;
+        SourceDisplay = previewEvent.StatusLabel;
+        LastSavedLocallyDisplay = previewEvent.PendingUpdatedAt.HasValue
+            ? previewEvent.PendingUpdatedAt.Value.ToLocalTime().ToString("g")
+            : "No local changes";
+        StartEndDisplay = BuildStartEndDisplay(previewEvent.StartLocal, previewEvent.EndLocal, previewEvent.IsAllDay);
+
+        if (IsEditMode)
+        {
+            var previousValue = new TimeRangeUndoValue(EditStartDate, EditStartTime, EditEndDate, EditEndTime);
+            ApplyTimeRangeInternal(previewEvent.StartLocal, previewEvent.EndLocal);
+            _undoState = new UndoState(UndoFieldEditDraggedRange, previousValue);
+            _hasPendingLocalChanges = false;
+            SaveStatusText = SavedStatusText;
+        }
+    }
+
+    private bool IsCurrentEvent(string eventId, CalendarEventSourceKind sourceKind)
+    {
+        return string.Equals(_currentEventId, eventId, StringComparison.Ordinal) &&
+            _currentSourceKind == sourceKind;
+    }
+
+    private static PendingEvent ClonePendingEvent(PendingEvent source)
+    {
+        return new PendingEvent
+        {
+            PendingEventId = source.PendingEventId,
+            GcalEventId = source.GcalEventId,
+            CalendarId = source.CalendarId,
+            Summary = source.Summary,
+            Description = source.Description,
+            StartDatetime = source.StartDatetime,
+            EndDatetime = source.EndDatetime,
+            IsAllDay = source.IsAllDay,
+            ColorId = source.ColorId,
+            AppCreated = source.AppCreated,
+            SourceSystem = source.SourceSystem,
+            ReadyToPublish = source.ReadyToPublish,
+            PublishAttemptedAt = source.PublishAttemptedAt,
+            PublishError = source.PublishError,
+            OperationType = source.OperationType,
+            CreatedAt = source.CreatedAt,
+            UpdatedAt = source.UpdatedAt
+        };
+    }
+
     private void ApplyEditColor(string? colorId)
     {
         var normalizedColorKey = _colorMappingService.NormalizeColorKey(colorId);
         EditColorId = normalizedColorKey;
         EditColorName = _colorMappingService.GetDisplayName(normalizedColorKey);
         EditColorHex = _colorMappingService.GetHexColor(normalizedColorKey);
+    }
+
+    public async Task DeleteEventAsync(CancellationToken ct = default)
+    {
+        if (_currentEventId is null || _currentSourceKind is null || _currentEvent is null || _contentDialogService is null)
+        {
+            return;
+        }
+
+        if (_isPendingDeleteEvent)
+        {
+            await _contentDialogService.ShowMessageAsync(
+                "Already Staged for Deletion",
+                "This event is already staged for deletion and will be removed from Google Calendar when you push your changes.",
+                "OK");
+            return;
+        }
+
+        if (_currentSourceKind == CalendarEventSourceKind.Pending)
+        {
+            var confirmed = await _contentDialogService.ShowConfirmationAsync(
+                "Delete Draft",
+                "This local draft will be permanently deleted.",
+                "Delete");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            var idToDelete = _currentEventId;
+            StopDebounce();
+            await _pendingEventRepository.DeleteByPendingEventIdAsync(idToDelete, ct);
+            RunOnUiThread(HidePanel);
+            _selectionService.ClearSelection();
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(idToDelete));
+            return;
+        }
+
+        var pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
+
+        if (pendingEvent is null)
+        {
+            var confirmed = await _contentDialogService.ShowConfirmationAsync(
+                "Stage Deletion",
+                "This event will be staged for deletion and removed from Google Calendar when you push your changes.",
+                "Stage Delete");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
+            if (gcalEvent is null)
+            {
+                return;
+            }
+
+            var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
+            var deletePending = new PendingEvent
+            {
+                PendingEventId = $"pending_{Guid.NewGuid():N}",
+                GcalEventId = _currentEventId,
+                CalendarId = gcalEvent.CalendarId,
+                Summary = _currentEvent.Title,
+                Description = _currentEvent.Description,
+                StartDatetime = _currentEvent.StartUtc,
+                EndDatetime = _currentEvent.EndUtc,
+                IsAllDay = _currentEvent.IsAllDay,
+                ColorId = _currentEvent.ColorKey,
+                AppCreated = false,
+                SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
+                ReadyToPublish = false,
+                OperationType = "delete",
+                CreatedAt = utcNow,
+                UpdatedAt = utcNow
+            };
+            await _pendingEventRepository.UpsertAsync(deletePending, ct);
+        }
+        else if (pendingEvent.OperationType == "edit")
+        {
+            var choice = await _contentDialogService.ShowDeleteWithPendingEditAsync(_currentEvent.Title);
+            switch (choice)
+            {
+                case DeleteWithPendingEditChoice.Cancel:
+                    return;
+                case DeleteWithPendingEditChoice.RevertChanges:
+                    await RevertPendingChangesForEventAsync(_currentEventId, CalendarEventSourceKind.Google, ct);
+                    return;
+                case DeleteWithPendingEditChoice.DeleteEvent:
+                    pendingEvent.OperationType = "delete";
+                    pendingEvent.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
+                    await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
+                    break;
+            }
+        }
+
+        var eventId = _currentEventId;
+        var refreshedEvent = await _queryService.GetEventByIdAsync(eventId, ct);
+        if (refreshedEvent is not null)
+        {
+            RunOnUiThread(() => ApplyEventDetails(refreshedEvent, eventId, keepEditMode: false));
+        }
+
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(eventId));
+    }
+
+    public async Task DeleteEventByIdAsync(string eventId, CalendarEventSourceKind sourceKind, CancellationToken ct = default)
+    {
+        if (_contentDialogService is null)
+        {
+            return;
+        }
+
+        var evt = await _queryService.GetEventByIdAsync(eventId, ct);
+        if (evt is null)
+        {
+            return;
+        }
+
+        var isCurrentlySelected = string.Equals(_currentEventId, eventId, StringComparison.Ordinal);
+
+        if (evt.IsPendingDelete)
+        {
+            await _contentDialogService.ShowMessageAsync(
+                "Already Staged for Deletion",
+                "This event is already staged for deletion and will be removed from Google Calendar when you push your changes.",
+                "OK");
+            return;
+        }
+
+        if (sourceKind == CalendarEventSourceKind.Pending)
+        {
+            var confirmed = await _contentDialogService.ShowConfirmationAsync(
+                "Delete Draft",
+                "This local draft will be permanently deleted.",
+                "Delete");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            StopDebounce();
+            await _pendingEventRepository.DeleteByPendingEventIdAsync(eventId, ct);
+            if (isCurrentlySelected)
+            {
+                RunOnUiThread(HidePanel);
+                _selectionService.ClearSelection();
+            }
+
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(eventId));
+            return;
+        }
+
+        var pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(eventId, ct);
+
+        if (pendingEvent is null)
+        {
+            var confirmed = await _contentDialogService.ShowConfirmationAsync(
+                "Stage Deletion",
+                "This event will be staged for deletion and removed from Google Calendar when you push your changes.",
+                "Stage Delete");
+            if (!confirmed)
+            {
+                return;
+            }
+
+            var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(eventId, ct);
+            if (gcalEvent is null)
+            {
+                return;
+            }
+
+            var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
+            await _pendingEventRepository.UpsertAsync(new PendingEvent
+            {
+                PendingEventId = $"pending_{Guid.NewGuid():N}",
+                GcalEventId = eventId,
+                CalendarId = gcalEvent.CalendarId,
+                Summary = evt.Title,
+                Description = evt.Description,
+                StartDatetime = evt.StartUtc,
+                EndDatetime = evt.EndUtc,
+                IsAllDay = evt.IsAllDay,
+                ColorId = evt.ColorKey,
+                AppCreated = false,
+                SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
+                ReadyToPublish = false,
+                OperationType = "delete",
+                CreatedAt = utcNow,
+                UpdatedAt = utcNow
+            }, ct);
+        }
+        else if (pendingEvent.OperationType == "edit")
+        {
+            var choice = await _contentDialogService.ShowDeleteWithPendingEditAsync(evt.Title);
+            switch (choice)
+            {
+                case DeleteWithPendingEditChoice.Cancel:
+                    return;
+                case DeleteWithPendingEditChoice.RevertChanges:
+                    await RevertPendingChangesForEventAsync(eventId, CalendarEventSourceKind.Google, ct);
+                    return;
+                case DeleteWithPendingEditChoice.DeleteEvent:
+                    pendingEvent.OperationType = "delete";
+                    pendingEvent.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
+                    await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
+                    break;
+            }
+        }
+
+        if (isCurrentlySelected)
+        {
+            var refreshedEvent = await _queryService.GetEventByIdAsync(eventId, ct);
+            if (refreshedEvent is not null)
+            {
+                RunOnUiThread(() => ApplyEventDetails(refreshedEvent, eventId, keepEditMode: false));
+            }
+        }
+
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(eventId));
     }
 
     private async Task DeleteUneditedDraftAsync(string pendingEventId)
@@ -1343,4 +1933,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private sealed record SingleDateUndoValue(DateOnly StartDate, DateOnly EndDate);
     private sealed record TimeRangeUndoValue(DateOnly StartDate, TimeOnly StartTime, DateOnly EndDate, TimeOnly EndTime);
     private sealed record EndTimeUndoValue(DateOnly EndDate, TimeOnly EndTime);
+    private sealed record DragRescheduleUndoState(
+        string EventId,
+        CalendarEventSourceKind SourceKind,
+        PendingEvent? PreviousPendingEvent);
 }

@@ -1,1 +1,4 @@
 - [ ] Set up deterministic overlapping event protocol
+- [ ] create all-day event (not midnight to midnight), name with data source view
+- [ ] remove delete event popup, just add temporary undo button
+- [ ] edit the delete selection to diagonal stripes? instead of red highlight

@@ -176,7 +176,7 @@ public static class YearViewDayProjectionBuilder
                 evt.EventId,
                 evt.SourceKind,
                 evt.Title,
-                evt.ColorHex,
+                evt.DisplayColorHex,
                 startDay,
                 endDay,
                 endDay.DayNumber - startDay.DayNumber + 1,

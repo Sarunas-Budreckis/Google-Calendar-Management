@@ -46,7 +46,9 @@ public sealed class PendingEventPublishService : IPendingEventPublishService
                 pendingEvent.EndDatetime,
                 pendingEvent.IsAllDay ?? false,
                 gcalEvent != null && gcalEvent.IsRecurringInstance,
-                pendingEvent.GcalEventId == null ? "new draft" : "edited event",
+                pendingEvent.OperationType == "delete" ? "pending delete"
+                    : pendingEvent.GcalEventId == null ? "new draft"
+                    : "edited event",
                 _colorMappingService.NormalizeColorKey(pendingEvent.ColorId),
                 _colorMappingService.GetHexColor(pendingEvent.ColorId),
                 pendingEvent.PublishError))
@@ -164,6 +166,11 @@ public sealed class PendingEventPublishService : IPendingEventPublishService
                     null,
                     false,
                     "The pending event could not be found.");
+            }
+
+            if (publishContext.PendingEvent.OperationType == "delete")
+            {
+                return await PublishDeleteAsync(publishContext.PendingEvent, publishAttemptedAt, ct);
             }
 
             var writeRequest = CreateWriteRequest(publishContext.PendingEvent);
@@ -330,6 +337,79 @@ public sealed class PendingEventPublishService : IPendingEventPublishService
         }
 
         return pendingEvent.UpdatedAt >= liveEvent.GcalUpdatedAt.Value;
+    }
+
+    private async Task<PendingPublishItemResult> PublishDeleteAsync(
+        PendingEvent pendingEvent,
+        DateTime publishAttemptedAt,
+        CancellationToken ct)
+    {
+        if (pendingEvent.GcalEventId is null)
+        {
+            await RemovePendingEventAsync(pendingEvent.PendingEventId, ct);
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(pendingEvent.PendingEventId));
+            return new PendingPublishItemResult(pendingEvent.PendingEventId, null, true, null);
+        }
+
+        var deleteResult = await _googleCalendarService.DeleteEventAsync(
+            pendingEvent.CalendarId,
+            pendingEvent.GcalEventId,
+            ct);
+
+        if (!deleteResult.Success)
+        {
+            var errorDetails = deleteResult.ErrorDetails ?? deleteResult.ErrorMessage ?? "Delete failed.";
+            await PersistFailureAsync(pendingEvent.PendingEventId, publishAttemptedAt, errorDetails, ct);
+            return new PendingPublishItemResult(
+                pendingEvent.PendingEventId,
+                pendingEvent.GcalEventId,
+                false,
+                deleteResult.ErrorMessage ?? "Unable to delete the event from Google Calendar.",
+                errorDetails);
+        }
+
+        await PersistDeleteSuccessAsync(pendingEvent, ct);
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(pendingEvent.GcalEventId));
+        return new PendingPublishItemResult(pendingEvent.PendingEventId, pendingEvent.GcalEventId, true, null);
+    }
+
+    private async Task PersistDeleteSuccessAsync(PendingEvent pendingEvent, CancellationToken ct)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
+        await using var transaction = await context.Database.BeginTransactionAsync(ct);
+
+        var storedPendingEvent = await context.PendingEvents
+            .SingleOrDefaultAsync(item => item.PendingEventId == pendingEvent.PendingEventId, ct);
+        if (storedPendingEvent is not null)
+        {
+            context.PendingEvents.Remove(storedPendingEvent);
+        }
+
+        if (pendingEvent.GcalEventId is not null)
+        {
+            var storedGcalEvent = await context.GcalEvents
+                .SingleOrDefaultAsync(item => item.GcalEventId == pendingEvent.GcalEventId, ct);
+            if (storedGcalEvent is not null)
+            {
+                storedGcalEvent.IsDeleted = true;
+                storedGcalEvent.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
+            }
+        }
+
+        await context.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+    }
+
+    private async Task RemovePendingEventAsync(string pendingEventId, CancellationToken ct)
+    {
+        await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
+        var storedPendingEvent = await context.PendingEvents
+            .SingleOrDefaultAsync(item => item.PendingEventId == pendingEventId, ct);
+        if (storedPendingEvent is not null)
+        {
+            context.PendingEvents.Remove(storedPendingEvent);
+            await context.SaveChangesAsync(ct);
+        }
     }
 
     private async Task PersistInsertSuccessAsync(

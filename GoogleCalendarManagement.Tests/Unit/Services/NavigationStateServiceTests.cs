@@ -39,6 +39,26 @@ public sealed class NavigationStateServiceTests
         actual.Should().Be(expected);
     }
 
+    [Fact]
+    public async Task SaveAsync_ThenLoadAsync_RoundTripsSelectedDay()
+    {
+        var repository = new InMemorySystemStateRepository();
+        var service = new NavigationStateService(
+            repository,
+            NullLogger<NavigationStateService>.Instance,
+            new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 0, 0, TimeSpan.Zero)));
+
+        var expected = new NavigationState(
+            ViewMode.Month,
+            new DateOnly(2026, 03, 15),
+            new DateOnly(2026, 03, 12));
+
+        await service.SaveAsync(expected);
+        var actual = await service.LoadAsync();
+
+        actual.Should().Be(expected);
+    }
+
     private sealed class InMemorySystemStateRepository : ISystemStateRepository
     {
         private readonly Dictionary<string, string> _values = new(StringComparer.Ordinal);

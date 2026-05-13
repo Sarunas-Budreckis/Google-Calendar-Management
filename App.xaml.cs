@@ -53,6 +53,8 @@ namespace GoogleCalendarManagement
             var services = new ServiceCollection();
             ConfigureServices(services);
             serviceProvider = services.BuildServiceProvider();
+            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
+                .Register(serviceProvider.GetRequiredService<TogglSleepImportHandler>());
 
             // Create and activate main window (must happen before RunStartupAsync for ContentDialog XamlRoot)
             window = new Window
@@ -186,6 +188,10 @@ namespace GoogleCalendarManagement
             services.AddSingleton(TimeProvider.System);
             services.AddSingleton<IGcalEventRepository, GcalEventRepository>();
             services.AddSingleton<IPendingEventRepository, PendingEventRepository>();
+            services.AddSingleton<IConfigRepository, ConfigRepository>();
+            services.AddSingleton<IDataSourceRepository, DataSourceRepository>();
+            services.AddSingleton<DataSourceImportHandlerRegistry>();
+            services.AddSingleton<DataSourceCardProviderRegistry>();
             services.AddSingleton<IPendingEventDraftService, PendingEventDraftService>();
             services.AddSingleton<IPendingEventPublishService, PendingEventPublishService>();
             services.AddSingleton<ISystemStateRepository, SystemStateRepository>();
@@ -193,15 +199,24 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ICalendarQueryService, CalendarQueryService>();
             services.AddTransient<IIcsExportService, IcsExportService>();
             services.AddTransient<IIcsImportService, IcsImportService>();
+            services.AddHttpClient<ITogglApiClient, TogglApiClient>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.track.toggl.com/api/v9/");
+            });
+            services.AddSingleton<ITogglSleepImportService, TogglSleepImportService>();
+            services.AddSingleton<TogglSleepImportHandler>();
             services.AddSingleton<ISyncStatusService, SyncStatusService>();
             services.AddSingleton<INavigationStateService, NavigationStateService>();
             services.AddSingleton<ICalendarSelectionService, CalendarSelectionService>();
+            services.AddSingleton<ICalendarDaySelectionService, CalendarDaySelectionService>();
             services.AddSingleton<SettingsViewModel>();
             services.AddSingleton<MainViewModel>();
             services.AddSingleton<EventDetailsPanelViewModel>();
+            services.AddSingleton<DataSourcePanelViewModel>();
             services.AddTransient<SettingsPage>();
             services.AddTransient<MainPage>();
             services.AddTransient<EventDetailsPanelControl>();
+            services.AddTransient<DataSourcePanelControl>();
             services.AddTransient<YearViewControl>();
             services.AddTransient<MonthViewControl>();
             services.AddTransient<WeekViewControl>();

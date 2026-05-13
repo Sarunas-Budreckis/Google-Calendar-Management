@@ -78,8 +78,10 @@ public static class WeekTimedEventProjectionBuilder
                 $"{segment.Item.Title}, {displayStart.ToString("t", culture)}",
                 null,
                 BuildTooltipText(segment.Item, culture),
-                segment.Item.ColorHex,
+                segment.Item.DisplayColorHex,
                 segment.Item.SourceKind,
+                displayStart,
+                displayEnd,
                 dayOffset,
                 gridRow,
                 Math.Max(1, Math.Min(gridRowSpan, 24 - gridRow)),
@@ -91,7 +93,8 @@ public static class WeekTimedEventProjectionBuilder
                 true,
                 segment.OverlapDepth > 0,
                 1,
-                segment.Item.Opacity);
+                segment.Item.Opacity,
+                segment.Item.IsPendingDelete);
         }
 
         var durationInt = (int)durationMinutes;
@@ -103,8 +106,10 @@ public static class WeekTimedEventProjectionBuilder
             segment.Item.Title,
             $"{displayStart.ToString("t", culture)} - {displayEnd.ToString("t", culture)}",
             BuildTooltipText(segment.Item, culture),
-            segment.Item.ColorHex,
+            segment.Item.DisplayColorHex,
             segment.Item.SourceKind,
+            displayStart,
+            displayEnd,
             dayOffset,
             gridRow,
             Math.Max(1, Math.Min(gridRowSpan, 24 - gridRow)),
@@ -116,7 +121,8 @@ public static class WeekTimedEventProjectionBuilder
             false,
             segment.OverlapDepth > 0,
             summaryLineCount,
-            segment.Item.Opacity);
+            segment.Item.Opacity,
+            segment.Item.IsPendingDelete);
     }
 
     private static string BuildTooltipText(CalendarEventDisplayModel item, CultureInfo culture)

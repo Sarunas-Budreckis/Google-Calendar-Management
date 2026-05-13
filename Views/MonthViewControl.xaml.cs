@@ -22,20 +22,25 @@ public sealed partial class MonthViewControl : Page
 {
     private static CornerRadius ElementCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusElement"];
     private static CornerRadius MediumCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusMedium"];
+    private static readonly Brush PendingDeleteBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xC4, 0x2B, 0x1C));
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
     private static readonly Brush SelectedForPushBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4C, 0xAF, 0x50));
     private static readonly Brush TodayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4E, 0x8F, 0xD8));
     private static readonly Brush TodayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x73, 0xA8, 0xE4));
+    private static readonly Brush SelectedDayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xB9, 0x32, 0x42));
+    private static readonly Brush SelectedDayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xF0, 0x8A, 0x94));
     private static readonly Brush TodayTextBrush = new SolidColorBrush(Colors.White);
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
     private static readonly Color SyncedColor = Color.FromArgb(0xFF, 0x4C, 0xAF, 0x50);
     private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
+    private readonly ICalendarDaySelectionService _daySelectionService;
     private readonly EventDetailsPanelViewModel _eventDetailsViewModel;
     private readonly TimeProvider _timeProvider;
     private readonly EventColorPickerFlyoutController _eventColorPicker;
     private readonly Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
+    private readonly Dictionary<DateOnly, List<DayNumberRegistration>> _dayNumberRegistrations = [];
     private readonly List<DispatcherQueueTimer> _tooltipTimers = [];
     private ColorPickerTarget? _activeColorTarget;
     private DispatcherTimer? _todayRefreshTimer;
@@ -45,6 +50,7 @@ public sealed partial class MonthViewControl : Page
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
         _selectionService = App.GetRequiredService<ICalendarSelectionService>();
+        _daySelectionService = App.GetRequiredService<ICalendarDaySelectionService>();
         _eventDetailsViewModel = App.GetRequiredService<EventDetailsPanelViewModel>();
         _timeProvider = App.GetRequiredService<TimeProvider>();
         _eventColorPicker = new EventColorPickerFlyoutController(
@@ -66,7 +72,8 @@ public sealed partial class MonthViewControl : Page
             () => new EventColorPickerMenuState(
                 ShowRevert: _activeColorTarget?.IsPending == true,
                 ShowPendingPublishSelectionToggle: _activeColorTarget?.IsPending == true,
-                IsSelectedForPush: _activeColorTarget is not null && ViewModel.IsPendingEventSelectedForPush(_activeColorTarget.EventId)),
+                IsSelectedForPush: _activeColorTarget is not null && ViewModel.IsPendingEventSelectedForPush(_activeColorTarget.EventId),
+                ShowDelete: _activeColorTarget is not null),
             async () =>
             {
                 if (_activeColorTarget is null)
@@ -86,6 +93,17 @@ public sealed partial class MonthViewControl : Page
                 }
 
                 await ViewModel.TogglePendingPublishSelectionForEventAsync(_activeColorTarget.EventId);
+            },
+            async () =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
+                await _eventDetailsViewModel.DeleteEventByIdAsync(
+                    _activeColorTarget.EventId,
+                    _activeColorTarget.SourceKind);
             });
         InitializeComponent();
         MonthGrid.Background = TransparentPanelBrush;
@@ -105,6 +123,7 @@ public sealed partial class MonthViewControl : Page
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WeakReferenceMessenger.Default.Register<MonthViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
+        WeakReferenceMessenger.Default.Register<MonthViewControl, DaySelectedMessage>(this, static (recipient, message) => recipient.OnDaySelected(message));
         WeakReferenceMessenger.Default.Register<MonthViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
         _lastObservedToday = GetLocalToday();
         StartTodayRefreshTimer();
@@ -119,6 +138,7 @@ public sealed partial class MonthViewControl : Page
         CloseMoreEventsPopup();
         StopTooltipTimers();
         _eventBorders.Clear();
+        _dayNumberRegistrations.Clear();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -139,6 +159,7 @@ public sealed partial class MonthViewControl : Page
         MonthGrid.RowDefinitions.Clear();
         MonthGrid.ColumnDefinitions.Clear();
         _eventBorders.Clear();
+        _dayNumberRegistrations.Clear();
 
         for (var column = 0; column < 7; column++)
         {
@@ -171,6 +192,7 @@ public sealed partial class MonthViewControl : Page
         }
 
         ApplySelectionVisualState(_selectionService.SelectedEventId);
+        ApplyDaySelectionVisualState(_daySelectionService.SelectedDay);
     }
 
     private Grid BuildWeekRowGrid(
@@ -270,7 +292,13 @@ public sealed partial class MonthViewControl : Page
 
         var headerGrid = new Grid
         {
-            Margin = new Thickness(8, 6, 8, 0)
+            Margin = new Thickness(8, 6, 8, 0),
+            Background = TransparentPanelBrush
+        };
+        headerGrid.Tapped += (_, e) =>
+        {
+            ToggleDaySelection(date);
+            e.Handled = true;
         };
         var headerPanel = new StackPanel
         {
@@ -288,7 +316,31 @@ public sealed partial class MonthViewControl : Page
         ToolTipService.SetToolTip(syncDot, ViewModel.LastSyncTooltip);
         headerPanel.Children.Add(syncDot);
 
-        headerPanel.Children.Add(new Border
+        var dayHighlight = new Ellipse
+        {
+            Fill = isToday ? TodayHighlightBrush : TransparentPanelBrush,
+            Stroke = isToday ? TodayHighlightStrokeBrush : TransparentPanelBrush,
+            StrokeThickness = isToday ? 1.25 : 0,
+            RenderTransformOrigin = new Point(0.5, 0.5)
+        };
+        var selectedOverlay = new Ellipse
+        {
+            Margin = new Thickness(4),
+            Fill = TransparentPanelBrush,
+            Stroke = TransparentPanelBrush,
+            StrokeThickness = 0
+        };
+        var dayLabel = new TextBlock
+        {
+            Text = date.Day.ToString(culture),
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Foreground = isToday
+                ? TodayTextBrush
+                : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var dayNumber = new Border
         {
             Width = 28,
             Height = 28,
@@ -298,25 +350,19 @@ public sealed partial class MonthViewControl : Page
             {
                 Children =
                 {
-                    new Ellipse
-                    {
-                        Fill = isToday ? TodayHighlightBrush : TransparentPanelBrush,
-                        Stroke = isToday ? TodayHighlightStrokeBrush : TransparentPanelBrush,
-                        StrokeThickness = isToday ? 1.25 : 0
-                    },
-                    new TextBlock
-                    {
-                        Text = date.Day.ToString(culture),
-                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                        Foreground = isToday
-                            ? TodayTextBrush
-                            : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center
-                    }
+                    dayHighlight,
+                    selectedOverlay,
+                    dayLabel
                 }
             }
-        });
+        };
+        dayNumber.Tapped += (_, e) =>
+        {
+            ToggleDaySelection(date);
+            e.Handled = true;
+        };
+        RegisterDayNumber(date, dayHighlight, selectedOverlay, dayLabel, isToday);
+        headerPanel.Children.Add(dayNumber);
         headerGrid.Children.Add(headerPanel);
 
         Grid.SetRow(headerGrid, 0);
@@ -370,9 +416,9 @@ public sealed partial class MonthViewControl : Page
                 continuesToRight ? 0 : corner.TopRight,
                 continuesToRight ? 0 : corner.BottomRight,
                 continuesFromLeft ? 0 : corner.BottomLeft),
-            Background = ToBrush(item.ColorHex),
-            BorderBrush = TransparentPanelBrush,
-            BorderThickness = new Thickness(0),
+            Background = ToBrush(item.DisplayColorHex),
+            BorderBrush = item.IsPendingDelete ? PendingDeleteBorderBrush : TransparentPanelBrush,
+            BorderThickness = item.IsPendingDelete ? new Thickness(2) : new Thickness(0),
             Child = new TextBlock
             {
                 Text = GetDisplayTitle(item),
@@ -393,6 +439,14 @@ public sealed partial class MonthViewControl : Page
         {
             ShowEventColorPicker(block, item, e.GetPosition(block));
             e.Handled = true;
+        };
+        block.PointerPressed += (_, e) =>
+        {
+            if (e.GetCurrentPoint(block).Properties.IsMiddleButtonPressed)
+            {
+                e.Handled = true;
+                _ = _eventDetailsViewModel.DeleteEventByIdAsync(item.EventId, item.SourceKind);
+            }
         };
 
         RegisterEventBorder(item.EventId, block);
@@ -482,15 +536,17 @@ public sealed partial class MonthViewControl : Page
         border.Padding = new Thickness(4, 2, 4, 2);
         border.CornerRadius = ElementCornerRadius;
         border.Background = TransparentPanelBrush;
-        border.BorderBrush = TransparentPanelBrush;
-        border.BorderThickness = new Thickness(0);
+        border.BorderBrush = item.IsPendingDelete ? PendingDeleteBorderBrush : TransparentPanelBrush;
+        border.BorderThickness = item.IsPendingDelete ? new Thickness(2) : new Thickness(0);
         border.Tapped -= TimedEventRow_Tapped;
         border.Tapped += TimedEventRow_Tapped;
         border.RightTapped -= TimedEventRow_RightTapped;
         border.RightTapped += TimedEventRow_RightTapped;
+        border.PointerPressed -= TimedEventRow_PointerPressed;
+        border.PointerPressed += TimedEventRow_PointerPressed;
         ToolTipService.SetToolTip(border, BuildTooltipText(item, culture));
 
-        dot.Fill = ToBrush(item.ColorHex);
+        dot.Fill = ToBrush(item.DisplayColorHex);
         timeTextBlock.Text = item.StartLocal.ToString("h:mm tt", culture);
         titleTextBlock.Text = GetDisplayTitle(item);
     }
@@ -513,6 +569,19 @@ public sealed partial class MonthViewControl : Page
         }
     }
 
+    private async void TimedEventRow_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Border border ||
+            !e.GetCurrentPoint(border).Properties.IsMiddleButtonPressed ||
+            border.DataContext is not CalendarEventDisplayModel item)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await _eventDetailsViewModel.DeleteEventByIdAsync(item.EventId, item.SourceKind);
+    }
+
     private void ResetTimedEventRow(Border border)
     {
         border.Tag = null;
@@ -522,6 +591,7 @@ public sealed partial class MonthViewControl : Page
         border.Padding = new Thickness(0);
         border.Tapped -= TimedEventRow_Tapped;
         border.RightTapped -= TimedEventRow_RightTapped;
+        border.PointerPressed -= TimedEventRow_PointerPressed;
         ToolTipService.SetToolTip(border, null);
 
         if (border.Child is not Grid layoutRoot || layoutRoot.Children.Count < 3)
@@ -629,7 +699,7 @@ public sealed partial class MonthViewControl : Page
         {
             Padding = new Thickness(6, 4, 6, 4),
             CornerRadius = ElementCornerRadius,
-            Background = ToBrush(item.ColorHex),
+            Background = ToBrush(item.DisplayColorHex),
             Child = new TextBlock
             {
                 Text = GetDisplayTitle(item),
@@ -672,7 +742,7 @@ public sealed partial class MonthViewControl : Page
         {
             Width = 7,
             Height = 7,
-            Fill = ToBrush(item.ColorHex),
+            Fill = ToBrush(item.DisplayColorHex),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 6, 0)
         });
@@ -721,7 +791,7 @@ public sealed partial class MonthViewControl : Page
 
     private void ShowEventColorPicker(FrameworkElement target, CalendarEventDisplayModel item, Point position)
     {
-        _activeColorTarget = new ColorPickerTarget(item.EventId, item.SourceKind, item.ColorKey, item.IsPending);
+        _activeColorTarget = new ColorPickerTarget(item.EventId, item.SourceKind, item.ColorKey, item.IsPending, item.IsPendingDelete);
         _eventColorPicker.ShowAt(target, position);
     }
 
@@ -853,6 +923,11 @@ public sealed partial class MonthViewControl : Page
         _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.EventId));
     }
 
+    private void OnDaySelected(DaySelectedMessage message)
+    {
+        _ = DispatcherQueue.TryEnqueue(() => ApplyDaySelectionVisualState(message.SelectedDay));
+    }
+
     private void OnSyncCompleted()
     {
         _ = DispatcherQueue.TryEnqueue(Rebuild);
@@ -869,6 +944,67 @@ public sealed partial class MonthViewControl : Page
             foreach (var registration in registrations)
             {
                 ApplySelectionState(registration.Border, registration, isSelected, isSelectedForPush);
+            }
+        }
+    }
+
+    private void RegisterDayNumber(DateOnly date, Ellipse highlight, Ellipse selectedOverlay, TextBlock label, bool isToday)
+    {
+        if (!_dayNumberRegistrations.TryGetValue(date, out var registrations))
+        {
+            registrations = [];
+            _dayNumberRegistrations[date] = registrations;
+        }
+
+        registrations.Add(new DayNumberRegistration(highlight, selectedOverlay, label, isToday));
+    }
+
+    private void ToggleDaySelection(DateOnly date)
+    {
+        if (_daySelectionService.SelectedDay == date)
+        {
+            _daySelectionService.ClearSelection();
+            return;
+        }
+
+        _daySelectionService.SelectDay(date);
+    }
+
+    private void ApplyDaySelectionVisualState(DateOnly? selectedDay)
+    {
+        foreach (var (date, registrations) in _dayNumberRegistrations)
+        {
+            var isSelected = selectedDay == date;
+            foreach (var registration in registrations)
+            {
+                registration.Highlight.Fill = isSelected
+                    ? registration.IsToday
+                        ? TodayHighlightBrush
+                        : SelectedDayHighlightBrush
+                    : registration.IsToday
+                        ? TodayHighlightBrush
+                        : TransparentPanelBrush;
+                registration.Highlight.Stroke = isSelected
+                    ? registration.IsToday
+                        ? TodayHighlightStrokeBrush
+                        : SelectedDayHighlightStrokeBrush
+                    : registration.IsToday
+                        ? TodayHighlightStrokeBrush
+                        : TransparentPanelBrush;
+                registration.Highlight.StrokeThickness = isSelected || registration.IsToday ? 1.25 : 0;
+                registration.Highlight.RenderTransform = registration.IsToday && isSelected
+                    ? new ScaleTransform { ScaleX = 1.16, ScaleY = 1.16 }
+                    : null;
+                registration.SelectedOverlay.Fill = registration.IsToday && isSelected
+                    ? SelectedDayHighlightBrush
+                    : TransparentPanelBrush;
+                registration.SelectedOverlay.Stroke = registration.IsToday && isSelected
+                    ? SelectedDayHighlightStrokeBrush
+                    : TransparentPanelBrush;
+                registration.SelectedOverlay.StrokeThickness = registration.IsToday && isSelected ? 1 : 0;
+                registration.Label.Foreground = isSelected || registration.IsToday
+                    ? TodayTextBrush
+                    : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
             }
         }
     }
@@ -1011,5 +1147,7 @@ public sealed partial class MonthViewControl : Page
         Thickness DefaultBorderThickness,
         Thickness DefaultPadding);
 
-    private sealed record ColorPickerTarget(string EventId, CalendarEventSourceKind SourceKind, string ColorKey, bool IsPending);
+    private sealed record DayNumberRegistration(Ellipse Highlight, Ellipse SelectedOverlay, TextBlock Label, bool IsToday);
+
+    private sealed record ColorPickerTarget(string EventId, CalendarEventSourceKind SourceKind, string ColorKey, bool IsPending, bool IsPendingDelete = false);
 }

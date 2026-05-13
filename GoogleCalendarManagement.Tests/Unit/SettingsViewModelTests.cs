@@ -46,7 +46,9 @@ public sealed class SettingsViewModelTests
 
         var viewModel = new SettingsViewModel(
             googleCalendarService.Object,
-            Mock.Of<IContentDialogService>());
+            Mock.Of<IContentDialogService>(),
+            CreateConfigRepository(),
+            Mock.Of<ITogglApiClient>());
 
         await viewModel.InitializeAsync();
         await viewModel.ConnectGoogleCalendarCommand.ExecuteAsync(null);
@@ -67,6 +69,17 @@ public sealed class SettingsViewModelTests
 
         return new SettingsViewModel(
             googleCalendarService.Object,
-            Mock.Of<IContentDialogService>());
+            Mock.Of<IContentDialogService>(),
+            CreateConfigRepository(),
+            Mock.Of<ITogglApiClient>());
+    }
+
+    private static IConfigRepository CreateConfigRepository()
+    {
+        var configRepository = new Mock<IConfigRepository>();
+        configRepository
+            .Setup(repository => repository.GetConfigValueAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        return configRepository.Object;
     }
 }

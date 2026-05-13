@@ -206,6 +206,187 @@ public class SchemaTests
     }
 
     [Fact]
+    public async Task DataSourceTier3Tables_ExistAfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'";
+        var tables = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            tables.Add(reader.GetString(0));
+
+        // Assert
+        tables.Should().Contain("data_source", "data_source table must exist after migration");
+        tables.Should().Contain("date_source_integration", "date_source_integration table must exist after migration");
+        tables.Should().Contain("data_source_import_log", "data_source_import_log table must exist after migration");
+    }
+
+    [Fact]
+    public async Task DataSource_HasExpectedColumns_AfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info('data_source')";
+        var columns = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            columns.Add(reader.GetString(1));
+
+        // Assert
+        columns.Should().Contain("data_source_id");
+        columns.Should().Contain("source_key");
+        columns.Should().Contain("display_name");
+        columns.Should().Contain("description");
+        columns.Should().Contain("supports_no_data_hint");
+        columns.Should().Contain("created_at");
+    }
+
+    [Fact]
+    public async Task DateSourceIntegration_HasUniqueIndexOnDateAndDataSourceId_AfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act — read all indexes for date_source_integration
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='date_source_integration'";
+        var indexes = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            indexes.Add(reader.GetString(0));
+
+        // Assert
+        indexes.Should().Contain("idx_date_source_integration_date_source",
+            "date_source_integration must have a unique index on (date, data_source_id)");
+
+        // Verify the index covers both columns and is unique
+        using var infoCmd = connection.CreateCommand();
+        infoCmd.CommandText = "PRAGMA index_info('idx_date_source_integration_date_source')";
+        var indexColumns = new List<string>();
+        await using var infoReader = await infoCmd.ExecuteReaderAsync();
+        while (await infoReader.ReadAsync())
+            indexColumns.Add(infoReader.GetString(2));
+
+        indexColumns.Should().Contain("date");
+        indexColumns.Should().Contain("data_source_id");
+    }
+
+    [Fact]
+    public async Task DataSourceImportLog_FkToDataSource_IsRestrictOnDelete_AfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA foreign_key_list('data_source_import_log')";
+
+        string? onDeleteBehavior = null;
+        string? referencedTable = null;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            referencedTable = reader.GetString(2);
+            onDeleteBehavior = reader.GetString(6);
+        }
+
+        // Assert
+        referencedTable.Should().Be("data_source", "import log FK must reference data_source");
+        onDeleteBehavior.Should().NotBe("CASCADE", "import log FK must not cascade deletes");
+    }
+
+    [Fact]
+    public async Task DateSourceIntegration_FkToDataSource_IsRestrictOnDelete_AfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA foreign_key_list('date_source_integration')";
+
+        string? onDeleteBehavior = null;
+        string? referencedTable = null;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            referencedTable = reader.GetString(2);
+            onDeleteBehavior = reader.GetString(6);
+        }
+
+        // Assert
+        referencedTable.Should().Be("data_source", "integration FK must reference data_source");
+        onDeleteBehavior.Should().NotBe("CASCADE", "integration FK must not cascade deletes");
+    }
+
+    [Fact]
+    public async Task TogglData_HasExpectedSchema_AfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info('toggl_data')";
+        var columns = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            columns.Add(reader.GetString(1));
+
+        // Assert
+        columns.Should().Contain("toggl_id");
+        columns.Should().Contain("description");
+        columns.Should().Contain("start_time");
+        columns.Should().Contain("end_time");
+        columns.Should().Contain("duration_seconds");
+        columns.Should().Contain("project_name");
+        columns.Should().Contain("tags");
+        columns.Should().Contain("visible_as_event");
+        columns.Should().Contain("published_to_gcal");
+        columns.Should().Contain("published_gcal_event_id");
+        columns.Should().Contain("last_synced_at");
+        columns.Should().Contain("created_at");
+    }
+
+    [Fact]
+    public async Task TogglData_FkToGcalEvent_IsRestrictOnDelete_AfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA foreign_key_list('toggl_data')";
+
+        string? onDeleteBehavior = null;
+        string? referencedTable = null;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            referencedTable = reader.GetString(2);
+            onDeleteBehavior = reader.GetString(6);
+        }
+
+        // Assert
+        referencedTable.Should().Be("gcal_event", "published Toggl entries may reference generated Google Calendar events");
+        onDeleteBehavior.Should().NotBe("CASCADE", "Toggl data must not be deleted by event deletion");
+    }
+
+    [Fact]
     public async Task AllIndexes_PresentAfterEnsureCreated()
     {
         // Arrange

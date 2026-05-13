@@ -31,18 +31,22 @@ public sealed partial class YearViewControl : Page
     private static readonly Brush SelectedForPushBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4C, 0xAF, 0x50));
     private static readonly Brush TodayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4E, 0x8F, 0xD8));
     private static readonly Brush TodayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x73, 0xA8, 0xE4));
+    private static readonly Brush SelectedDayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xB9, 0x32, 0x42));
+    private static readonly Brush SelectedDayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xF0, 0x8A, 0x94));
     private static readonly Brush TodayTextBrush = new SolidColorBrush(Colors.White);
     private static readonly Brush TransparentPanelBrush = new SolidColorBrush(Colors.Transparent);
     private static readonly Color SyncedColor = Color.FromArgb(0xFF, 0x4C, 0xAF, 0x50);
     private static readonly Color NotSyncedColor = Color.FromArgb(0xFF, 0xA0, 0xA0, 0xA0);
 
     private readonly ICalendarSelectionService _selectionService;
+    private readonly ICalendarDaySelectionService _daySelectionService;
     private readonly EventDetailsPanelViewModel _eventDetailsViewModel;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<YearViewControl> _logger;
     private readonly EventColorPickerFlyoutController _eventColorPicker;
     private readonly SharedTooltipManager _tooltipManager;
     private Dictionary<string, List<EventBorderRegistration>> _eventBorders = new(StringComparer.Ordinal);
+    private Dictionary<DateOnly, List<DayNumberRegistration>> _dayNumberRegistrations = [];
     private ColorPickerTarget? _activeColorTarget;
     private readonly Dictionary<int, ProjectionCacheEntry> _projectionCache = [];
     private long _projectionCacheAccessSequence;
@@ -57,6 +61,7 @@ public sealed partial class YearViewControl : Page
     {
         ViewModel = App.GetRequiredService<MainViewModel>();
         _selectionService = App.GetRequiredService<ICalendarSelectionService>();
+        _daySelectionService = App.GetRequiredService<ICalendarDaySelectionService>();
         _eventDetailsViewModel = App.GetRequiredService<EventDetailsPanelViewModel>();
         _timeProvider = App.GetRequiredService<TimeProvider>();
         _logger = App.GetRequiredService<ILogger<YearViewControl>>();
@@ -79,7 +84,8 @@ public sealed partial class YearViewControl : Page
             () => new EventColorPickerMenuState(
                 ShowRevert: _activeColorTarget?.IsPending == true,
                 ShowPendingPublishSelectionToggle: _activeColorTarget?.IsPending == true,
-                IsSelectedForPush: _activeColorTarget is not null && ViewModel.IsPendingEventSelectedForPush(_activeColorTarget.EventId)),
+                IsSelectedForPush: _activeColorTarget is not null && ViewModel.IsPendingEventSelectedForPush(_activeColorTarget.EventId),
+                ShowDelete: _activeColorTarget is not null),
             async () =>
             {
                 if (_activeColorTarget is null)
@@ -99,6 +105,17 @@ public sealed partial class YearViewControl : Page
                 }
 
                 await ViewModel.TogglePendingPublishSelectionForEventAsync(_activeColorTarget.EventId);
+            },
+            async () =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
+                await _eventDetailsViewModel.DeleteEventByIdAsync(
+                    _activeColorTarget.EventId,
+                    _activeColorTarget.SourceKind);
             });
         InitializeComponent();
         _tooltipManager = new SharedTooltipManager(DispatcherQueue);
@@ -113,6 +130,7 @@ public sealed partial class YearViewControl : Page
     {
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         WeakReferenceMessenger.Default.Register<YearViewControl, EventSelectedMessage>(this, static (recipient, message) => recipient.OnEventSelected(message));
+        WeakReferenceMessenger.Default.Register<YearViewControl, DaySelectedMessage>(this, static (recipient, message) => recipient.OnDaySelected(message));
         WeakReferenceMessenger.Default.Register<YearViewControl, SyncCompletedMessage>(this, static (recipient, _) => recipient.OnSyncCompleted());
         _lastObservedToday = GetLocalToday();
         StartTodayRefreshTimer();
@@ -126,6 +144,7 @@ public sealed partial class YearViewControl : Page
         CancelRenderPrewarm();
         _tooltipManager.Reset();
         _eventBorders.Clear();
+        _dayNumberRegistrations.Clear();
         _projectionCache.Clear();
         _renderCache.Clear();
         _currentRenderState = null;
@@ -166,6 +185,11 @@ public sealed partial class YearViewControl : Page
         _ = DispatcherQueue.TryEnqueue(() => ApplySelectionVisualState(message.EventId));
     }
 
+    private void OnDaySelected(DaySelectedMessage message)
+    {
+        _ = DispatcherQueue.TryEnqueue(() => ApplyDaySelectionVisualState(message.SelectedDay));
+    }
+
     private void Rebuild()
     {
         var totalTimer = Stopwatch.StartNew();
@@ -180,6 +204,7 @@ public sealed partial class YearViewControl : Page
                 ViewModel.CurrentDate.Year,
                 totalTimer.ElapsedMilliseconds);
             ApplySelectionVisualState(_selectionService.SelectedEventId);
+            ApplyDaySelectionVisualState(_daySelectionService.SelectedDay);
             ScheduleRenderPrewarm();
             return;
         }
@@ -188,6 +213,7 @@ public sealed partial class YearViewControl : Page
         _tooltipManager.Reset();
         MonthsGrid.Children.Clear();
         _eventBorders = new Dictionary<string, List<EventBorderRegistration>>(StringComparer.Ordinal);
+        _dayNumberRegistrations = [];
         resetTimer.Stop();
 
         var culture = CultureInfo.CurrentCulture;
@@ -221,6 +247,7 @@ public sealed partial class YearViewControl : Page
             totalTimer.ElapsedMilliseconds);
 
         ApplySelectionVisualState(_selectionService.SelectedEventId);
+        ApplyDaySelectionVisualState(_daySelectionService.SelectedDay);
         ScheduleRenderPrewarm();
     }
 
@@ -310,6 +337,7 @@ public sealed partial class YearViewControl : Page
 
         _currentRenderState = renderState;
         _eventBorders = renderState.EventBorders;
+        _dayNumberRegistrations = renderState.DayNumbers;
     }
 
     private void CacheAndActivateRenderState(RenderCacheEntry renderState)
@@ -375,7 +403,8 @@ public sealed partial class YearViewControl : Page
         bool attachToGrid)
     {
         var eventBorders = new Dictionary<string, List<EventBorderRegistration>>(StringComparer.Ordinal);
-        var renderContext = new RenderBuildContext(eventBorders);
+        var dayNumbers = new Dictionary<DateOnly, List<DayNumberRegistration>>();
+        var renderContext = new RenderBuildContext(eventBorders, dayNumbers);
         var monthPanels = new List<UIElement>(12);
 
         for (var month = 1; month <= 12; month++)
@@ -398,6 +427,7 @@ public sealed partial class YearViewControl : Page
             syncStatusMap,
             monthPanels,
             eventBorders,
+            dayNumbers,
             ++_renderCacheAccessSequence);
     }
 
@@ -584,7 +614,7 @@ public sealed partial class YearViewControl : Page
                 continue;
             }
 
-            var header = BuildDayHeader(date, culture, displayModel, CalendarViewVisualStateCalculator.IsToday(date, _timeProvider.GetLocalNow().DateTime));
+            var header = BuildDayHeader(date, culture, displayModel, CalendarViewVisualStateCalculator.IsToday(date, _timeProvider.GetLocalNow().DateTime), renderContext);
             Grid.SetColumn(header, column);
             Grid.SetRow(header, 0);
             weekGrid.Children.Add(header);
@@ -633,16 +663,22 @@ public sealed partial class YearViewControl : Page
         return background;
     }
 
-    private static Grid BuildDayHeader(
+    private Grid BuildDayHeader(
         DateOnly date,
         CultureInfo culture,
         YearViewDayDisplayModel displayModel,
-        bool isToday)
+        bool isToday,
+        RenderBuildContext renderContext)
     {
         var header = new Grid
         {
             Margin = new Thickness(2, 2, 2, 1),
-            IsHitTestVisible = false
+            Background = TransparentPanelBrush
+        };
+        header.Tapped += (_, e) =>
+        {
+            ToggleDaySelection(date);
+            e.Handled = true;
         };
 
         if (displayModel.SyncDotPlacement == YearViewSyncDotPlacement.Trailing)
@@ -657,7 +693,32 @@ public sealed partial class YearViewControl : Page
             });
         }
 
-        header.Children.Add(new Border
+        var highlight = new Ellipse
+        {
+            Fill = isToday ? TodayHighlightBrush : TransparentPanelBrush,
+            Stroke = isToday ? TodayHighlightStrokeBrush : TransparentPanelBrush,
+            StrokeThickness = isToday ? 1.25 : 0,
+            RenderTransformOrigin = new Point(0.5, 0.5)
+        };
+        var selectedOverlay = new Ellipse
+        {
+            Margin = new Thickness(4),
+            Fill = TransparentPanelBrush,
+            Stroke = TransparentPanelBrush,
+            StrokeThickness = 0
+        };
+        var label = new TextBlock
+        {
+            Text = date.Day.ToString(culture),
+            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+            Foreground = isToday
+                ? TodayTextBrush
+                : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 11
+        };
+        var dayNumber = new Border
         {
             Width = 20,
             Height = 20,
@@ -668,26 +729,19 @@ public sealed partial class YearViewControl : Page
             {
                 Children =
                 {
-                    new Ellipse
-                    {
-                        Fill = isToday ? TodayHighlightBrush : TransparentPanelBrush,
-                        Stroke = isToday ? TodayHighlightStrokeBrush : TransparentPanelBrush,
-                        StrokeThickness = isToday ? 1.25 : 0
-                    },
-                    new TextBlock
-                    {
-                        Text = date.Day.ToString(culture),
-                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
-                        Foreground = isToday
-                            ? TodayTextBrush
-                            : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        FontSize = 11
-                    }
+                    highlight,
+                    selectedOverlay,
+                    label
                 }
             }
-        });
+        };
+        dayNumber.Tapped += (_, e) =>
+        {
+            ToggleDaySelection(date);
+            e.Handled = true;
+        };
+        RegisterDayNumber(date, highlight, selectedOverlay, label, isToday, renderContext);
+        header.Children.Add(dayNumber);
 
         return header;
     }
@@ -817,9 +871,19 @@ public sealed partial class YearViewControl : Page
                     bar.EventId,
                     bar.SourceKind.Value,
                     ResolveColorKey(bar.EventId),
-                    ResolveIsPending(bar.EventId));
+                    ResolveIsPending(bar.EventId),
+                    ResolveIsPendingDelete(bar.EventId));
                 _eventColorPicker.ShowAt(previewBar, e.GetPosition(previewBar));
                 e.Handled = true;
+            }
+        };
+        previewBar.PointerPressed += (_, e) =>
+        {
+            if (bar.EventId is not null && bar.SourceKind is not null &&
+                e.GetCurrentPoint(previewBar).Properties.IsMiddleButtonPressed)
+            {
+                e.Handled = true;
+                _ = _eventDetailsViewModel.DeleteEventByIdAsync(bar.EventId, bar.SourceKind.Value);
             }
         };
 
@@ -902,6 +966,34 @@ public sealed partial class YearViewControl : Page
         registrations.Add(new EventBorderRegistration(border, border.BorderBrush, border.BorderThickness, border.Padding));
     }
 
+    private static void RegisterDayNumber(
+        DateOnly date,
+        Ellipse highlight,
+        Ellipse selectedOverlay,
+        TextBlock label,
+        bool isToday,
+        RenderBuildContext renderContext)
+    {
+        if (!renderContext.DayNumbers.TryGetValue(date, out var registrations))
+        {
+            registrations = [];
+            renderContext.DayNumbers[date] = registrations;
+        }
+
+        registrations.Add(new DayNumberRegistration(highlight, selectedOverlay, label, isToday));
+    }
+
+    private void ToggleDaySelection(DateOnly date)
+    {
+        if (_daySelectionService.SelectedDay == date)
+        {
+            _daySelectionService.ClearSelection();
+            return;
+        }
+
+        _daySelectionService.SelectDay(date);
+    }
+
     private string ResolveColorKey(string eventId)
     {
         return ViewModel.CurrentEvents
@@ -915,6 +1007,14 @@ public sealed partial class YearViewControl : Page
         return ViewModel.CurrentEvents
             .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.Ordinal))
             ?.IsPending
+            ?? false;
+    }
+
+    private bool ResolveIsPendingDelete(string eventId)
+    {
+        return ViewModel.CurrentEvents
+            .FirstOrDefault(item => string.Equals(item.EventId, eventId, StringComparison.Ordinal))
+            ?.IsPendingDelete
             ?? false;
     }
 
@@ -961,6 +1061,45 @@ public sealed partial class YearViewControl : Page
             : registration.DefaultPadding;
     }
 
+    private void ApplyDaySelectionVisualState(DateOnly? selectedDay)
+    {
+        foreach (var (date, registrations) in _dayNumberRegistrations)
+        {
+            var isSelected = selectedDay == date;
+            foreach (var registration in registrations)
+            {
+                registration.Highlight.Fill = isSelected
+                    ? registration.IsToday
+                        ? TodayHighlightBrush
+                        : SelectedDayHighlightBrush
+                    : registration.IsToday
+                        ? TodayHighlightBrush
+                        : TransparentPanelBrush;
+                registration.Highlight.Stroke = isSelected
+                    ? registration.IsToday
+                        ? TodayHighlightStrokeBrush
+                        : SelectedDayHighlightStrokeBrush
+                    : registration.IsToday
+                        ? TodayHighlightStrokeBrush
+                        : TransparentPanelBrush;
+                registration.Highlight.StrokeThickness = isSelected || registration.IsToday ? 1.25 : 0;
+                registration.Highlight.RenderTransform = registration.IsToday && isSelected
+                    ? new ScaleTransform { ScaleX = 1.16, ScaleY = 1.16 }
+                    : null;
+                registration.SelectedOverlay.Fill = registration.IsToday && isSelected
+                    ? SelectedDayHighlightBrush
+                    : TransparentPanelBrush;
+                registration.SelectedOverlay.Stroke = registration.IsToday && isSelected
+                    ? SelectedDayHighlightStrokeBrush
+                    : TransparentPanelBrush;
+                registration.SelectedOverlay.StrokeThickness = registration.IsToday && isSelected ? 1 : 0;
+                registration.Label.Foreground = isSelected || registration.IsToday
+                    ? TodayTextBrush
+                    : (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"];
+            }
+        }
+    }
+
     private static Thickness AdjustPaddingForThickness(Thickness padding, Thickness fromThickness, Thickness toThickness)
     {
         return new Thickness(
@@ -976,7 +1115,9 @@ public sealed partial class YearViewControl : Page
         Thickness DefaultBorderThickness,
         Thickness DefaultPadding);
 
-    private sealed record ColorPickerTarget(string EventId, CalendarEventSourceKind SourceKind, string ColorKey, bool IsPending);
+    private sealed record DayNumberRegistration(Ellipse Highlight, Ellipse SelectedOverlay, TextBlock Label, bool IsToday);
+
+    private sealed record ColorPickerTarget(string EventId, CalendarEventSourceKind SourceKind, string ColorKey, bool IsPending, bool IsPendingDelete = false);
 
     private sealed class ProjectionCacheEntry
     {
@@ -1009,6 +1150,7 @@ public sealed partial class YearViewControl : Page
             IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap,
             IReadOnlyList<UIElement> monthPanels,
             Dictionary<string, List<EventBorderRegistration>> eventBorders,
+            Dictionary<DateOnly, List<DayNumberRegistration>> dayNumbers,
             long accessSequence)
         {
             Year = year;
@@ -1016,6 +1158,7 @@ public sealed partial class YearViewControl : Page
             SyncStatusMap = syncStatusMap;
             MonthPanels = monthPanels;
             EventBorders = eventBorders;
+            DayNumbers = dayNumbers;
             AccessSequence = accessSequence;
         }
 
@@ -1029,11 +1172,14 @@ public sealed partial class YearViewControl : Page
 
         public Dictionary<string, List<EventBorderRegistration>> EventBorders { get; }
 
+        public Dictionary<DateOnly, List<DayNumberRegistration>> DayNumbers { get; }
+
         public long AccessSequence { get; set; }
     }
 
     private sealed record RenderBuildContext(
-        Dictionary<string, List<EventBorderRegistration>> EventBorders);
+        Dictionary<string, List<EventBorderRegistration>> EventBorders,
+        Dictionary<DateOnly, List<DayNumberRegistration>> DayNumbers);
 
     private sealed class SharedTooltipManager
     {

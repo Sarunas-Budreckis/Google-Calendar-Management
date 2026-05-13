@@ -61,6 +61,7 @@ credentials/
 **/credentials/
 **/credentials/client_secret.json
 *.client_secret.json
+appsettings.secrets.json
 
 ## Runtime database artifacts
 # The app's real SQLite database is NOT stored in this repository.

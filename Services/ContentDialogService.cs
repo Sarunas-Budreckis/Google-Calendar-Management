@@ -113,4 +113,32 @@ public sealed class ContentDialogService : IContentDialogService
 
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
+
+    public async Task<DeleteWithPendingEditChoice> ShowDeleteWithPendingEditAsync(string eventTitle)
+    {
+        var xamlRoot = _windowService.GetXamlRoot();
+        if (xamlRoot is null)
+        {
+            return DeleteWithPendingEditChoice.Cancel;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = "Delete Event",
+            Content = $"\"{eventTitle}\" has pending edits. Choose an action:",
+            PrimaryButtonText = "Delete Event",
+            SecondaryButtonText = "Revert Changes",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = xamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        return result switch
+        {
+            ContentDialogResult.Primary => DeleteWithPendingEditChoice.DeleteEvent,
+            ContentDialogResult.Secondary => DeleteWithPendingEditChoice.RevertChanges,
+            _ => DeleteWithPendingEditChoice.Cancel
+        };
+    }
 }

@@ -534,6 +534,11 @@ public sealed class PendingEventPublishServiceTests : IDisposable
             return UpdateHandler?.Invoke(eventId, request, ifMatchEtag) ??
                 Task.FromResult(GoogleCalendarWriteResult.Failure("No update handler configured."));
         }
+
+        public Task<GoogleCalendarDeleteResult> DeleteEventAsync(
+            string calendarId,
+            string eventId,
+            CancellationToken ct = default) => throw new NotImplementedException();
     }
 
     private sealed class FixedTimeProvider : TimeProvider

@@ -350,6 +350,30 @@
                             Text="{x:Bind ViewModel.BreadcrumbLabel, Mode=OneWay}" />
                     </Border>
 
+                    <Button
+                        x:Name="SelectedDayButton"
+                        Grid.Column="5"
+                        MinWidth="180"
+                        Padding="12,6"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Content="No day selected"
+                        ToolTipService.ToolTip="Select data source day">
+                        <Button.Flyout>
+                            <Flyout
+                                x:Name="SelectedDayPickerFlyout"
+                                Opened="SelectedDayPickerFlyout_Opened"
+                                Placement="Bottom">
+                                <CalendarView
+                                    x:Name="SelectedDayCalendarView"
+                                    Width="320"
+                                    Height="340"
+                                    SelectionMode="Single"
+                                    SelectedDatesChanged="SelectedDayCalendarView_SelectedDatesChanged" />
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+
                     <StackPanel
                         Grid.Column="6"
                         Margin="12,0,0,0"
@@ -445,14 +469,22 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Frame x:Name="CalendarFrame" Grid.Column="0" />
+            <ContentControl
+                x:Name="DataSourcePanel"
+                Grid.Column="0"
+                VerticalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch" />
+
+            <Frame x:Name="CalendarFrame" Grid.Column="1" />
 
             <Border
-                Grid.Column="0"
+                Grid.Column="1"
                 Padding="24"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
@@ -477,7 +509,7 @@
             </Border>
 
             <ProgressRing
-                Grid.Column="0"
+                Grid.Column="1"
                 Width="48"
                 Height="48"
                 HorizontalAlignment="Center"
@@ -486,7 +518,7 @@
 
             <ContentControl
                 x:Name="EventDetailsPanel"
-                Grid.Column="1"
+                Grid.Column="2"
                 Width="380"
                 VerticalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"

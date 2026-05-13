@@ -361,7 +361,7 @@ Measured by:
 - Receive event IDs, update local database
 
 **Date State Tracking:**
-- Per-date states: call_log_data_published, sleep_data_published, youtube_data_published, toggl_data_published, named, complete_walkthrough_approval, part_of_tracked_gap
+- Per-date states: call_log_data_published, sleep_data_published, youtube_data_published, toggl_data_published, named, approved, part_of_tracked_gap
 - Contiguity calculation: edge of verified calendar
 - "Fill to present" workflow starts from edge
 

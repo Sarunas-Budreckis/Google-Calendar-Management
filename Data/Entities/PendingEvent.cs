@@ -16,6 +16,7 @@ public class PendingEvent
     public bool ReadyToPublish { get; set; }
     public DateTime? PublishAttemptedAt { get; set; }
     public string? PublishError { get; set; }
+    public string OperationType { get; set; } = "edit";
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

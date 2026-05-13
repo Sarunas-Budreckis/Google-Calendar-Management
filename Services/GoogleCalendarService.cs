@@ -283,6 +283,45 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
         }
     }
 
+    public async Task<GoogleCalendarDeleteResult> DeleteEventAsync(
+        string calendarId,
+        string eventId,
+        CancellationToken ct = default)
+    {
+        var apiClientResult = await CreateAuthenticatedApiClientAsync(ct);
+        if (!apiClientResult.Success)
+        {
+            return GoogleCalendarDeleteResult.Failure(apiClientResult.ErrorMessage!);
+        }
+
+        try
+        {
+            await apiClientResult.ApiClient!.DeleteEventAsync(calendarId, eventId, ct);
+            return GoogleCalendarDeleteResult.Ok();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Google Calendar delete failed due to network error for {EventId}.", eventId);
+            return GoogleCalendarDeleteResult.Failure(
+                "Unable to reach Google. Check internet connection.",
+                ex.ToString());
+        }
+        catch (GoogleApiException ex)
+        {
+            _logger.LogError(ex, "Google Calendar API returned an error while deleting event {EventId}.", eventId);
+            return GoogleCalendarDeleteResult.Failure(
+                GetFriendlyWriteApiErrorMessage(ex),
+                ex.ToString());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Google Calendar delete failed unexpectedly for {EventId}.", eventId);
+            return GoogleCalendarDeleteResult.Failure(
+                "Unable to delete the event from Google Calendar.",
+                ex.ToString());
+        }
+    }
+
     private UserCredential CreateUserCredential(TokenResponse tokenResponse)
     {
         var clientSecrets = GoogleClientSecrets.FromFile(_options.ClientSecretPath).Secrets;

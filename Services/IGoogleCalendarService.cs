@@ -34,4 +34,9 @@ public interface IGoogleCalendarService
         GoogleCalendarWriteRequest request,
         string? ifMatchEtag,
         CancellationToken ct = default);
+
+    Task<GoogleCalendarDeleteResult> DeleteEventAsync(
+        string calendarId,
+        string eventId,
+        CancellationToken ct = default);
 }

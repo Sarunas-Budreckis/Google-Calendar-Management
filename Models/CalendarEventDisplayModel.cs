@@ -19,4 +19,8 @@ public sealed record CalendarEventDisplayModel(
     double Opacity = 1.0,
     DateTime? PendingUpdatedAt = null,
     string StatusLabel = "",
-    string ColorKey = "azure");
+    string ColorKey = "azure",
+    bool IsPendingDelete = false)
+{
+    public string DisplayColorHex => ColorHex;
+}

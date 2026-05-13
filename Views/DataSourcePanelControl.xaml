@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GoogleCalendarManagement.Views.DataSourcePanelControl"
+    x:Name="root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Loaded="DataSourcePanelControl_Loaded">
+
+    <Grid>
+        <!-- Full panel (visible when not minimized) -->
+        <Border
+            Width="280"
+            VerticalAlignment="Stretch"
+            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,1,0"
+            Visibility="{x:Bind ViewModel.PanelBodyVisibility, Mode=OneWay}">
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Grid
+                    Grid.Row="0"
+                    Padding="12,8"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,0,1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource SubtitleTextBlockStyle}"
+                        Text="Data Sources"
+                        Visibility="{x:Bind ViewModel.GlobalModeVisibility, Mode=OneWay}" />
+
+                    <StackPanel
+                        Grid.Column="0"
+                        MinWidth="0"
+                        VerticalAlignment="Center"
+                        Spacing="2"
+                        Tapped="DayHeader_Tapped"
+                        Visibility="{x:Bind ViewModel.DayModeVisibility, Mode=OneWay}">
+                        <TextBlock
+                            FontWeight="SemiBold"
+                            Text="{x:Bind ViewModel.DayLabel, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                        <TextBlock
+                            Opacity="0.78"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.DayNameOrHint, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                    </StackPanel>
+
+                    <Button
+                        Grid.Column="1"
+                        Width="32"
+                        Height="32"
+                        Padding="0"
+                        Click="MinimizeButton_Click"
+                        ToolTipService.ToolTip="Collapse panel">
+                        <FontIcon
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                            FontSize="12"
+                            Glyph="&#xE76B;" />
+                    </Button>
+                </Grid>
+
+                <!-- Body -->
+                <Grid
+                    Grid.Row="1"
+                    Visibility="{x:Bind ViewModel.GlobalModeVisibility, Mode=OneWay}">
+                    <ScrollViewer Visibility="{x:Bind ViewModel.EmptyGlobalStateVisibility, Mode=OneWay}">
+                        <TextBlock
+                            Margin="12,24"
+                            HorizontalAlignment="Center"
+                            Opacity="0.6"
+                            Text="No data sources configured"
+                            TextAlignment="Center"
+                            TextWrapping="WrapWholeWords" />
+                    </ScrollViewer>
+
+                    <ListView
+                        Padding="0,4"
+                        ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}"
+                        SelectionMode="None"
+                        Visibility="{x:Bind ViewModel.SourceListVisibility, Mode=OneWay}">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Padding="12,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel
+                                        Grid.Column="0"
+                                        MinWidth="0"
+                                        Spacing="2">
+                                        <TextBlock
+                                            FontWeight="SemiBold"
+                                            Text="{Binding DisplayName}"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="NoWrap" />
+                                        <TextBlock
+                                            Opacity="0.72"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{Binding LastDataDateDisplayLabel}"
+                                            TextWrapping="WrapWholeWords" />
+                                        <TextBlock
+                                            Opacity="0.58"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{Binding LastImportedDisplayLabel}"
+                                            TextWrapping="WrapWholeWords"
+                                            Visibility="{Binding LastImportedVisibility}" />
+                                    </StackPanel>
+
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal"
+                                        Spacing="6">
+                                        <Button
+                                            Command="{Binding ImportCommand}"
+                                            Content="{Binding ImportButtonContent}"
+                                            IsEnabled="{Binding IsImportEnabled}" />
+                                        <ProgressRing
+                                            Width="18"
+                                            Height="18"
+                                            IsActive="{Binding IsImporting}"
+                                            Visibility="{Binding ImportProgressVisibility}" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <Grid
+                        Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                        Opacity="0.92"
+                        Visibility="{x:Bind ViewModel.LoadingGlobalVisibility, Mode=OneWay}">
+                        <ProgressRing
+                            Width="32"
+                            Height="32"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            IsActive="{x:Bind ViewModel.IsLoadingGlobal, Mode=OneWay}" />
+                    </Grid>
+                </Grid>
+
+                <Grid
+                    Grid.Row="1"
+                    Visibility="{x:Bind ViewModel.DayModeVisibility, Mode=OneWay}">
+                    <ListView
+                        Padding="0,4"
+                        ItemsSource="{x:Bind ViewModel.DayCards, Mode=OneWay}"
+                        SelectionMode="None"
+                        Visibility="{x:Bind ViewModel.DayModeSourceListVisibility, Mode=OneWay}">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Border
+                                    Margin="8,4"
+                                    Padding="8"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6">
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <CheckBox
+                                            Grid.Column="0"
+                                            VerticalAlignment="Top"
+                                            Command="{Binding ToggleIntegrationCommand}"
+                                            IsChecked="{Binding IsIntegrated, Mode=OneWay}"
+                                            IsEnabled="{Binding IsIntegrationEnabled}" />
+
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            MinWidth="0"
+                                            Spacing="4">
+                                            <TextBlock
+                                                FontWeight="SemiBold"
+                                                Text="{Binding DisplayName}"
+                                                TextTrimming="CharacterEllipsis"
+                                                TextWrapping="NoWrap" />
+                                            <ContentPresenter Content="{Binding CompactSummaryView}" />
+                                        </StackPanel>
+
+                                        <Button
+                                            Grid.Column="2"
+                                            Width="32"
+                                            Height="32"
+                                            Padding="0"
+                                            VerticalAlignment="Top"
+                                            Command="{Binding ExpandCommand}"
+                                            ToolTipService.ToolTip="Open details">
+                                            <FontIcon
+                                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                FontSize="12"
+                                                Glyph="&#xE76C;" />
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <Grid Visibility="{x:Bind ViewModel.DayModeDrilldownVisibility, Mode=OneWay}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid
+                            Grid.Row="0"
+                            Padding="8"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="0,0,0,1"
+                            ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Button
+                                Grid.Column="0"
+                                Width="32"
+                                Height="32"
+                                Padding="0"
+                                Command="{x:Bind ViewModel.BackFromDrilldownCommand}"
+                                ToolTipService.ToolTip="Back">
+                                <FontIcon
+                                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                    FontSize="12"
+                                    Glyph="&#xE72B;" />
+                            </Button>
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                FontWeight="SemiBold"
+                                Text="{Binding ViewModel.DrilldownCard.DisplayName, ElementName=root}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1">
+                            <ContentPresenter Content="{Binding ViewModel.DrilldownCard.DrilldownView, ElementName=root}" />
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Restore tab (visible when minimized) -->
+        <Border
+            Width="28"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Stretch"
+            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,1,0"
+            Visibility="{x:Bind ViewModel.RestoreTabVisibility, Mode=OneWay}">
+
+            <Button
+                Width="28"
+                Height="44"
+                Margin="0,8,0,0"
+                Padding="0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Click="ExpandButton_Click"
+                ToolTipService.ToolTip="Expand panel">
+                <FontIcon
+                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                    FontSize="12"
+                    Glyph="&#xE76C;" />
+            </Button>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,111 @@
+# Story 7.9: YouTube Watch History Import
+
+**Epic:** 7 — Additional Data Source Integrations
+**Status:** Draft
+**Dependencies:** Story 7.1 (data_source registry), Story 5.5 (left panel day mode)
+
+---
+
+## User Story
+
+As a **user**,
+I want **to import my YouTube watch history from a Google Takeout export and see viewing sessions in the left panel**,
+so that **I can create calendar events for my YouTube viewing time**.
+
+---
+
+## Background
+
+YouTube watch history is exported via Google Takeout as `watch-history.json`. The user watches YouTube on a **different Google account** from the one used for Google Calendar, so this import cannot use the existing GCal OAuth token — it requires either a separate OAuth login or manual file selection.
+
+This story implements **manual file import** (user downloads Takeout ZIP, extracts the JSON, and selects it in the app). Automated pull via the secondary Google account OAuth is noted as a future story.
+
+**Future note:** Investigate automating YouTube history export from the secondary Google account. Google Takeout does not expose a programmatic "create export" API, but the Google Data Portability API (`dataportability.myactivity.youtube.read` scope) may allow reading activity data directly — evaluate in a dedicated investigation story.
+
+The compact card shows **total watch time**, calculated using truncation for overlapping watches (if a new video starts before the previous one's full length has elapsed, truncate the previous video at the start of the next). The session coalescing algorithm (from `docs/tier-3-requirements.md`) groups videos into viewing sessions for candidate events.
+
+---
+
+## Acceptance Criteria
+
+**Schema:**
+
+`youtube_import`:
+- `id` (integer, PK)
+- `imported_at` (datetime)
+- `file_name` (text)
+- `record_count` (integer)
+- `date_min` (date)
+- `date_max` (date)
+
+`youtube_watch_entry`:
+- `id` (integer, PK)
+- `import_id` (FK → youtube_import)
+- `watched_at` (datetime) — from Takeout JSON `time` field
+- `title` (text, nullable) — video title at time of export
+- `title_url` (text, nullable) — YouTube video URL
+- `channel` (text, nullable) — channel name
+- `channel_url` (text, nullable)
+- `video_duration_seconds` (integer, nullable) — video length; may be null if video is deleted
+- `linked_event_id` (text, nullable)
+- `linked_event_type` (text, nullable)
+
+**Import Flow:**
+
+**Given** I click "Import Watch History"
+**When** I select a `watch-history.json` file via file picker
+**Then** entries are parsed from the Takeout JSON format
+
+**And** duplicate detection: entries with the same `watched_at` + `title_url` are skipped
+
+**And** an import record is created; the import is logged to `data_source_import_log`
+
+**Note:** `video_duration_seconds` is not in the Takeout JSON — this field requires a YouTube Data API call per video to populate. Populating durations is a **background enrichment step** that runs after import, using the YouTube Data API with the user's secondary Google account OAuth (if configured). If OAuth is not set up, durations remain null and the compact card shows "watch count" instead of "watch time".
+
+**Compact Card:**
+
+**Given** durations are available for the day's entries
+**When** the YouTube card is shown
+**Then** the card displays total watch time calculated as:
+- Sort entries by `watched_at`
+- For each entry: effective duration = min(`video_duration_seconds`, gap to next entry's `watched_at`)
+- Sum effective durations
+
+**Given** durations are not available
+**Then** the card shows: "X videos watched" (count only)
+
+**Drilldown View:**
+
+**Given** I expand the YouTube source for a selected day
+**Then** I see a chronological list of watched videos: time, title, channel, duration (if known)
+
+**And** a "Create Candidate Events" button is visible
+
+**Candidate Event Generation (Session Coalescing + 8/15):**
+
+**Given** I click "Create Candidate Events"
+**Then** the YouTube session coalescing algorithm runs (see `docs/tier-3-requirements.md`):
+1. Sort videos by `watched_at`
+2. Start a session at the first video
+3. Extend the session while the next video starts within (`current video duration` + 30 minutes)
+4. Allow overlaps (next video starts before current ends)
+5. Session total duration = first `watched_at` to (last `watched_at` + last `video_duration_seconds`)
+6. Apply 8/15 rounding to session start/end
+7. Create one `pending_event` per session:
+   - Color: Yellow
+   - Title: `"YouTube – [unique channels]"` (comma-separated, max 3 channels then "et al.")
+   - Start/end from 8/15-rounded session bounds
+
+**And** if `video_duration_seconds` is null for any video, that video uses a fallback duration of 15 minutes for coalescing gap calculation (note this in the event description)
+
+---
+
+## Technical Notes
+
+- Takeout `watch-history.json` format: array of objects with fields `header`, `title`, `titleUrl`, `subtitles` (array with `name` for channel), `time` (ISO 8601 string)
+- `subtitles[0].name` is the channel name; `subtitles[0].url` is the channel URL
+- Duration enrichment via YouTube Data API: `videos.list?part=contentDetails&id={videoId}` — batch up to 50 IDs per request; cache results in `youtube_watch_entry.video_duration_seconds`
+- Secondary Google account OAuth: store as a separate credential alongside the primary GCal token; use the same DPAPI encryption pattern
+- The YouTube Data API requires an API key or OAuth; use OAuth with scope `youtube.readonly` on the secondary account
+- Large Takeout files (millions of entries for long-time users) — parse with streaming JSON reader, not `JsonDocument.ParseAsync` into memory
+- Index `youtube_watch_entry` on `watched_at` for per-day queries

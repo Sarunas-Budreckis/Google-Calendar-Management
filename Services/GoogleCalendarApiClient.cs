@@ -40,6 +40,11 @@ public interface IGoogleCalendarApiClient
         Event eventPayload,
         string? ifMatchEtag,
         CancellationToken ct = default);
+
+    Task DeleteEventAsync(
+        string calendarId,
+        string eventId,
+        CancellationToken ct = default);
 }
 
 public sealed record GoogleCalendarEventPage(
@@ -154,5 +159,14 @@ public sealed class GoogleCalendarApiClient : IGoogleCalendarApiClient
         }
 
         return updatedEvent;
+    }
+
+    public async Task DeleteEventAsync(
+        string calendarId,
+        string eventId,
+        CancellationToken ct = default)
+    {
+        var request = _calendarService.Events.Delete(calendarId, eventId);
+        await request.ExecuteAsync(ct);
     }
 }

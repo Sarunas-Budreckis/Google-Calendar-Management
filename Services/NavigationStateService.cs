@@ -7,6 +7,7 @@ public sealed class NavigationStateService : INavigationStateService
 {
     private const string CurrentViewModeKey = "current_view_mode";
     private const string CurrentViewDateKey = "current_view_date";
+    private const string SelectedDayKey = "selected_day";
 
     private readonly ISystemStateRepository _systemStateRepository;
     private readonly ILogger<NavigationStateService> _logger;
@@ -28,11 +29,15 @@ public sealed class NavigationStateService : INavigationStateService
         {
             var viewModeText = await _systemStateRepository.GetAsync(CurrentViewModeKey, ct);
             var currentDateText = await _systemStateRepository.GetAsync(CurrentViewDateKey, ct);
+            var selectedDayText = await _systemStateRepository.GetAsync(SelectedDayKey, ct);
 
             if (Enum.TryParse<ViewMode>(viewModeText, ignoreCase: true, out var viewMode)
                 && DateOnly.TryParse(currentDateText, out var currentDate))
             {
-                return new NavigationState(viewMode, currentDate);
+                DateOnly? selectedDay = DateOnly.TryParse(selectedDayText, out var parsedSelectedDay)
+                    ? parsedSelectedDay
+                    : null;
+                return new NavigationState(viewMode, currentDate, selectedDay);
             }
 
             if (!string.IsNullOrWhiteSpace(viewModeText) || !string.IsNullOrWhiteSpace(currentDateText))
@@ -57,7 +62,8 @@ public sealed class NavigationStateService : INavigationStateService
             new Dictionary<string, string>
             {
                 [CurrentViewModeKey] = state.ViewMode.ToString(),
-                [CurrentViewDateKey] = state.CurrentDate.ToString("yyyy-MM-dd")
+                [CurrentViewDateKey] = state.CurrentDate.ToString("yyyy-MM-dd"),
+                [SelectedDayKey] = state.SelectedDay?.ToString("yyyy-MM-dd") ?? string.Empty
             },
             ct);
     }

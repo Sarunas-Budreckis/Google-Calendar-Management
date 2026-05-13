@@ -1,9 +1,13 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Globalization;
+using CommunityToolkit.Mvvm.Messaging;
+using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -11,6 +15,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Windows.System;
 using Windows.Storage.Pickers;
 using Windows.Foundation;
+using Windows.UI.Core;
 using WinRT.Interop;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
@@ -20,6 +25,7 @@ public sealed partial class MainPage : Page
 {
     private static CornerRadius MediumCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusMedium"];
 
+    private readonly DataSourcePanelControl _dataSourcePanel;
     private readonly EventDetailsPanelControl _eventDetailsPanel;
     private readonly Dictionary<ViewMode, Button> _viewModeButtons;
     private readonly Brush _selectorBackground = new SolidColorBrush(Colors.Transparent);
@@ -29,6 +35,7 @@ public sealed partial class MainPage : Page
     private readonly Brush _selectorSelectedForeground;
     private readonly Brush _selectorUnselectedForeground;
     private readonly ICalendarSelectionService _selectionService;
+    private readonly ICalendarDaySelectionService _daySelectionService;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly TimeProvider _timeProvider;
     private readonly TranslateTransform _selectionIndicatorTransform = new();
@@ -38,22 +45,28 @@ public sealed partial class MainPage : Page
     private bool _isLoaded;
     private bool _hasSelectionIndicatorPosition;
     private bool _isUpdatingPicker;
+    private bool _isUpdatingSelectedDayPicker;
     private ViewMode? _pendingViewMode;
     private ViewMode _selectionIndicatorMode;
 
     public MainPage(
         MainViewModel viewModel,
         ICalendarSelectionService selectionService,
+        ICalendarDaySelectionService daySelectionService,
+        DataSourcePanelControl dataSourcePanel,
         EventDetailsPanelControl eventDetailsPanel,
         IPendingEventDraftService pendingEventDraftService,
         TimeProvider timeProvider)
     {
         ViewModel = viewModel;
         _selectionService = selectionService;
+        _daySelectionService = daySelectionService;
+        _dataSourcePanel = dataSourcePanel;
         _eventDetailsPanel = eventDetailsPanel;
         _pendingEventDraftService = pendingEventDraftService;
         _timeProvider = timeProvider;
         InitializeComponent();
+        DataSourcePanel.Content = dataSourcePanel;
         EventDetailsPanel.Content = eventDetailsPanel;
         _selectorHoverBackground = (Brush)Application.Current.Resources["CalendarSelectorHoverBrush"];
         _selectorSelectedIndicatorBackground = (Brush)Application.Current.Resources["CalendarSelectionHoverBrush"];
@@ -83,7 +96,11 @@ public sealed partial class MainPage : Page
         StartLastSyncRefreshTimer();
         ViewModel.RefreshRelativeSyncPresentation();
         _selectionIndicatorMode = ViewModel.CurrentViewMode;
+        WeakReferenceMessenger.Default.Register<MainPage, DaySelectedMessage>(
+            this,
+            static (recipient, message) => recipient.OnDaySelected(message));
         UpdateViewModeButtons();
+        UpdateSelectedDayPicker(_daySelectionService.SelectedDay);
         UpdateSelectionIndicator(_selectionIndicatorMode, animate: false);
         NavigateToCurrentView(force: true);
         _isUpdatingPicker = true;
@@ -95,6 +112,7 @@ public sealed partial class MainPage : Page
     {
         _isLoaded = false;
         ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        WeakReferenceMessenger.Default.UnregisterAll(this);
         StopLastSyncRefreshTimer();
         StopNotificationAutoDismissTimer();
     }
@@ -105,6 +123,7 @@ public sealed partial class MainPage : Page
         {
             _pendingViewMode = null;
             UpdateViewModeButtons();
+            UpdateSelectedDayPicker(_daySelectionService.SelectedDay);
             if (_selectionIndicatorMode != ViewModel.CurrentViewMode)
             {
                 UpdateSelectionIndicator(ViewModel.CurrentViewMode);
@@ -117,6 +136,7 @@ public sealed partial class MainPage : Page
             _isUpdatingPicker = true;
             JumpToDatePicker.Date = ViewModel.CurrentDate.ToDateTime(TimeOnly.MinValue);
             _isUpdatingPicker = false;
+            UpdateSelectedDayPicker(_daySelectionService.SelectedDay);
         }
 
         if (e.PropertyName == nameof(MainViewModel.SyncFlyoutOpenRequestId))
@@ -160,6 +180,14 @@ public sealed partial class MainPage : Page
 
         switch (e.Key)
         {
+            case VirtualKey.Z:
+                if (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down) &&
+                    await _eventDetailsPanel.ViewModel.UndoLastDragRescheduleAsync())
+                {
+                    e.Handled = true;
+                }
+
+                break;
             case VirtualKey.P:
             case VirtualKey.K:
             case VirtualKey.Left:
@@ -248,6 +276,77 @@ public sealed partial class MainPage : Page
 
         var date = DateOnly.FromDateTime(args.NewDate.Value.DateTime);
         await ViewModel.JumpToDateCommand.ExecuteAsync(date);
+    }
+
+    private void SelectedDayPickerFlyout_Opened(object sender, object e)
+    {
+        UpdateSelectedDayCalendar(_daySelectionService.SelectedDay);
+    }
+
+    private void SelectedDayCalendarView_SelectedDatesChanged(CalendarView sender, CalendarViewSelectedDatesChangedEventArgs args)
+    {
+        if (_isUpdatingSelectedDayPicker || args.AddedDates.Count == 0)
+        {
+            return;
+        }
+
+        var selectedDate = DateOnly.FromDateTime(args.AddedDates[^1].DateTime);
+        _daySelectionService.SelectDay(selectedDate);
+        SelectedDayPickerFlyout.Hide();
+    }
+
+    private void OnDaySelected(DaySelectedMessage message)
+    {
+        _ = DispatcherQueue.TryEnqueue(() => UpdateSelectedDayPicker(message.SelectedDay));
+    }
+
+    private void UpdateSelectedDayPicker(DateOnly? selectedDay)
+    {
+        var isDayView = ViewModel.CurrentViewMode == ViewMode.Day;
+        SelectedDayButton.IsHitTestVisible = !isDayView;
+        SelectedDayButton.IsTabStop = !isDayView;
+
+        if (isDayView)
+        {
+            var temporaryDay = selectedDay ?? ViewModel.CurrentDate;
+            SelectedDayButton.Content =
+                $"{FormatSelectedDay(temporaryDay)} temporarily selected in day view";
+            SelectedDayPickerFlyout.Hide();
+            UpdateSelectedDayCalendar(temporaryDay);
+            return;
+        }
+
+        SelectedDayButton.Content = selectedDay is null
+            ? "No day selected"
+            : $"{FormatSelectedDay(selectedDay.Value)} selected";
+        UpdateSelectedDayCalendar(selectedDay);
+    }
+
+    private static string FormatSelectedDay(DateOnly selectedDay)
+    {
+        return selectedDay.ToDateTime(TimeOnly.MinValue).ToString("MMM d, yyyy", CultureInfo.CurrentCulture);
+    }
+
+    private void UpdateSelectedDayCalendar(DateOnly? selectedDay)
+    {
+        if (SelectedDayCalendarView is null)
+        {
+            return;
+        }
+
+        _isUpdatingSelectedDayPicker = true;
+        SelectedDayCalendarView.SelectedDates.Clear();
+
+        var displayDate = selectedDay ?? ViewModel.CurrentDate;
+        var displayDateTimeOffset = ToDateTimeOffset(displayDate);
+        SelectedDayCalendarView.SetDisplayDate(displayDateTimeOffset);
+
+        if (selectedDay is not null)
+        {
+            SelectedDayCalendarView.SelectedDates.Add(displayDateTimeOffset);
+        }
+
+        _isUpdatingSelectedDayPicker = false;
     }
 
     private Task OpenJumpToDatePicker()
@@ -731,6 +830,7 @@ public sealed partial class MainPage : Page
     private bool ShouldSuppressShellArrowNavigation()
     {
         if (JumpToDatePicker.IsCalendarOpen ||
+            SelectedDayPickerFlyout.IsOpen ||
             GetSyncFlyout().IsOpen)
         {
             return true;
@@ -743,6 +843,7 @@ public sealed partial class MainPage : Page
     private bool ShouldSuppressShellHotkeys()
     {
         if (JumpToDatePicker.IsCalendarOpen ||
+            SelectedDayPickerFlyout.IsOpen ||
             GetSyncFlyout().IsOpen)
         {
             return true;

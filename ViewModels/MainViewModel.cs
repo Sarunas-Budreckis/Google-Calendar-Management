@@ -26,6 +26,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly IContentDialogService _dialogService;
     private readonly IPendingEventPublishService _pendingEventPublishService;
     private readonly ICalendarSelectionService _calendarSelectionService;
+    private readonly ICalendarDaySelectionService? _calendarDaySelectionService;
     private readonly IIcsExportService _icsExportService;
     private readonly IIcsImportService _icsImportService;
     private readonly IColorMappingService _colorMappingService;
@@ -73,7 +74,8 @@ public sealed class MainViewModel : ObservableObject
         IIcsImportService icsImportService,
         IColorMappingService colorMappingService,
         ILogger<MainViewModel> logger,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ICalendarDaySelectionService? calendarDaySelectionService = null)
     {
         _calendarQueryService = calendarQueryService;
         _navigationStateService = navigationStateService;
@@ -82,6 +84,7 @@ public sealed class MainViewModel : ObservableObject
         _dialogService = dialogService;
         _pendingEventPublishService = pendingEventPublishService;
         _calendarSelectionService = calendarSelectionService;
+        _calendarDaySelectionService = calendarDaySelectionService;
         _icsExportService = icsExportService;
         _icsImportService = icsImportService;
         _colorMappingService = colorMappingService;
@@ -118,13 +121,26 @@ public sealed class MainViewModel : ObservableObject
     public ViewMode CurrentViewMode
     {
         get => _currentViewMode;
-        private set => SetProperty(ref _currentViewMode, value);
+        private set
+        {
+            var previousMode = _currentViewMode;
+            if (SetProperty(ref _currentViewMode, value))
+            {
+                OnCurrentViewModeChanged(previousMode, value);
+            }
+        }
     }
 
     public DateOnly CurrentDate
     {
         get => _currentDate;
-        private set => SetProperty(ref _currentDate, value);
+        private set
+        {
+            if (SetProperty(ref _currentDate, value) && CurrentViewMode == ViewMode.Day)
+            {
+                _calendarDaySelectionService?.AutoSelectDay(value);
+            }
+        }
     }
 
     public string BreadcrumbLabel
@@ -875,8 +891,8 @@ public sealed class MainViewModel : ObservableObject
     private async Task InitializeCoreAsync()
     {
         var state = await _navigationStateService.LoadAsync();
-        CurrentViewMode = state.ViewMode;
         CurrentDate = state.CurrentDate;
+        CurrentViewMode = state.ViewMode;
         await RefreshAsync();
     }
 
@@ -898,7 +914,7 @@ public sealed class MainViewModel : ObservableObject
                 UpdateSyncPresentation(yearViewData.SyncStatusMap, yearViewData.LastSyncTime);
                 CurrentEvents = yearViewData.Events;
                 BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
-                await _navigationStateService.SaveAsync(new NavigationState(CurrentViewMode, CurrentDate), ct);
+                await _navigationStateService.SaveAsync(CreateNavigationState(), ct);
                 await LoadPendingPublishItemsAsync(ct);
                 StartYearViewPreloads(CurrentDate.Year);
                 return;
@@ -915,7 +931,7 @@ public sealed class MainViewModel : ObservableObject
             UpdateSyncPresentation(syncStatusTask.Result, lastSyncTask.Result);
             CurrentEvents = eventsTask.Result;
             BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
-            await _navigationStateService.SaveAsync(new NavigationState(CurrentViewMode, CurrentDate), ct);
+            await _navigationStateService.SaveAsync(CreateNavigationState(), ct);
             await LoadPendingPublishItemsAsync(ct);
         }
         catch (OperationCanceledException)
@@ -936,6 +952,31 @@ public sealed class MainViewModel : ObservableObject
                 IsLoading = false;
             }
         }
+    }
+
+    private void OnCurrentViewModeChanged(ViewMode previousMode, ViewMode currentMode)
+    {
+        if (_calendarDaySelectionService is null)
+        {
+            return;
+        }
+
+        if (currentMode == ViewMode.Day)
+        {
+            _calendarDaySelectionService.AutoSelectDay(CurrentDate);
+        }
+        else if (previousMode == ViewMode.Day)
+        {
+            _calendarDaySelectionService.RestoreManualSelection();
+        }
+    }
+
+    private NavigationState CreateNavigationState()
+    {
+        return new NavigationState(
+            CurrentViewMode,
+            CurrentDate,
+            _calendarDaySelectionService?.ManuallySelectedDay);
     }
 
     private void UpdateSyncPresentation(IReadOnlyDictionary<DateOnly, SyncStatus> syncStatusMap, DateTime? lastSyncTime)

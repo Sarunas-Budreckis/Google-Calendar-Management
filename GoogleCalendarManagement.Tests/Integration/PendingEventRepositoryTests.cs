@@ -162,6 +162,7 @@ public sealed class PendingEventRepositoryTests : IDisposable
                     app_created INTEGER NOT NULL,
                     source_system TEXT NULL,
                     ready_to_publish INTEGER NOT NULL,
+                    operation_type TEXT NOT NULL DEFAULT 'edit',
                     publish_attempted_at TEXT NULL,
                     publish_error TEXT NULL,
                     created_at TEXT NOT NULL,
@@ -249,6 +250,263 @@ public sealed class PendingEventRepositoryTests : IDisposable
         var liveEvent = await verificationContext.GcalEvents.SingleAsync(item => item.GcalEventId == "evt-3");
         liveEvent.ColorId.Should().Be("1");
         verificationContext.GcalEventVersions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task UpsertAsync_RescheduleOverlay_UpdatesPendingRowWithoutTouchingLiveEvent()
+    {
+        await using (var seedContext = await _contextFactory.CreateDbContextAsync())
+        {
+            seedContext.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "evt-reschedule-1",
+                CalendarId = "primary",
+                Summary = "Original",
+                StartDatetime = new DateTime(2026, 05, 11, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 05, 11, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "azure",
+                CreatedAt = new DateTime(2026, 05, 11, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 05, 11, 8, 0, 0, DateTimeKind.Utc)
+            });
+            seedContext.PendingEvents.Add(new PendingEvent
+            {
+                PendingEventId = "pending_reschedule_1",
+                GcalEventId = "evt-reschedule-1",
+                CalendarId = "primary",
+                Summary = "Original",
+                StartDatetime = new DateTime(2026, 05, 11, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 05, 11, 10, 0, 0, DateTimeKind.Utc),
+                IsAllDay = false,
+                ColorId = "azure",
+                AppCreated = false,
+                SourceSystem = "google-overlay",
+                ReadyToPublish = false,
+                CreatedAt = new DateTime(2026, 05, 11, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 05, 11, 8, 30, 0, DateTimeKind.Utc)
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        var repository = new PendingEventRepository(_contextFactory);
+        var existing = await repository.GetByGcalEventIdAsync("evt-reschedule-1");
+        existing!.StartDatetime = new DateTime(2026, 05, 11, 11, 15, 0, DateTimeKind.Utc);
+        existing.EndDatetime = new DateTime(2026, 05, 11, 12, 15, 0, DateTimeKind.Utc);
+        existing.UpdatedAt = new DateTime(2026, 05, 11, 8, 45, 0, DateTimeKind.Utc);
+
+        await repository.UpsertAsync(existing);
+
+        var stored = await repository.GetByGcalEventIdAsync("evt-reschedule-1");
+        stored.Should().NotBeNull();
+        stored!.PendingEventId.Should().Be("pending_reschedule_1");
+        stored.StartDatetime.Should().Be(new DateTime(2026, 05, 11, 11, 15, 0, DateTimeKind.Utc));
+
+        await using var verificationContext = await _contextFactory.CreateDbContextAsync();
+        var liveEvent = await verificationContext.GcalEvents.SingleAsync(item => item.GcalEventId == "evt-reschedule-1");
+        liveEvent.StartDatetime.Should().Be(new DateTime(2026, 05, 11, 9, 0, 0, DateTimeKind.Utc));
+        liveEvent.EndDatetime.Should().Be(new DateTime(2026, 05, 11, 10, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task DeleteByPendingEventIdAsync_RemovesLocalDraftPendingEvent()
+    {
+        await using (var seedContext = await _contextFactory.CreateDbContextAsync())
+        {
+            seedContext.PendingEvents.Add(new PendingEvent
+            {
+                PendingEventId = "pending_draft_del_1",
+                CalendarId = "primary",
+                Summary = "Local Draft",
+                StartDatetime = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 05, 01, 10, 0, 0, DateTimeKind.Utc),
+                AppCreated = true,
+                SourceSystem = "manual",
+                ReadyToPublish = false,
+                CreatedAt = new DateTime(2026, 05, 01, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 05, 01, 8, 0, 0, DateTimeKind.Utc)
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        var repository = new PendingEventRepository(_contextFactory);
+
+        await repository.DeleteByPendingEventIdAsync("pending_draft_del_1");
+
+        var stored = await repository.GetByPendingEventIdAsync("pending_draft_del_1");
+        stored.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpsertAsync_WhenOperationTypeDelete_PersistsDeleteState()
+    {
+        await using (var seedContext = await _contextFactory.CreateDbContextAsync())
+        {
+            seedContext.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "evt-del-1",
+                CalendarId = "primary",
+                Summary = "Published Event",
+                StartDatetime = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 05, 01, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "azure",
+                CreatedAt = new DateTime(2026, 05, 01, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 05, 01, 8, 0, 0, DateTimeKind.Utc)
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        var repository = new PendingEventRepository(_contextFactory);
+        var deletePending = new PendingEvent
+        {
+            PendingEventId = "pending_del_evt_1",
+            GcalEventId = "evt-del-1",
+            CalendarId = "primary",
+            Summary = "Published Event",
+            StartDatetime = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc),
+            EndDatetime = new DateTime(2026, 05, 01, 10, 0, 0, DateTimeKind.Utc),
+            IsAllDay = false,
+            ColorId = "azure",
+            AppCreated = false,
+            SourceSystem = "google-overlay",
+            ReadyToPublish = false,
+            OperationType = "delete",
+            CreatedAt = new DateTime(2026, 05, 01, 8, 30, 0, DateTimeKind.Utc),
+            UpdatedAt = new DateTime(2026, 05, 01, 8, 30, 0, DateTimeKind.Utc)
+        };
+
+        await repository.UpsertAsync(deletePending);
+
+        var stored = await repository.GetByGcalEventIdAsync("evt-del-1");
+        stored.Should().NotBeNull();
+        stored!.OperationType.Should().Be("delete");
+    }
+
+    [Fact]
+    public async Task UpsertAsync_WhenOperationTypeChangedToDelete_UpdatesExistingRow()
+    {
+        await using (var seedContext = await _contextFactory.CreateDbContextAsync())
+        {
+            seedContext.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "evt-del-2",
+                CalendarId = "primary",
+                Summary = "Event with Edit",
+                StartDatetime = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 05, 01, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "azure",
+                CreatedAt = new DateTime(2026, 05, 01, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 05, 01, 8, 0, 0, DateTimeKind.Utc)
+            });
+            seedContext.PendingEvents.Add(new PendingEvent
+            {
+                PendingEventId = "pending_del_evt_2",
+                GcalEventId = "evt-del-2",
+                CalendarId = "primary",
+                Summary = "Edited title",
+                StartDatetime = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 05, 01, 10, 0, 0, DateTimeKind.Utc),
+                IsAllDay = false,
+                ColorId = "azure",
+                AppCreated = false,
+                SourceSystem = "google-overlay",
+                ReadyToPublish = false,
+                OperationType = "edit",
+                CreatedAt = new DateTime(2026, 05, 01, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 05, 01, 8, 30, 0, DateTimeKind.Utc)
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        var repository = new PendingEventRepository(_contextFactory);
+        var existing = await repository.GetByGcalEventIdAsync("evt-del-2");
+        existing!.OperationType = "delete";
+        existing.UpdatedAt = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc);
+
+        await repository.UpsertAsync(existing);
+
+        var stored = await repository.GetByGcalEventIdAsync("evt-del-2");
+        stored.Should().NotBeNull();
+        stored!.OperationType.Should().Be("delete");
+        stored.PendingEventId.Should().Be("pending_del_evt_2");
+    }
+
+    [Fact]
+    public async Task OperationType_DefaultValue_IsEdit()
+    {
+        await using (var seedContext = await _contextFactory.CreateDbContextAsync())
+        {
+            seedContext.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "evt-default-op",
+                CalendarId = "primary",
+                Summary = "Event",
+                StartDatetime = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 05, 01, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "azure",
+                CreatedAt = new DateTime(2026, 05, 01, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 05, 01, 8, 0, 0, DateTimeKind.Utc)
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        var repository = new PendingEventRepository(_contextFactory);
+        await repository.UpsertAsync(new PendingEvent
+        {
+            PendingEventId = "pending_default_op_1",
+            GcalEventId = "evt-default-op",
+            CalendarId = "primary",
+            Summary = "Draft",
+            StartDatetime = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc),
+            EndDatetime = new DateTime(2026, 05, 01, 10, 0, 0, DateTimeKind.Utc),
+            AppCreated = false,
+            ReadyToPublish = false,
+            CreatedAt = new DateTime(2026, 05, 01, 8, 30, 0, DateTimeKind.Utc),
+            UpdatedAt = new DateTime(2026, 05, 01, 8, 30, 0, DateTimeKind.Utc)
+        });
+
+        var stored = await repository.GetByGcalEventIdAsync("evt-default-op");
+        stored.Should().NotBeNull();
+        stored!.OperationType.Should().Be("edit");
+    }
+
+    [Fact]
+    public async Task DeletedEventTable_CanInsertAndQuery()
+    {
+        await using var seedContext = await _contextFactory.CreateDbContextAsync();
+        var deletedAt = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc);
+        seedContext.DeletedEvents.Add(new GoogleCalendarManagement.Data.Entities.DeletedEvent
+        {
+            GcalEventId = "gcal-deleted-1",
+            CalendarId = "primary",
+            Summary = "Deleted Event",
+            DeletedAt = deletedAt,
+            DeletionSource = "user"
+        });
+        await seedContext.SaveChangesAsync();
+
+        var stored = await seedContext.DeletedEvents
+            .FindAsync("gcal-deleted-1");
+        stored.Should().NotBeNull();
+        stored!.DeletionSource.Should().Be("user");
+    }
+
+    [Fact]
+    public async Task RecurringEventSeriesTable_CanInsertAndQuery()
+    {
+        await using var seedContext = await _contextFactory.CreateDbContextAsync();
+        var createdAt = new DateTime(2026, 05, 01, 9, 0, 0, DateTimeKind.Utc);
+        seedContext.RecurringEventSeries.Add(new GoogleCalendarManagement.Data.Entities.RecurringEventSeries
+        {
+            SeriesId = "series-1",
+            CalendarId = "primary",
+            Recurrence = "RRULE:FREQ=WEEKLY;BYDAY=MO",
+            CreatedAt = createdAt,
+            UpdatedAt = createdAt
+        });
+        await seedContext.SaveChangesAsync();
+
+        var stored = await seedContext.RecurringEventSeries.FindAsync("series-1");
+        stored.Should().NotBeNull();
+        stored!.Recurrence.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=MO");
     }
 
     public void Dispose()

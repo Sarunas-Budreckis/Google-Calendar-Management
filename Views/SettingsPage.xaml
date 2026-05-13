@@ -51,6 +51,48 @@
                         </StackPanel>
                     </StackPanel>
                 </Border>
+
+                <Border
+                    Padding="24"
+                    CornerRadius="{StaticResource AppCornerRadiusLarge}"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="16">
+                        <TextBlock
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="Data Sources" />
+
+                        <TextBlock
+                            Text="Configure a Toggl Track API token to import sleep entries into the local data source cache."
+                            TextWrapping="WrapWholeWords" />
+
+                        <PasswordBox
+                            x:Name="TogglApiTokenBox"
+                            Header="Toggl API token"
+                            Password="{x:Bind ViewModel.TogglApiToken, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            PlaceholderText="Paste Toggl Track API token" />
+
+                        <StackPanel
+                            Orientation="Horizontal"
+                            Spacing="12">
+                            <Button
+                                Content="Save token"
+                                Click="SaveTogglTokenButton_Click" />
+                            <Button
+                                Content="Test connection"
+                                Click="TestTogglConnectionButton_Click"
+                                IsEnabled="{x:Bind ViewModel.CanTestTogglConnection, Mode=OneWay}" />
+                            <ProgressRing
+                                Width="24"
+                                Height="24"
+                                IsActive="{x:Bind ViewModel.IsTestingTogglConnection, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.TogglConnectionProgressVisibility, Mode=OneWay}" />
+                        </StackPanel>
+
+                        <TextBlock
+                            Text="{x:Bind ViewModel.TogglConnectionTestResult, Mode=OneWay}"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
     </Grid>

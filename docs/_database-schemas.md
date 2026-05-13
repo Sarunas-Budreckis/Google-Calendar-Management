@@ -70,7 +70,7 @@ CREATE TABLE date_state (
     -- Other states
     named BOOLEAN DEFAULT FALSE,  -- Has all-day name event
     named_event_gcal_id TEXT,  -- Reference to all-day name event
-    complete_walkthrough_approval BOOLEAN DEFAULT FALSE,
+    approved BOOLEAN DEFAULT FALSE,
     part_of_tracked_gap BOOLEAN DEFAULT FALSE,
 
     -- Timestamps (separate for each data source)
@@ -79,7 +79,7 @@ CREATE TABLE date_state (
     youtube_data_published_at DATETIME,
     toggl_data_published_at DATETIME,
     named_at DATETIME,
-    complete_walkthrough_approval_at DATETIME,
+    approved_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
@@ -91,11 +91,11 @@ CREATE TABLE date_state (
 
 **Key Fields:**
 - `*_published` - Only set TRUE when data is actually published to Google Calendar
-- `complete_walkthrough_approval` - Final approval state for the date
+- `approved` - Final approval state for the date
 - `part_of_tracked_gap` - Explicitly marked as part of a gap (to be filled later)
 
 **Contiguity Rule:**
-Starting from `contiguity_start_date`, every date must have `complete_walkthrough_approval = TRUE` OR `part_of_tracked_gap = TRUE` to maintain contiguity.
+Starting from `contiguity_start_date`, every date must have `approved = TRUE` OR `part_of_tracked_gap = TRUE` to maintain contiguity.
 
 ---
 

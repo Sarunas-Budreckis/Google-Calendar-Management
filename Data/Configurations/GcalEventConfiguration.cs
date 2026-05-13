@@ -37,6 +37,10 @@ public class GcalEventConfiguration : IEntityTypeConfiguration<GcalEvent>
         builder.HasIndex(e => e.RecurringEventId).HasDatabaseName("idx_gcal_recurring");
         builder.HasIndex(e => e.SourceSystem).HasDatabaseName("idx_gcal_source");
         builder.HasIndex(e => e.AppCreated).HasDatabaseName("idx_gcal_app_created");
+        builder.HasIndex(e => new { e.StartDatetime, e.SourceSystem })
+            .IsUnique()
+            .HasFilter("source_system = 'day_name' AND is_deleted = 0")
+            .HasDatabaseName("idx_gcal_event_day_name_unique");
 
         builder.HasMany(e => e.Versions)
                .WithOne(v => v.GcalEvent)

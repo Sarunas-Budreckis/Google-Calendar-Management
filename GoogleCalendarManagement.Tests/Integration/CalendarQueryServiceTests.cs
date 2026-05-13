@@ -174,6 +174,58 @@ public sealed class CalendarQueryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetEventsForRangeAsync_UsesRescheduledPendingOverlayRange()
+    {
+        await using (var context = await _contextFactory.CreateDbContextAsync())
+        {
+            context.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "event-rescheduled",
+                CalendarId = "primary",
+                Summary = "Original title",
+                StartDatetime = new DateTime(2026, 01, 15, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 15, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "azure",
+                CreatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc)
+            });
+            context.PendingEvents.Add(new PendingEvent
+            {
+                PendingEventId = "pending_rescheduled_1",
+                GcalEventId = "event-rescheduled",
+                CalendarId = "primary",
+                Summary = "Original title",
+                StartDatetime = new DateTime(2026, 01, 16, 11, 15, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 16, 12, 15, 0, DateTimeKind.Utc),
+                IsAllDay = false,
+                ColorId = "azure",
+                AppCreated = false,
+                SourceSystem = "google-overlay",
+                ReadyToPublish = false,
+                CreatedAt = new DateTime(2026, 01, 15, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
+
+        var originalDayEvents = await service.GetEventsForRangeAsync(
+            new DateOnly(2026, 01, 15),
+            new DateOnly(2026, 01, 15));
+        var rescheduledDayEvents = await service.GetEventsForRangeAsync(
+            new DateOnly(2026, 01, 16),
+            new DateOnly(2026, 01, 16));
+
+        originalDayEvents.Should().BeEmpty();
+        rescheduledDayEvents.Should().ContainSingle();
+        rescheduledDayEvents[0].EventId.Should().Be("event-rescheduled");
+        rescheduledDayEvents[0].IsPending.Should().BeTrue();
+        rescheduledDayEvents[0].Opacity.Should().Be(0.6);
+        rescheduledDayEvents[0].StartUtc.Should().Be(new DateTime(2026, 01, 16, 11, 15, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
     public async Task GetEventsForRangeAsync_IncludesStandalonePendingDraftsAlongsideSyncedEvents()
     {
         await using (var context = await _contextFactory.CreateDbContextAsync())
@@ -220,6 +272,102 @@ public sealed class CalendarQueryServiceTests : IDisposable
         events[1].IsPending.Should().BeTrue();
         events[1].StatusLabel.Should().Be("Not yet published to Google Calendar");
         events[1].Opacity.Should().Be(0.6);
+    }
+
+    [Fact]
+    public async Task GetEventsForRangeAsync_PendingDeleteEventRemainsVisibleWithDeleteFlag()
+    {
+        await using (var context = await _contextFactory.CreateDbContextAsync())
+        {
+            context.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "event-pending-delete",
+                CalendarId = "primary",
+                Summary = "Event to Delete",
+                StartDatetime = new DateTime(2026, 01, 15, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 15, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "azure",
+                CreatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc)
+            });
+            context.PendingEvents.Add(new PendingEvent
+            {
+                PendingEventId = "pending_del_1",
+                GcalEventId = "event-pending-delete",
+                CalendarId = "primary",
+                Summary = "Event to Delete",
+                StartDatetime = new DateTime(2026, 01, 15, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 15, 10, 0, 0, DateTimeKind.Utc),
+                IsAllDay = false,
+                ColorId = "azure",
+                AppCreated = false,
+                SourceSystem = "google-overlay",
+                ReadyToPublish = false,
+                OperationType = "delete",
+                CreatedAt = new DateTime(2026, 01, 15, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
+
+        var events = await service.GetEventsForRangeAsync(
+            new DateOnly(2026, 01, 15),
+            new DateOnly(2026, 01, 15));
+
+        events.Should().ContainSingle();
+        events[0].IsPending.Should().BeTrue();
+        events[0].IsPendingDelete.Should().BeTrue();
+        events[0].Opacity.Should().Be(0.6);
+        events[0].StatusLabel.Should().Contain("Pending delete");
+    }
+
+    [Fact]
+    public async Task GetEventsForRangeAsync_PendingEditNotFlaggedAsPendingDelete()
+    {
+        await using (var context = await _contextFactory.CreateDbContextAsync())
+        {
+            context.GcalEvents.Add(new GcalEvent
+            {
+                GcalEventId = "event-pending-edit",
+                CalendarId = "primary",
+                Summary = "Original Title",
+                StartDatetime = new DateTime(2026, 01, 15, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 15, 10, 0, 0, DateTimeKind.Utc),
+                ColorId = "azure",
+                CreatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 0, 0, DateTimeKind.Utc)
+            });
+            context.PendingEvents.Add(new PendingEvent
+            {
+                PendingEventId = "pending_edit_q",
+                GcalEventId = "event-pending-edit",
+                CalendarId = "primary",
+                Summary = "Edited Title",
+                StartDatetime = new DateTime(2026, 01, 15, 9, 0, 0, DateTimeKind.Utc),
+                EndDatetime = new DateTime(2026, 01, 15, 10, 0, 0, DateTimeKind.Utc),
+                IsAllDay = false,
+                ColorId = "azure",
+                AppCreated = false,
+                SourceSystem = "google-overlay",
+                ReadyToPublish = false,
+                OperationType = "edit",
+                CreatedAt = new DateTime(2026, 01, 15, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
+
+        var events = await service.GetEventsForRangeAsync(
+            new DateOnly(2026, 01, 15),
+            new DateOnly(2026, 01, 15));
+
+        events.Should().ContainSingle();
+        events[0].IsPending.Should().BeTrue();
+        events[0].IsPendingDelete.Should().BeFalse();
     }
 
     public void Dispose()

@@ -8,6 +8,8 @@ public sealed record WeekTimedEventLayoutItem(
     string TooltipText,
     string ColorHex,
     CalendarEventSourceKind SourceKind,
+    DateTime StartLocal,
+    DateTime EndLocal,
     int DayOffset,
     int GridRow,
     int GridRowSpan,
@@ -19,4 +21,5 @@ public sealed record WeekTimedEventLayoutItem(
     bool IsCompact,
     bool UseOverlapOutline,
     int MaxTitleLines,
-    double Opacity = 1.0);
+    double Opacity = 1.0,
+    bool IsPendingDelete = false);

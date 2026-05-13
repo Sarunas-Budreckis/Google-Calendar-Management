@@ -29,6 +29,24 @@ public sealed class PendingEventRepository : IPendingEventRepository
             .SingleOrDefaultAsync(pendingEvent => pendingEvent.GcalEventId == gcalEventId, ct);
     }
 
+    public async Task<PendingEvent?> GetDayNameEventAsync(DateOnly date, CancellationToken ct = default)
+    {
+        var startUtc = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var endExclusiveUtc = date.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+        await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
+        return await context.PendingEvents
+            .AsNoTracking()
+            .Where(pendingEvent =>
+                pendingEvent.IsAllDay == true &&
+                pendingEvent.SourceSystem == "day_name" &&
+                pendingEvent.StartDatetime.HasValue &&
+                pendingEvent.StartDatetime.Value >= startUtc &&
+                pendingEvent.StartDatetime.Value < endExclusiveUtc)
+            .OrderByDescending(pendingEvent => pendingEvent.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task UpsertAsync(PendingEvent pendingEvent, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(pendingEvent);
@@ -75,6 +93,7 @@ public sealed class PendingEventRepository : IPendingEventRepository
             existing.ReadyToPublish = pendingEvent.ReadyToPublish;
             existing.PublishAttemptedAt = pendingEvent.PublishAttemptedAt;
             existing.PublishError = pendingEvent.PublishError;
+            existing.OperationType = pendingEvent.OperationType;
             existing.CreatedAt = pendingEvent.CreatedAt;
             existing.UpdatedAt = pendingEvent.UpdatedAt;
         }

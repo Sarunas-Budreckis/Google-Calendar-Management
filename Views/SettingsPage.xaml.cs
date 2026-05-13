@@ -18,4 +18,14 @@ public sealed partial class SettingsPage : Page
     {
         await ViewModel.InitializeAsync();
     }
+
+    private void SaveTogglTokenButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        _ = ViewModel.SaveTogglApiTokenCommand.ExecuteAsync(TogglApiTokenBox.Password);
+    }
+
+    private void TestTogglConnectionButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        _ = ViewModel.TestTogglConnectionCommand.ExecuteAsync(TogglApiTokenBox.Password);
+    }
 }

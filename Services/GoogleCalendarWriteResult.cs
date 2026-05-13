@@ -9,6 +9,17 @@ public enum GoogleCalendarWriteFailureKind
     PreconditionFailed = 4
 }
 
+public sealed record GoogleCalendarDeleteResult(
+    bool Success,
+    string? ErrorMessage = null,
+    string? ErrorDetails = null)
+{
+    public static GoogleCalendarDeleteResult Ok() => new(true);
+
+    public static GoogleCalendarDeleteResult Failure(string message, string? errorDetails = null)
+        => new(false, message, errorDetails);
+}
+
 public sealed record GoogleCalendarWriteResult(
     bool Success,
     GcalEventDto? Event,

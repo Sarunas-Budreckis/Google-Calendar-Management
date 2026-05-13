@@ -25,7 +25,7 @@ public sealed class PendingEventDraftService : IPendingEventDraftService
         {
             PendingEventId = $"pending_{Guid.NewGuid():N}",
             CalendarId = "primary",
-            Summary = string.IsNullOrWhiteSpace(summary) ? "New event" : summary.Trim(),
+            Summary = string.IsNullOrWhiteSpace(summary) ? null : summary.Trim(),
             StartDatetime = normalizedStartLocal.ToUniversalTime(),
             EndDatetime = normalizedEndLocal.ToUniversalTime(),
             IsAllDay = false,

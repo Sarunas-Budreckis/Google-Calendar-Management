@@ -365,19 +365,19 @@ Result: 14:30-15:15 (45 minutes rounded)
 **States Tracked:**
 1. Data source publication (`call_log_data_published`, `sleep_data_published`, etc.)
 2. Named status (`named`)
-3. Walkthrough approval (`complete_walkthrough_approval`)
+3. Approval (`approved`)
 4. Gap status (`part_of_tracked_gap`)
 
 **Why Multiple Dimensions:**
 - User may want to track progress incrementally
 - "Did I import call logs for this week?" → Check specific state
-- "Is this date completely done?" → Check walkthrough approval
+- "Is this date completely done?" → Check approved
 - "Which data sources am I missing?" → Compare all publication states
 
 **Contiguity Rule:**
 ```
 Date is "verified" if:
-    complete_walkthrough_approval == TRUE
+    approved == TRUE
     OR part_of_tracked_gap == TRUE
 ```
 

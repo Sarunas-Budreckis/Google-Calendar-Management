@@ -1,0 +1,91 @@
+# Story 7.13: Voice Memos
+
+**Epic:** 7 — Additional Data Source Integrations
+**Status:** Draft
+**Dependencies:** Story 7.1 (data_source registry), Story 5.5 (left panel day mode)
+
+---
+
+## User Story
+
+As a **user**,
+I want **to view my voice memos in the left panel and play them from the drilldown**,
+so that **I can review audio recordings as part of my day's context**.
+
+---
+
+## Background
+
+The user has a folder of `.m4a` audio recordings (iOS Voice Memos synced to Windows). Each file's recording timestamp and duration are extracted from audio metadata. The folder path is configurable in app settings. No candidate events are generated — this source is for reference and playback only.
+
+---
+
+## Acceptance Criteria
+
+**Configuration:**
+
+**Given** I navigate to Settings > Data Sources > Voice Memos
+**Then** I see a "Voice Memos Folder" path field with a "Browse" button
+
+**And** I can select a folder via folder picker dialog
+
+**And** the path is stored in the app's `AppMetadata` table (key: `"VoiceMemosFolder"`)
+
+**Schema:**
+
+`voice_memo`:
+- `id` (integer, PK)
+- `file_name` (text) — just the filename, not the full path (derived from configured folder + filename at access time)
+- `recorded_at` (datetime with timezone offset) — from audio file metadata (`TAG:date` or `creation_time` in ffprobe/MediaInfo; must include timezone)
+- `duration_seconds` (integer) — total recording duration from audio metadata
+- `description` (text, nullable) — user-editable label; initially empty
+- `scanned_at` (datetime)
+
+**Scan Flow:**
+
+**Given** a folder is configured
+**When** I click "Scan Memos" or the app scans on startup
+**Then** all `.m4a` files in the configured folder are scanned (non-recursive, flat folder only unless changed in future)
+
+**And** for each file:
+- `recorded_at` is extracted from audio metadata (prefer `com.apple.quicktime.creationdate` tag which includes timezone; fall back to file creation time if absent)
+- `duration_seconds` is extracted from audio metadata
+- `file_name` is stored (filename only, not full path)
+
+**And** duplicate detection: files with the same `file_name` that are already in `voice_memo` are updated (not re-inserted) if their metadata has changed; new files are inserted
+
+**And** the scan is logged to `data_source_import_log`
+
+**Compact Card:**
+
+**Given** a day is selected with voice memos
+**When** the Voice Memos card is shown
+**Then** the card displays:
+- Number of recordings for the day
+- Total recording duration (formatted as "X min Y sec")
+
+**Given** no memos for the day: "No recordings"
+
+**Drilldown View:**
+
+**Given** I expand the Voice Memos source for a selected day
+**Then** I see a list of recordings sorted by `recorded_at`:
+- Time, duration, description (if set)
+
+**And** each memo has a **Play** button that plays the `.m4a` file using the system's default audio player (`Process.Start` with the full reconstructed path: configured folder + `file_name`)
+
+**And** each memo has an editable **Description** field — clicking it opens an inline text input; changes are saved to `voice_memo.description`
+
+**And** no "Create Candidate Events" button — this source is reference and playback only
+
+---
+
+## Technical Notes
+
+- Audio metadata extraction: use `TagLib#` (NuGet: `TagLibSharp`) which supports `.m4a` / Apple MPEG-4 tags including `com.apple.quicktime.creationdate`
+- `com.apple.quicktime.creationdate` is an ISO 8601 string with timezone offset (e.g., `2025-11-15T08:32:10-0600`) — parse with `DateTimeOffset.Parse` and store offset-aware
+- If `TagLibSharp` cannot find the tag, fall back to `File.GetCreationTime` (local time, mark timezone as unknown with a note)
+- File path reconstruction: `Path.Combine(configuredFolder, voice_memo.file_name)` — if the file no longer exists at this path, the Play button shows "File not found" instead of crashing
+- `.m4a` playback via `Process.Start`: pass the full path; Windows will use the associated media player (Windows Media Player, VLC, etc.)
+- Duration extraction: `TagLib.File.Create(path).Properties.Duration.TotalSeconds`
+- Non-recursive scan for now; note as a future option

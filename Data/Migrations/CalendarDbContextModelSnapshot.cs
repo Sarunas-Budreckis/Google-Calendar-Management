@@ -145,6 +145,88 @@ namespace GoogleCalendarManagement.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.DataSource", b =>
+                {
+                    b.Property<int>("DataSourceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("data_source_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("SourceKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_key");
+
+                    b.Property<bool>("SupportsNoDataHint")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false)
+                        .HasColumnName("supports_no_data_hint");
+
+                    b.HasKey("DataSourceId");
+
+                    b.HasIndex("SourceKey")
+                        .IsUnique()
+                        .HasDatabaseName("idx_data_source_key");
+
+                    b.ToTable("data_source", (string)null);
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.DataSourceImportLog", b =>
+                {
+                    b.Property<int>("ImportLogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("import_log_id");
+
+                    b.Property<DateOnly>("CoveredEndDate")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("covered_end_date");
+
+                    b.Property<DateOnly>("CoveredStartDate")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("covered_start_date");
+
+                    b.Property<int>("DataSourceId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("data_source_id");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error_message");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("imported_at");
+
+                    b.Property<int?>("RecordsFetched")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("records_fetched");
+
+                    b.Property<bool>("Success")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("success");
+
+                    b.HasKey("ImportLogId");
+
+                    b.HasIndex("DataSourceId");
+
+                    b.ToTable("data_source_import_log", (string)null);
+                });
+
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.DataSourceRefresh", b =>
                 {
                     b.Property<int>("RefreshId")
@@ -194,6 +276,130 @@ namespace GoogleCalendarManagement.Data.Migrations
                         .HasDatabaseName("idx_refresh_date");
 
                     b.ToTable("data_source_refresh", (string)null);
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.DateSourceIntegration", b =>
+                {
+                    b.Property<int>("IntegrationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("integration_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DataSourceId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("data_source_id");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("date");
+
+                    b.Property<bool>("Integrated")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false)
+                        .HasColumnName("integrated");
+
+                    b.Property<DateTime?>("IntegratedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("integrated_at");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("IntegrationId");
+
+                    b.HasIndex("DataSourceId");
+
+                    b.HasIndex("Date", "DataSourceId")
+                        .IsUnique()
+                        .HasDatabaseName("idx_date_source_integration_date_source");
+
+                    b.ToTable("date_source_integration", (string)null);
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.DeletedEvent", b =>
+                {
+                    b.Property<string>("GcalEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("gcal_event_id");
+
+                    b.Property<bool?>("AppCreated")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("app_created");
+
+                    b.Property<string>("CalendarId")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("calendar_id");
+
+                    b.Property<string>("ColorId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("color_id");
+
+                    b.Property<DateTime>("DeletedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletionSource")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("deletion_source");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime?>("EndDatetime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("end_datetime");
+
+                    b.Property<string>("GcalEtag")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("gcal_etag");
+
+                    b.Property<bool?>("IsAllDay")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_all_day");
+
+                    b.Property<bool?>("IsRecurringInstance")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_recurring_instance");
+
+                    b.Property<DateTime?>("OriginalCreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("original_created_at");
+
+                    b.Property<DateTime?>("OriginalUpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("original_updated_at");
+
+                    b.Property<string>("RecurringEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recurring_event_id");
+
+                    b.Property<string>("SourceSystem")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_system");
+
+                    b.Property<DateTime?>("StartDatetime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("start_datetime");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("summary");
+
+                    b.HasKey("GcalEventId");
+
+                    b.HasIndex("StartDatetime")
+                        .HasDatabaseName("idx_deleted_event_date");
+
+                    b.ToTable("deleted_event", (string)null);
                 });
 
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.GcalEvent", b =>
@@ -304,6 +510,11 @@ namespace GoogleCalendarManagement.Data.Migrations
 
                     b.HasIndex("StartDatetime", "EndDatetime")
                         .HasDatabaseName("idx_gcal_event_date");
+
+                    b.HasIndex("StartDatetime", "SourceSystem")
+                        .IsUnique()
+                        .HasDatabaseName("idx_gcal_event_day_name_unique")
+                        .HasFilter("source_system = 'day_name' AND is_deleted = 0");
 
                     b.ToTable("gcal_event", (string)null);
                 });
@@ -421,6 +632,13 @@ namespace GoogleCalendarManagement.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("is_all_day");
 
+                    b.Property<string>("OperationType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("edit")
+                        .HasColumnName("operation_type");
+
                     b.Property<DateTime?>("PublishAttemptedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("publish_attempted_at");
@@ -458,7 +676,77 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.HasIndex("StartDatetime", "EndDatetime")
                         .HasDatabaseName("idx_pending_event_date");
 
+                    b.HasIndex("StartDatetime", "SourceSystem")
+                        .IsUnique()
+                        .HasDatabaseName("idx_pending_event_day_name_unique")
+                        .HasFilter("source_system = 'day_name'");
+
                     b.ToTable("pending_event", (string)null);
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.RecurringEventSeries", b =>
+                {
+                    b.Property<string>("SeriesId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("series_id");
+
+                    b.Property<string>("CalendarId")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("calendar_id");
+
+                    b.Property<string>("ColorId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("color_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<string>("GcalEtag")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("gcal_etag");
+
+                    b.Property<DateTime?>("GcalUpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("gcal_updated_at");
+
+                    b.Property<bool?>("IsAllDay")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_all_day");
+
+                    b.Property<DateTime?>("LastSyncedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_synced_at");
+
+                    b.Property<string>("Recurrence")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recurrence");
+
+                    b.Property<DateTime?>("SeriesEndDatetime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("series_end_datetime");
+
+                    b.Property<DateTime?>("SeriesStartDatetime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("series_start_datetime");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("summary");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("SeriesId");
+
+                    b.ToTable("recurring_event_series", (string)null);
                 });
 
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.SaveState", b =>
@@ -517,6 +805,97 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.ToTable("system_state", (string)null);
                 });
 
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.TogglEntry", b =>
+                {
+                    b.Property<long>("TogglId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("toggl_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
+
+                    b.Property<int?>("DurationSeconds")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("duration_seconds");
+
+                    b.Property<DateTime?>("EndTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("end_time");
+
+                    b.Property<DateTime?>("LastSyncedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_synced_at");
+
+                    b.Property<string>("ProjectName")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_name");
+
+                    b.Property<string>("PublishedGcalEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("published_gcal_event_id");
+
+                    b.Property<bool>("PublishedToGcal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false)
+                        .HasColumnName("published_to_gcal");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("start_time");
+
+                    b.Property<string>("Tags")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tags");
+
+                    b.Property<bool>("VisibleAsEvent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true)
+                        .HasColumnName("visible_as_event");
+
+                    b.HasKey("TogglId");
+
+                    b.HasIndex("Description")
+                        .HasDatabaseName("idx_toggl_description");
+
+                    b.HasIndex("PublishedGcalEventId");
+
+                    b.HasIndex("StartTime", "EndTime")
+                        .HasDatabaseName("idx_toggl_date");
+
+                    b.ToTable("toggl_data", (string)null);
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.DataSourceImportLog", b =>
+                {
+                    b.HasOne("GoogleCalendarManagement.Data.Entities.DataSource", "DataSource")
+                        .WithMany()
+                        .HasForeignKey("DataSourceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DataSource");
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.DateSourceIntegration", b =>
+                {
+                    b.HasOne("GoogleCalendarManagement.Data.Entities.DataSource", "DataSource")
+                        .WithMany()
+                        .HasForeignKey("DataSourceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DataSource");
+                });
+
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.GcalEventVersion", b =>
                 {
                     b.HasOne("GoogleCalendarManagement.Data.Entities.GcalEvent", "GcalEvent")
@@ -536,6 +915,16 @@ namespace GoogleCalendarManagement.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("GcalEvent");
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.TogglEntry", b =>
+                {
+                    b.HasOne("GoogleCalendarManagement.Data.Entities.GcalEvent", "PublishedGcalEvent")
+                        .WithMany()
+                        .HasForeignKey("PublishedGcalEventId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("PublishedGcalEvent");
                 });
 
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.GcalEvent", b =>

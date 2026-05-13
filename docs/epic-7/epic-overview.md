@@ -1,0 +1,146 @@
+# Epic 7: Additional Data Source Integrations
+
+**Author:** Sarunas Budreckis
+**Date:** 2026-05-13
+**Status:** Ready for Story Creation
+**Tier:** 3 (data source layer)
+
+---
+
+## Goal
+
+Expand the data source library established in Epic 5 by integrating twelve additional data sources into the left panel system. Each source follows the established pattern: import → store → compact card → drilldown → optional candidate event generation. Epic 7 also enhances the existing Toggl data schema to support typed entries and event linkage.
+
+---
+
+## Background
+
+Epic 5 built the infrastructure (registry, integration tracking, drilldown contract) and validated it with Toggl Sleep. Epic 7 fills in the full source library the user needs for the backfilling ritual: physical activity, communication, location, work, entertainment, gaming, creative work, audio recordings, and browsing. Two additional sources (Chrome Search History, iOS Screen Time) are included as investigatory stories.
+
+This epic does **not** depend on Epic 6 (Batch Day Management) — sources can be developed and used independently before batch operations are available.
+
+---
+
+## Shared Patterns
+
+All data sources in this epic follow the Epic 5 contract:
+
+- Registered in `data_source` table on first run / migration
+- Integration checkbox in left panel day mode (per-source per-day)
+- Compact card in source list (source-defined summary)
+- Drilldown view (source-defined detail, receives selected date)
+- Optional "Create Candidate Event" button using defined color + algorithm
+- Import run logged to `data_source_import_log` (source, covered dates, record count, timestamp)
+
+### Vertical Dot Drilldown Pattern
+
+Several sources use "vertical dots" — a time-axis visualization where each data point is a dot placed at its timestamp on a vertical 24-hour timeline. Hovering/clicking a dot shows detail. This is a shared UI component to be designed once and reused.
+
+### Event Linkage
+
+When a candidate event is accepted (pushed to GCal), source rows that contributed to it are back-linked via two columns added to each source table:
+- `linked_event_id` (string, nullable) — the `gcal_event.google_event_id` after push
+- `linked_event_type` (string, nullable) — discriminator: `"gcal_event"` (post-push)
+
+This is set at the time the pending event is pushed. Before push, the link is null.
+
+---
+
+## Data Model Overview
+
+### Toggl Schema Enhancements (Story 7.1)
+
+Additions to the existing `toggl_data` table:
+- `toggl_data_type` (string, nullable) — enum: `toggl_sleep`, `toggl_transit`, `toggl_phone`, null (unclassified)
+- `linked_event_id` (string, nullable)
+- `linked_event_type` (string, nullable)
+
+New table `toggl_sleep_quality`:
+- `date` (date, primary key)
+- `quality` (integer, nullable, 0–10)
+- `updated_at` (datetime)
+
+### New Source Tables
+
+| Table | Source | Notes |
+|-------|--------|-------|
+| `call_log_entry` | iOS Call Log | Full iMazing CSV rows |
+| `call_log_import` | iOS Call Log | Import run metadata |
+| `maps_timeline_raw` | Google Maps | Full JSON blob per import |
+| `outlook_event` | Outlook | Synced events; deletable from GCal view |
+| `outlook_deleted_event` | Outlook | Events flagged to suppress from calendar |
+| `youtube_watch_entry` | YouTube | Per-video: timestamp, title, channel, duration |
+| `youtube_import` | YouTube | Import file metadata |
+| `spotify_stream` | stats.fm | Per-track: timestamp, track, artist, duration |
+| `civ5_session_point` | Civ 5 | File modified time + filename + mode |
+| `comfyui_scan_point` | ComfyUI | File created/modified timestamps only |
+| `comfyui_folder` | ComfyUI | Configurable folder paths |
+| `voice_memo` | Voice Memos | Derived: filename, recorded_at (with tz), duration, description |
+| `chrome_search_entry` | Chrome History | Timestamp + query + URL |
+| `chrome_history_import` | Chrome History | Import run metadata |
+
+---
+
+## Story Candidates
+
+| Story | Title | Color | Algorithm |
+|-------|-------|-------|-----------|
+| 7.1 | Toggl Data Schema Enhancement | — | Schema only |
+| 7.2 | Toggl Sleep Quality UI | — | UI entry → rename sleep event |
+| 7.3 | Toggl Driving (Transit) | Lavender | 8/15 rule |
+| 7.4 | Toggl Phone | Yellow | Sliding window + 8/15 |
+| 7.5 | Toggl Phone Date-Range Rules | — | Rule management UI |
+| 7.6 | iOS Call Log Import | Azure | ≥10 min filter |
+| 7.7 | Google Maps Timeline Import | — | Manual + viewer integration |
+| 7.8 | Outlook Work Calendar Sync | Purple | Direct sync |
+| 7.9 | YouTube Watch History Import | Yellow | Session coalescing + 8/15 |
+| 7.10 | Spotify / stats.fm Integration | — | Vertical dots only |
+| 7.11 | Civilization 5 Saves | Yellow | 8/15 + coalescing |
+| 7.12 | ComfyUI Tracking | Navy | Coalescing |
+| 7.13 | Voice Memos | — | No candidate events |
+| 7.14 | Chrome Search History | — | Investigatory import |
+| 7.15 | iOS Screen Time Investigation | — | Investigation only |
+
+---
+
+## Dependencies
+
+- **Epic 5 complete** — `data_source` registry, `date_source_integration`, `data_source_import_log`, left panel drilldown contract, three-panel layout
+- Epic 6 not required — stories in Epic 7 are independent of batch operations
+- Toggl API credentials (existing from Epic 5)
+- iMazing installed on user's machine for call log export
+- Google Takeout access (manual download for YouTube)
+- stats.fm account with Spotify Extended History imported; personal API token
+- Outlook account accessible (Mayo Clinic work account — permissions TBD)
+- Civ 5 saves at known paths (hardcoded in story 7.11)
+- ComfyUI output folders configured in DB (story 7.12)
+- Voice memos folder configured in app settings (story 7.13)
+
+---
+
+## Out of Scope
+
+- Batch operations across sources (Epic 6)
+- Automated Google Takeout export (future — story 7.9 notes this)
+- Official stats.fm OAuth (not publicly supported; future if they publish API)
+- iOS Screen Time actual implementation (Epic 7 is investigation only)
+- Chrome Search History candidate events or filtering (follow-up epic)
+- Source-level configuration UI (future)
+- Auto-accept / trusted source bulk actions (future)
+- Rollback / version history for source data (future)
+
+---
+
+## Success Criteria
+
+- All 12 active data sources appear in the left panel global mode
+- Each source's compact card shows correct per-day summary
+- Drilldown views render for all sources when a day is selected
+- Candidate event buttons generate correctly colored `pending_event` records using the correct algorithm
+- Import runs are logged to `data_source_import_log`
+- Integration checkboxes persist per source per day
+- `linked_event_id` is populated on source rows when their derived event is pushed to GCal
+- Toggl Sleep quality entry renames the sleep event title for that day
+- ComfyUI folder scan shows a user-facing popup on access failure
+- Voice memo playback works from the drilldown view
+- iOS Screen Time investigation story produces a written findings report

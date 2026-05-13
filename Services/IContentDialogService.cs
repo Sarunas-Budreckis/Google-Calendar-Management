@@ -1,5 +1,7 @@
 namespace GoogleCalendarManagement.Services;
 
+public enum DeleteWithPendingEditChoice { Cancel, RevertChanges, DeleteEvent }
+
 public interface IContentDialogService
 {
     Task ShowErrorAsync(string title, string message);
@@ -14,4 +16,5 @@ public interface IContentDialogService
         string message,
         string primaryButtonText,
         string closeButtonText = "Cancel");
+    Task<DeleteWithPendingEditChoice> ShowDeleteWithPendingEditAsync(string eventTitle);
 }

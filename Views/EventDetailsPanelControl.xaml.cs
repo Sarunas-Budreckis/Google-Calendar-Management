@@ -38,6 +38,8 @@ public sealed partial class EventDetailsPanelControl : UserControl
     private TextBlock? _editLastSavedTextBlock;
     private Button? _editSaveButton;
     private Button? _editRevertButton;
+    private Button? _editDeleteButton;
+    private TextBlock? _pendingDeleteStatusTextBlock;
     private readonly Dictionary<string, Button> _colorOptionButtons = new(StringComparer.OrdinalIgnoreCase);
 
     public EventDetailsPanelControl(EventDetailsPanelViewModel viewModel)
@@ -99,6 +101,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
             or nameof(EventDetailsPanelViewModel.DateTimeError)
             or nameof(EventDetailsPanelViewModel.SaveStatusText)
             or nameof(EventDetailsPanelViewModel.RevertButtonVisibility)
+            or nameof(EventDetailsPanelViewModel.IsPendingDeleteEvent)
             or nameof(EventDetailsPanelViewModel.EditColorHex)
             or nameof(EventDetailsPanelViewModel.EditColorName)
             or nameof(EventDetailsPanelViewModel.EditColorId)
@@ -144,7 +147,10 @@ public sealed partial class EventDetailsPanelControl : UserControl
         }
 
         _saveStatusTextBlock = new TextBlock();
-        _editTitleTextBox = new TextBox();
+        _editTitleTextBox = new TextBox
+        {
+            PlaceholderText = "New event"
+        };
         _editTitleTextBox.TextChanged += EditTitleTextBox_TextChanged;
         _titleErrorTextBlock = CreateErrorTextBlock();
         _editSingleDatePicker = new DatePicker();
@@ -203,7 +209,33 @@ public sealed partial class EventDetailsPanelControl : UserControl
         {
             Content = "Revert"
         };
+        // Use AddHandler so the button captures PointerPressed even when the
+        // ScrollViewer or a focused TextBox has already marked the event as handled.
+        _editRevertButton.AddHandler(
+            UIElement.PointerPressedEvent,
+            new PointerEventHandler((s, _) => ((UIElement)s).Focus(FocusState.Pointer)),
+            handledEventsToo: true);
         _editRevertButton.Click += EditRevertButton_Click;
+        _editDeleteButton = new Button
+        {
+            Content = "Delete"
+        };
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var criticalBrush) &&
+            criticalBrush is Microsoft.UI.Xaml.Media.Brush dangerBrush)
+        {
+            _editDeleteButton.Foreground = dangerBrush;
+        }
+        _editDeleteButton.Click += EditDeleteButton_Click;
+        _pendingDeleteStatusTextBlock = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed
+        };
+        if (Application.Current.Resources.TryGetValue("SystemFillColorCautionBrush", out var cautionBrush) &&
+            cautionBrush is Microsoft.UI.Xaml.Media.Brush warningBrush)
+        {
+            _pendingDeleteStatusTextBlock.Foreground = warningBrush;
+        }
 
         var timeGrid = new Grid
         {
@@ -222,10 +254,9 @@ public sealed partial class EventDetailsPanelControl : UserControl
         Grid.SetColumn(endStack, 1);
         timeGrid.Children.Add(endStack);
 
-        var actionButtons = new StackPanel
+        var rightButtons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
             Spacing = 8,
             Children =
             {
@@ -233,6 +264,14 @@ public sealed partial class EventDetailsPanelControl : UserControl
                 _editSaveButton
             }
         };
+        var actionButtons = new Grid();
+        actionButtons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        actionButtons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        actionButtons.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(_editDeleteButton!, 0);
+        actionButtons.Children.Add(_editDeleteButton);
+        Grid.SetColumn(rightButtons, 2);
+        actionButtons.Children.Add(rightButtons);
 
         _editPanel = new StackPanel
         {
@@ -253,6 +292,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
                 _editColorButton,
                 CreateFieldLabelTextBlock("Source"),
                 _editSourceTextBlock,
+                _pendingDeleteStatusTextBlock,
                 CreateFieldLabelTextBlock("Last Saved Locally"),
                 _editLastSavedTextBlock,
                 actionButtons
@@ -463,7 +503,9 @@ public sealed partial class EventDetailsPanelControl : UserControl
             _editColorTextBlock is null ||
             _editSourceTextBlock is null ||
             _editLastSavedTextBlock is null ||
-            _editRevertButton is null)
+            _editRevertButton is null ||
+            _editDeleteButton is null ||
+            _pendingDeleteStatusTextBlock is null)
         {
             return;
         }
@@ -486,6 +528,15 @@ public sealed partial class EventDetailsPanelControl : UserControl
         _editSingleDatePanel.Visibility = ViewModel.UsesSingleDateEditor ? Visibility.Visible : Visibility.Collapsed;
         _editDateGrid.Visibility = ViewModel.UsesSingleDateEditor ? Visibility.Collapsed : Visibility.Visible;
         _editRevertButton.Visibility = ViewModel.RevertButtonVisibility;
+        if (ViewModel.IsPendingDeleteEvent)
+        {
+            _pendingDeleteStatusTextBlock.Text = ViewModel.SourceDisplay;
+            _pendingDeleteStatusTextBlock.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            _pendingDeleteStatusTextBlock.Visibility = Visibility.Collapsed;
+        }
         UpdateColorSwatches();
         UpdateColorPickerSelection();
         _isSyncingEditors = false;
@@ -506,7 +557,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
         var ctrlPressed = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
         if (ctrlPressed && e.Key == VirtualKey.Z && ViewModel.IsEditMode)
         {
-            ViewModel.UndoLastChange();
+            await ViewModel.UndoLastInteractiveChangeAsync();
             e.Handled = true;
         }
     }
@@ -575,6 +626,15 @@ public sealed partial class EventDetailsPanelControl : UserControl
     private async void EditRevertButton_Click(object sender, RoutedEventArgs e)
     {
         await ViewModel.RevertPendingChangesAsync();
+        // After the revert the Revert button becomes Collapsed (IsPendingEvent → false),
+        // which causes WinUI 3 to auto-move focus back to the title TextBox.
+        // Explicitly land focus on the Save button so it doesn't return to a TextBox.
+        _editSaveButton?.Focus(FocusState.Programmatic);
+    }
+
+    private async void EditDeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ViewModel.DeleteEventAsync();
     }
 
     private void ColorPickerFlyout_Opened(object? sender, object e)

@@ -1324,3 +1324,91 @@ so that **I can categorize events visually**.
 ❌ Event deletion
 ❌ Recurring event editing
 ❌ Drag-to-reschedule
+
+---
+
+## Epic 5: Data Source Left Panel & Single-Day Select
+
+**Goal:** Introduce the data source management surface — a persistent left panel showing data source status and per-day integration tracking — along with the single-day selection model that drives it. Deliver the first working data source (Toggl Track Sleep) end-to-end to validate the infrastructure.
+
+**Full scope:** See [docs/epic-5/epic-overview.md](epic-5/epic-overview.md)
+
+**Story Candidates:**
+- 5.1: Data source infrastructure (`data_source` registry, `date_source_integration` junction table, import log)
+- 5.2: Three-panel layout & left panel shell (minimizable, arrow tab)
+- 5.3: Single-day select (click day number in any view; day-view auto-select; state persistence)
+- 5.4: Left panel global mode (source list with last-covered-date and last-import timestamp)
+- 5.5: Left panel day mode (date/name header; integration checkboxes; expand/drilldown navigation)
+- 5.6: Toggl Sleep import (Toggl API; sleep entry ingestion; import log)
+- 5.7: Toggl Sleep card & drilldown (compact card; drilldown view; Create Candidate Event button)
+
+**Epic 5 Sequencing:** Depends on Epic 4 complete. Begins Tier 3 data source work.
+
+**What's NOT in Epic 5:**
+❌ Multi-day select or batch operations (Epic 6)
+❌ Left panel behavior for week/multi-day context (future)
+❌ Any data source other than Toggl Sleep
+❌ Day Approval UI (Epic 6)
+❌ Auto-accept / trusted source bulk actions (future)
+
+---
+
+## Epic 6: Batch Day Management
+
+**Goal:** Enable the user to collect a non-contiguous set of days into a persistent batch and perform bulk operations (approve, mark integration, select events), with Next/Previous navigation that drives the left panel — dramatically accelerating the backfilling ritual.
+
+**Full scope:** See [docs/epic-6/epic-overview.md](epic-6/epic-overview.md)
+
+**Story Candidates:**
+- 6.1: Batch data model & persistence (single active batch, survives reload)
+- 6.2: Batch tray UI (top panel; badge, expand, clear)
+- 6.3: Add/remove days to batch (context menu or toggle; visual marker in all views)
+- 6.4: Batch navigation (Next/Previous; position indicator; drives single-day select)
+- 6.5: Batch approve action (bulk approval with confirmation)
+- 6.6: Batch mark integration action (source picker; bulk write to `date_source_integration`)
+- 6.7: Batch select events (select all events across batch dates; feeds into multi-select)
+
+**Epic 6 Sequencing:** Depends on Epic 5 complete. Story 6.7 also depends on Story 4.6 (multi-select events).
+
+**What's NOT in Epic 6:**
+❌ Multiple simultaneous batches
+❌ Batch add to chapter (future)
+❌ Batch push to external Excel sheet (future)
+❌ Auto-build batch from tracked gap (future convenience)
+❌ Source-specific auto-accept for batch (future)
+
+---
+
+## Epic 7: Additional Data Source Integrations
+
+**Goal:** Expand the data source library with twelve additional sources (Toggl Driving, Toggl Phone, iOS Call Log, Google Maps Timeline, Outlook Calendar, YouTube, Spotify, Civilization 5, ComfyUI, Voice Memos, Chrome Search History, iOS Screen Time investigation), each integrated into the left panel system established in Epic 5.
+
+**Full scope:** See [docs/epic-7/epic-overview.md](epic-7/epic-overview.md)
+
+**Story Candidates:**
+- 7.1: Toggl data schema enhancement (`toggl_data_type`, `linked_event_id` columns; `toggl_sleep_quality` table; data_source registry seeding)
+- 7.2: Toggl Sleep quality UI (0–10 rating entry; renames sleep event title)
+- 7.3: Toggl Driving — Transit project entries; 8/15 rule; Lavender candidate events
+- 7.4: Toggl Phone — sliding window coalescing; vertical dot drilldown; Yellow candidate events
+- 7.5: Toggl Phone date-range rules — configurable per-date-range matching rules; re-classify action
+- 7.6: iOS Call Log import — iMazing CSV; full copy; Azure candidate events (≥10 min calls)
+- 7.7: Google Maps Timeline import — Takeout JSON; full copy; viewer integration
+- 7.8: Outlook Work Calendar sync — Graph API investigation + MVP; Purple events; suppress-from-calendar
+- 7.9: YouTube Watch History import — manual Takeout JSON; session coalescing; Yellow candidate events
+- 7.10: Spotify / stats.fm — personal API token; vertical dot timeline; display-only
+- 7.11: Civilization 5 saves — file timestamp scan; coalescing; Yellow candidate events
+- 7.12: ComfyUI tracking — configurable folder list; timestamp-only scan; Navy candidate events
+- 7.13: Voice Memos — .m4a metadata; playback from drilldown; no candidate events
+- 7.14: Chrome Search History — local DB or Takeout JSON; full copy; vertical dot drilldown
+- 7.15: iOS Screen Time investigation — findings document only, no implementation
+
+**Epic 7 Sequencing:** Depends on Epic 5 complete. Does NOT require Epic 6. Individual stories are largely independent of each other (7.1 is a prerequisite for 7.2–7.4).
+
+**What's NOT in Epic 7:**
+❌ Automated Google Takeout export (future — noted in 7.9)
+❌ Google Maps Timeline home filtering and WebView2 embedding (future)
+❌ stats.fm OAuth (not publicly available; future)
+❌ Chrome Search History candidate events / session filtering (future epic)
+❌ iOS Screen Time implementation (7.15 is investigation only)
+❌ Batch operations across sources (Epic 6)
+❌ Source configuration UI (future)

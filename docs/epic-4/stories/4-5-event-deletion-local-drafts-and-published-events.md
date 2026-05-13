@@ -1,6 +1,6 @@
 # Story 4.5: Event Deletion (Local Drafts and Published Events)
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -32,80 +32,80 @@ so that **I can remove unwanted events from the app without losing control over 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Verify prerequisites and source-of-truth alignment before writing code** (AC: 4.5.1, 4.5.2, 4.5.3, 4.5.8, 4.5.9)
-  - [ ] Confirm Story 4.1's edit panel, pending-event persistence, Revert flow, and `EventUpdatedMessage` refresh path are present on the branch.
-  - [ ] Confirm Story 4.2's local-draft prerequisites are actually present before implementing AC-4.5.2: nullable `PendingEvent.GcalEventId`, source-agnostic event selection/querying, and the ability for `CalendarQueryService` to surface pending-only events. If they are not present, land Story 4.2 first or cherry-pick its prerequisite schema/query changes before implementing 4.5.
-  - [ ] Treat [Epic 4 tech spec](../tech-spec.md) as authoritative for Story 4.5. Do not follow the outdated Epic 4 note in `docs/epics.md` that still says event deletion is outside Epic 4.
-  - [ ] Do not implement deletion by toggling `GcalEvent.IsDeleted`, directly removing `gcal_event` rows, or inventing fake Google IDs for local drafts.
+- [x] **Task 1: Verify prerequisites and source-of-truth alignment before writing code** (AC: 4.5.1, 4.5.2, 4.5.3, 4.5.8, 4.5.9)
+  - [x] Confirm Story 4.1's edit panel, pending-event persistence, Revert flow, and `EventUpdatedMessage` refresh path are present on the branch.
+  - [x] Confirm Story 4.2's local-draft prerequisites are actually present before implementing AC-4.5.2: nullable `PendingEvent.GcalEventId`, source-agnostic event selection/querying, and the ability for `CalendarQueryService` to surface pending-only events. If they are not present, land Story 4.2 first or cherry-pick its prerequisite schema/query changes before implementing 4.5.
+  - [x] Treat [Epic 4 tech spec](../tech-spec.md) as authoritative for Story 4.5. Do not follow the outdated Epic 4 note in `docs/epics.md` that still says event deletion is outside Epic 4.
+  - [x] Do not implement deletion by toggling `GcalEvent.IsDeleted`, directly removing `gcal_event` rows, or inventing fake Google IDs for local drafts.
 
-- [ ] **Task 2: Extend the Tier 2 schema for delete staging and future push compatibility** (AC: 4.5.3, 4.5.8, 4.5.9)
-  - [ ] Extend `Data/Entities/PendingEvent.cs` with `OperationType` defaulting to `"edit"`.
-  - [ ] Update `Data/Configurations/PendingEventConfiguration.cs` to map `operation_type` and preserve the unique-per-source-event behavior from prior stories.
-  - [ ] Add `Data/Entities/DeletedEvent.cs` and `Data/Configurations/DeletedEventConfiguration.cs` for the `deleted_event` table defined in the tech spec.
-  - [ ] Add `Data/Entities/RecurringEventSeries.cs` and `Data/Configurations/RecurringEventSeriesConfiguration.cs` for the schema-only table required by the Epic 4 migration sequence. Do not implement recurring-edit behavior in Story 4.5.
-  - [ ] Register new `DbSet`s in `Data/CalendarDbContext.cs`.
-  - [ ] Add one migration that captures the Story 4.5 schema delta, e.g. `AddPendingEventOperationTypeAndDeletionTables`.
-  - [ ] Preserve the existing `gcal_event` schema exactly; Story 4.5 must not add or repurpose an `is_deleted` workflow on that table.
+- [x] **Task 2: Extend the Tier 2 schema for delete staging and future push compatibility** (AC: 4.5.3, 4.5.8, 4.5.9)
+  - [x] Extend `Data/Entities/PendingEvent.cs` with `OperationType` defaulting to `"edit"`.
+  - [x] Update `Data/Configurations/PendingEventConfiguration.cs` to map `operation_type` and preserve the unique-per-source-event behavior from prior stories.
+  - [x] Add `Data/Entities/DeletedEvent.cs` and `Data/Configurations/DeletedEventConfiguration.cs` for the `deleted_event` table defined in the tech spec.
+  - [x] Add `Data/Entities/RecurringEventSeries.cs` and `Data/Configurations/RecurringEventSeriesConfiguration.cs` for the schema-only table required by the Epic 4 migration sequence. Do not implement recurring-edit behavior in Story 4.5.
+  - [x] Register new `DbSet`s in `Data/CalendarDbContext.cs`.
+  - [x] Add one migration that captures the Story 4.5 schema delta, e.g. `AddPendingEventOperationTypeAndDeletionTables`.
+  - [x] Preserve the existing `gcal_event` schema exactly; Story 4.5 must not add or repurpose an `is_deleted` workflow on that table.
 
-- [ ] **Task 3: Extend repository contracts for local-draft deletion and delete staging reuse** (AC: 4.5.2, 4.5.3, 4.5.4, 4.5.7)
-  - [ ] Extend `Services/IPendingEventRepository.cs` with `GetByIdAsync(Guid id, CancellationToken ct = default)` and `DeleteByIdAsync(Guid id, CancellationToken ct = default)`.
-  - [ ] Update `Services/PendingEventRepository.cs` to support both delete paths:
-    - [ ] delete by Google event ID for published-event revert/staged-delete cleanup
-    - [ ] delete by pending ID for local draft removal
-  - [ ] Keep repository access on `IDbContextFactory<CalendarDbContext>` and keep all timestamps in UTC.
-  - [ ] Do not add an unnecessary Google-delete service abstraction in Story 4.5; outbound deletion remains deferred to Story 4.4.
+- [x] **Task 3: Extend repository contracts for local-draft deletion and delete staging reuse** (AC: 4.5.2, 4.5.3, 4.5.4, 4.5.7)
+  - [x] Extend `Services/IPendingEventRepository.cs` with `GetByIdAsync(Guid id, CancellationToken ct = default)` and `DeleteByIdAsync(Guid id, CancellationToken ct = default)`.
+  - [x] Update `Services/PendingEventRepository.cs` to support both delete paths:
+    - [x] delete by Google event ID for published-event revert/staged-delete cleanup
+    - [x] delete by pending ID for local draft removal
+  - [x] Keep repository access on `IDbContextFactory<CalendarDbContext>` and keep all timestamps in UTC.
+  - [x] Do not add an unnecessary Google-delete service abstraction in Story 4.5; outbound deletion remains deferred to Story 4.4.
 
-- [ ] **Task 4: Add reusable confirmation-dialog support instead of ad-hoc XAML dialogs** (AC: 4.5.1, 4.5.2, 4.5.4, 4.5.6)
-  - [ ] Extend `Services/IContentDialogService.cs` beyond `ShowErrorAsync(...)` with a reusable confirmation API that can express:
-    - [ ] Delete / Cancel for local drafts and published events with no pending edit
-    - [ ] Revert Changes / Delete Event / Cancel for published events that already have a pending edit row
-  - [ ] Implement the new API in `Services/ContentDialogService.cs` using `ContentDialog` and the existing `IWindowService`/`XamlRoot` pattern.
-  - [ ] Keep dialog copy explicit and safe. The destructive button text must clearly distinguish immediate local draft removal from staged deletion of a published event.
+- [x] **Task 4: Add reusable confirmation-dialog support instead of ad-hoc XAML dialogs** (AC: 4.5.1, 4.5.2, 4.5.4, 4.5.6)
+  - [x] Extend `Services/IContentDialogService.cs` beyond `ShowErrorAsync(...)` with a reusable confirmation API that can express:
+    - [x] Delete / Cancel for local drafts and published events with no pending edit
+    - [x] Revert Changes / Delete Event / Cancel for published events that already have a pending edit row
+  - [x] Implement the new API in `Services/ContentDialogService.cs` using `ContentDialog` and the existing `IWindowService`/`XamlRoot` pattern.
+  - [x] Keep dialog copy explicit and safe. The destructive button text must clearly distinguish immediate local draft removal from staged deletion of a published event.
 
-- [ ] **Task 5: Extend query/display models so pending delete is a first-class UI state** (AC: 4.5.3, 4.5.5, 4.5.7)
-  - [ ] If Story 4.2's widened display model is present, reuse it; otherwise extend the current `Models/CalendarEventDisplayModel.cs` minimally with a delete-state signal such as `IsPendingDelete` or `PendingOperationType`.
-  - [ ] Update `Services/CalendarQueryService.cs` so pending-delete rows still project into the visible calendar surfaces using the event's current title/time/color plus the delete-state signal.
-  - [ ] Keep staged deletes visible at 60% opacity until Story 4.4 completes the actual Google delete.
-  - [ ] Local draft deletions must disappear from the query results immediately after `DeleteByIdAsync(...)`.
-  - [ ] Reverting a staged delete must restore the event to its original non-pending display model on the next refresh cycle.
+- [x] **Task 5: Extend query/display models so pending delete is a first-class UI state** (AC: 4.5.3, 4.5.5, 4.5.7)
+  - [x] If Story 4.2's widened display model is present, reuse it; otherwise extend the current `Models/CalendarEventDisplayModel.cs` minimally with a delete-state signal such as `IsPendingDelete` or `PendingOperationType`.
+  - [x] Update `Services/CalendarQueryService.cs` so pending-delete rows still project into the visible calendar surfaces using the event's current title/time/color plus the delete-state signal.
+  - [x] Keep staged deletes visible at 60% opacity until Story 4.4 completes the actual Google delete.
+  - [x] Local draft deletions must disappear from the query results immediately after `DeleteByIdAsync(...)`.
+  - [x] Reverting a staged delete must restore the event to its original non-pending display model on the next refresh cycle.
 
-- [ ] **Task 6: Implement the details-panel delete flows on top of the existing Story 4.1 VM and XAML** (AC: 4.5.1 through 4.5.7)
-  - [ ] Extend `ViewModels/EventDetailsPanelViewModel.cs`; do not build a second delete-specific panel or second view model.
-  - [ ] Add a `Delete` command and any supporting state needed to distinguish:
-    - [ ] local draft (`PendingEvent` only)
-    - [ ] published event with no pending row
-    - [ ] published event with pending edit row
-    - [ ] published event already staged for delete
-  - [ ] For local drafts, confirm and then call `DeleteByIdAsync(...)`, clear selection, and publish an update so the event disappears from all active views immediately.
-  - [ ] For published events with no pending row, create a pending row from the selected event's current effective data and set `OperationType = "delete"`.
-  - [ ] For published events with a pending edit row, use the three-outcome confirmation flow and either:
-    - [ ] route to the existing revert path unchanged, or
-    - [ ] mutate the same pending row to `OperationType = "delete"`
-  - [ ] For already-staged deletes, either keep `Delete` disabled with clear copy or confirm the same staged-delete intent without duplicating writes. Do not create duplicate pending rows.
-  - [ ] Reuse `EventUpdatedMessage` and `MainViewModel` refresh behavior rather than adding a second refresh mechanism.
+- [x] **Task 6: Implement the details-panel delete flows on top of the existing Story 4.1 VM and XAML** (AC: 4.5.1 through 4.5.7)
+  - [x] Extend `ViewModels/EventDetailsPanelViewModel.cs`; do not build a second delete-specific panel or second view model.
+  - [x] Add a `Delete` command and any supporting state needed to distinguish:
+    - [x] local draft (`PendingEvent` only)
+    - [x] published event with no pending row
+    - [x] published event with pending edit row
+    - [x] published event already staged for delete
+  - [x] For local drafts, confirm and then call `DeleteByIdAsync(...)`, clear selection, and publish an update so the event disappears from all active views immediately.
+  - [x] For published events with no pending row, create a pending row from the selected event's current effective data and set `OperationType = "delete"`.
+  - [x] For published events with a pending edit row, use the three-outcome confirmation flow and either:
+    - [x] route to the existing revert path unchanged, or
+    - [x] mutate the same pending row to `OperationType = "delete"`
+  - [x] For already-staged deletes, either keep `Delete` disabled with clear copy or confirm the same staged-delete intent without duplicating writes. Do not create duplicate pending rows.
+  - [x] Reuse `EventUpdatedMessage` and `MainViewModel` refresh behavior rather than adding a second refresh mechanism.
 
-- [ ] **Task 7: Update the details-panel UI and any pending-state visual affordances** (AC: 4.5.1, 4.5.5, 4.5.7)
-  - [ ] Update `Views/EventDetailsPanelControl.xaml` so `Delete` is available in both read-only and edit mode.
-  - [ ] Keep the destructive action visually distinct from `Edit`, `Save`, and `Revert`.
-  - [ ] Surface pending-delete state in the panel metadata or inline status area with explicit copy such as `Pending delete - will be removed from Google Calendar when pushed`.
-  - [ ] If the current view templates already have a status-label or badge slot, reuse it for the delete indicator. If not, add the smallest shared affordance possible rather than forking per-view markup.
+- [x] **Task 7: Update the details-panel UI and any pending-state visual affordances** (AC: 4.5.1, 4.5.5, 4.5.7)
+  - [x] Update `Views/EventDetailsPanelControl.xaml` so `Delete` is available in both read-only and edit mode.
+  - [x] Keep the destructive action visually distinct from `Edit`, `Save`, and `Revert`.
+  - [x] Surface pending-delete state in the panel metadata or inline status area with explicit copy such as `Pending delete - will be removed from Google Calendar when pushed`.
+  - [x] If the current view templates already have a status-label or badge slot, reuse it for the delete indicator. If not, add the smallest shared affordance possible rather than forking per-view markup.
 
-- [ ] **Task 8: Add automated coverage for schema, repository, VM branching, and query behavior** (AC: all)
-  - [ ] Extend `GoogleCalendarManagement.Tests/Integration/PendingEventRepositoryTests.cs` with:
-    - [ ] `DeleteByIdAsync_RemovesLocalDraftPendingEvent`
-    - [ ] `UpsertAsync_WhenOperationTypeDelete_PersistsDeleteState`
-    - [ ] migration/schema assertions for `operation_type` default
-  - [ ] Add integration coverage for the new `deleted_event` and `recurring_event_series` tables so the Story 4.5 migration shape is locked in.
-  - [ ] Extend `GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs` with:
-    - [ ] local draft delete confirmed -> pending row removed and selection cleared
-    - [ ] published event delete confirmed -> pending delete staged, no Google call made
-    - [ ] pending edit delete dialog choosing `Revert Changes` routes to existing revert behavior
-    - [ ] cancel/dismiss produces no repository write
-  - [ ] Add or extend `CalendarQueryService` tests so a pending delete remains visible with the delete-state flag while a deleted local draft disappears.
+- [x] **Task 8: Add automated coverage for schema, repository, VM branching, and query behavior** (AC: all)
+  - [x] Extend `GoogleCalendarManagement.Tests/Integration/PendingEventRepositoryTests.cs` with:
+    - [x] `DeleteByIdAsync_RemovesLocalDraftPendingEvent`
+    - [x] `UpsertAsync_WhenOperationTypeDelete_PersistsDeleteState`
+    - [x] migration/schema assertions for `operation_type` default
+  - [x] Add integration coverage for the new `deleted_event` and `recurring_event_series` tables so the Story 4.5 migration shape is locked in.
+  - [x] Extend `GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs` with:
+    - [x] local draft delete confirmed -> pending row removed and selection cleared
+    - [x] published event delete confirmed -> pending delete staged, no Google call made
+    - [x] pending edit delete dialog choosing `Revert Changes` routes to existing revert behavior
+    - [x] cancel/dismiss produces no repository write
+  - [x] Add or extend `CalendarQueryService` tests so a pending delete remains visible with the delete-state flag while a deleted local draft disappears.
 
-- [ ] **Task 9: Final validation** (AC: all)
-  - [ ] Run `dotnet build -p:Platform=x64`
-  - [ ] Run `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64`
+- [x] **Task 9: Final validation** (AC: all)
+  - [x] Run `dotnet build -p:Platform=x64`
+  - [x] Run `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64`
   - [ ] Manual validation:
     - [ ] create a local draft, delete it, confirm it disappears immediately from panel and calendar
     - [ ] select a published event with no pending row, delete it, confirm it stays visible as pending delete at 60% opacity
@@ -261,16 +261,41 @@ GoogleCalendarManagement.Tests/
 
 ### Agent Model Used
 
-gpt-5
+claude-sonnet-4-6
 
 ### Debug Log References
 
-<!-- to be filled by dev agent -->
+- Fixed test `UpsertAsync_InsertsDraftWhenSchemaDoesNotDefineStoreDefaults`: legacy manual schema in test fixture was missing `operation_type` column; added `operation_type TEXT NOT NULL DEFAULT 'edit'` to bring it in sync with the new entity model.
 
 ### Completion Notes List
 
-<!-- to be filled by dev agent -->
+- Story 4.2 prerequisites (nullable `GcalEventId`, `CalendarEventSourceKind.Pending`, pending-only event surfacing) were already present on the branch — no prerequisite work needed.
+- `IContentDialogService` was extended with `ShowDeleteConfirmAsync` (Delete/Cancel) and `ShowDeleteWithPendingEditAsync` (Delete Event/Revert Changes/Cancel).
+- `DeleteCommand` on `EventDetailsPanelViewModel` handles all four cases: already-staged delete (noop), local draft (confirm + `DeleteByPendingEventIdAsync`), published no-pending (stage with `OperationType = "delete"`), published with pending edit (3-way dialog).
+- Delete button rendered in `EventDetailsPanelControl` code-behind using `SystemFillColorCriticalBrush`; placed on left side of a Grid so it stays visually separated from Save/Revert.
+- `IsPendingDeleteEvent` VM property drives delete button disabled state and a visible inline status label when deletion is staged.
+- Migration `20260507184025_AddPendingEventOperationTypeAndDeletionTables` adds `operation_type`, `deleted_event`, and `recurring_event_series` tables.
+- 14 new tests added (6 repository integration, 6 VM unit, 2 query service integration). All 246 tests pass.
 
 ### File List
 
-<!-- to be filled by dev agent -->
+- `Data/Entities/PendingEvent.cs` — added `OperationType` property
+- `Data/Configurations/PendingEventConfiguration.cs` — mapped `operation_type` column with default `"edit"`
+- `Data/Entities/DeletedEvent.cs` — new entity for `deleted_event` table
+- `Data/Configurations/DeletedEventConfiguration.cs` — new EF configuration
+- `Data/Entities/RecurringEventSeries.cs` — new schema-only entity
+- `Data/Configurations/RecurringEventSeriesConfiguration.cs` — new EF configuration
+- `Data/CalendarDbContext.cs` — registered `DeletedEvents` and `RecurringEventSeries` DbSets
+- `Data/Migrations/20260507184025_AddPendingEventOperationTypeAndDeletionTables.cs` — Story 4.5 migration
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs` — updated model snapshot
+- `Services/IPendingEventRepository.cs` — added `GetByPendingEventIdAsync` and `DeleteByPendingEventIdAsync`
+- `Services/PendingEventRepository.cs` — implemented new delete-by-pending-ID methods; propagates `OperationType` in upsert
+- `Services/IContentDialogService.cs` — added `DeleteWithPendingEditChoice` enum and two new dialog methods
+- `Services/ContentDialogService.cs` — implemented `ShowDeleteConfirmAsync` and `ShowDeleteWithPendingEditAsync`
+- `Models/CalendarEventDisplayModel.cs` — added `IsPendingDelete` optional parameter
+- `Services/CalendarQueryService.cs` — maps `IsPendingDelete` from `OperationType == "delete"` and applies pending-delete status label
+- `ViewModels/EventDetailsPanelViewModel.cs` — added `DeleteCommand`, `IsPendingDeleteEvent`, `DeleteEventAsync`
+- `Views/EventDetailsPanelControl.xaml.cs` — added Delete button, pending-delete status text block, Grid layout for action area
+- `GoogleCalendarManagement.Tests/Integration/PendingEventRepositoryTests.cs` — 6 new tests; updated legacy schema fixture to include `operation_type`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs` — 6 new delete-flow unit tests
+- `GoogleCalendarManagement.Tests/Integration/CalendarQueryServiceTests.cs` — 2 new tests for pending delete query behavior

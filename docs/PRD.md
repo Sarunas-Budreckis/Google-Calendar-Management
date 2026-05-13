@@ -550,7 +550,7 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - `youtube_data_published`
   - `toggl_data_published`
   - `named` (date has been reviewed and named/contextualized)
-  - `complete_walkthrough_approval` (all sources reviewed, date complete)
+  - `approved` (date fully signed off by user)
   - `part_of_tracked_gap` (intentionally incomplete, e.g., vacation)
 - **Acceptance Criteria:**
   - Flags stored per date in database
@@ -559,9 +559,9 @@ Requirements organized by capability, each with acceptance criteria and domain c
   - Visual indicators for data source completeness per date
 
 **FR-5.2: Contiguity Edge Calculation (Tier 3)**
-- **Capability:** Calculate the last date with complete walkthrough approval
+- **Capability:** Calculate the last date with approval
 - **Purpose:** Know where to start "fill to present" workflow
-- **Logic:** Most recent date where `complete_walkthrough_approval = true` and all subsequent dates are incomplete (except tracked gaps)
+- **Logic:** Most recent date where `approved = true` and all subsequent dates are incomplete (except tracked gaps)
 - **Acceptance Criteria:**
   - Algorithm correctly identifies contiguity edge
   - Edge displayed prominently in UI
