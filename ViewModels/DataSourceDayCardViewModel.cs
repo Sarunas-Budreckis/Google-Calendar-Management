@@ -24,7 +24,8 @@ public sealed class DataSourceDayCardViewModel : ObservableObject
         IDataSourceRepository dataSourceRepository,
         Action<DataSourceDayCardViewModel> expand,
         UIElement? compactSummaryView,
-        Func<UIElement> drilldownViewFactory)
+        Func<UIElement> drilldownViewFactory,
+        Func<Task>? addAction = null)
     {
         DataSourceId = dataSourceId;
         SourceKey = sourceKey;
@@ -36,6 +37,15 @@ public sealed class DataSourceDayCardViewModel : ObservableObject
         _expand = expand;
         CompactSummaryView = compactSummaryView;
         DrilldownViewFactory = drilldownViewFactory;
+        AddCommand = new AsyncRelayCommand(
+            async () =>
+            {
+                if (addAction is not null)
+                {
+                    await addAction();
+                }
+            },
+            () => addAction is not null && !IsGreyedOut);
         ToggleIntegrationCommand = new AsyncRelayCommand(ToggleIntegrationAsync, () => !IsGreyedOut);
         ExpandCommand = new RelayCommand(() => _expand(this));
     }
@@ -59,6 +69,12 @@ public sealed class DataSourceDayCardViewModel : ObservableObject
     public IAsyncRelayCommand ToggleIntegrationCommand { get; }
 
     public IRelayCommand ExpandCommand { get; }
+
+    public IAsyncRelayCommand AddCommand { get; }
+
+    public bool HasAddAction => AddCommand.CanExecute(null);
+
+    public Visibility AddButtonVisibility => HasAddAction ? Visibility.Visible : Visibility.Collapsed;
 
     public UIElement? CompactSummaryView { get; }
 

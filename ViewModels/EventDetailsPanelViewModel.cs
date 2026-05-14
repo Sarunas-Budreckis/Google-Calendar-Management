@@ -64,7 +64,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private string _editDescription = string.Empty;
     private string _editColorId = "azure";
     private string _editColorName = "Azure";
-    private string _editColorHex = "#0088CC";
+    private string _editColorHex = "#00AAFF";
     private string _titleError = string.Empty;
     private string _dateTimeError = string.Empty;
     private string _saveStatusText = string.Empty;
@@ -1167,7 +1167,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
                 ApplyEventDetails(loadedEvent, message.EventId!, keepEditMode: false);
                 if (message.OpenInEditMode && loadedEvent.SourceKind == CalendarEventSourceKind.Pending)
                 {
-                    _isUneditedNewDraft = true;
+                    _isUneditedNewDraft = string.IsNullOrWhiteSpace(loadedEvent.Title);
                     OnPropertyChanged(nameof(IsNewUneditedDraft));
                 }
 

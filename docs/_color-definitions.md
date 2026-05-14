@@ -20,7 +20,7 @@ This document defines the comprehensive color taxonomy used for life tracking in
 
 ## Active Color Definitions
 
-### Azure (#0088CC) - Eudaimonia
+### Azure (#00AAFF) - Eudaimonia
 
 **Custom color:** Vibrant cyan, like a blue lightsaber
 

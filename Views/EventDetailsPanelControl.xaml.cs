@@ -446,7 +446,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
             Width = 16,
             Height = 16,
             CornerRadius = new CornerRadius(999),
-            Background = CreateBrush(option.Hex),
+            Background = CreateBrush(option.DisplayHex),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Child = checkIcon

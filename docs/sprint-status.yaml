@@ -2,7 +2,7 @@
 # project: Google Calendar Management
 # project_key: Google Calendar Management
 # tracking_system: file-system
-# story_location: {project-root}/docs/epic-{N}/stories  (update N per active epic)
+# story_location: {project-root}/docs/epic-{N}-{slug}/stories  (use the named epic folder)
 
 # STATUS DEFINITIONS:
 # ==================
@@ -30,11 +30,11 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-05-13T13:00:36-05:00
+last_updated: 2026-05-13T16:46:23-05:00
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
-story_location: "{project-root}/docs/epic-{N}/stories  # active epics: 2, 3, 4"
+story_location: "{project-root}/docs/epic-{N}-{slug}/stories  # use the named epic folder"
 
 development_status:
   epic-1: contexted
@@ -84,17 +84,17 @@ development_status:
   4-10-overlapping-event-layout: ready-for-dev
   epic-4-retrospective: optional
 
-  epic-5: contexted  # Data Source Left Panel & Single-Day Select — scope doc at docs/epic-5/epic-overview.md
+  epic-5: contexted  # Data Source Left Panel & Single-Day Select — scope doc at docs/epic-5-day-select-left-data-panel/epic-overview.md
   5-1-data-source-infrastructure: review
   5-2-three-panel-layout-and-left-panel-shell: review
   5-3-single-day-select: review
   5-4-left-panel-global-mode: review
   5-5-left-panel-day-mode: review
   5-6-toggl-sleep-import: review
-  5-7-toggl-sleep-card-and-drilldown: drafted
+  5-7-toggl-sleep-card-and-drilldown: review
   epic-5-retrospective: optional
 
-  epic-6: backlog  # Batch Day Management — scope doc at docs/epic-6/epic-overview.md
+  epic-6: backlog  # Batch Day Management — scope doc at docs/epic-6-batch-multi-select/epic-overview.md
   6-1-batch-data-model-and-persistence: backlog
   6-2-batch-tray-ui: backlog
   6-3-add-remove-days-to-batch: backlog

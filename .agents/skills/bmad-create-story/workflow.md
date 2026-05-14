@@ -34,7 +34,8 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 - `ux_file` = `{planning_artifacts}/*ux*.md`
 - `story_title` = "" (will be elicited if not derivable)
 - `project_context` = `**/project-context.md` (load if exists)
-- `default_output_file` = `{implementation_artifacts}/{{story_key}}.md`
+- `epic_folder` = resolved after `epic_num` is known by finding the single directory under `{implementation_artifacts}` matching `epic-{{epic_num}}-*`
+- `default_output_file` = `{implementation_artifacts}/{{epic_folder}}/stories/{{story_key}}.md`
 
 ### Input Files
 
@@ -55,6 +56,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
   <check if="{{story_path}} is provided by user or user provided the epic and story number such as 2-4 or 1.6 or epic 1 story 5">
     <action>Parse user-provided story path: extract epic_num, story_num, story_title from format like "1-2-user-auth"</action>
     <action>Set {{epic_num}}, {{story_num}}, {{story_key}} from user input</action>
+    <action>Resolve {{epic_folder}} by scanning {implementation_artifacts} for the single directory matching `epic-{{epic_num}}-*`; HALT if no matching named epic folder exists or more than one match is found</action>
     <action>GOTO step 2a</action>
   </check>
 
@@ -81,6 +83,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
     <check if="user provides epic-story number">
       <action>Parse user input: extract epic_num, story_num, story_title</action>
       <action>Set {{epic_num}}, {{story_num}}, {{story_key}} from user input</action>
+      <action>Resolve {{epic_folder}} by scanning {implementation_artifacts} for the single directory matching `epic-{{epic_num}}-*`; HALT if no matching named epic folder exists or more than one match is found</action>
       <action>GOTO step 2a</action>
     </check>
 
@@ -123,6 +126,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
     </action>
     <action>Set {{story_id}} = "{{epic_num}}.{{story_num}}"</action>
     <action>Store story_key for later use (e.g., "1-2-user-authentication")</action>
+    <action>Resolve {{epic_folder}} by scanning {implementation_artifacts} for the single directory matching `epic-{{epic_num}}-*`; HALT if no matching named epic folder exists or more than one match is found</action>
 
     <!-- Mark epic as in-progress if this is first story -->
     <action>Check if this is the first story in epic {{epic_num}} by looking for {{epic_num}}-1-* pattern</action>
@@ -180,6 +184,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
   </action>
   <action>Set {{story_id}} = "{{epic_num}}.{{story_num}}"</action>
   <action>Store story_key for later use (e.g., "1-2-user-authentication")</action>
+  <action>Resolve {{epic_folder}} by scanning {implementation_artifacts} for the single directory matching `epic-{{epic_num}}-*`; HALT if no matching named epic folder exists or more than one match is found</action>
 
   <!-- Mark epic as in-progress if this is first story -->
   <action>Check if this is the first story in epic {{epic_num}} by looking for {{epic_num}}-1-* pattern</action>
@@ -225,8 +230,8 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
   (As a, I want, so that) - Detailed acceptance criteria (already BDD formatted) - Technical requirements specific to this story -
   Business context and value - Success criteria <!-- Previous story analysis for context continuity -->
   <check if="story_num > 1">
-    <action>Find {{previous_story_num}}: scan {implementation_artifacts} for the story file in epic {{epic_num}} with the highest story number less than {{story_num}}</action>
-    <action>Load previous story file: {implementation_artifacts}/{{epic_num}}-{{previous_story_num}}-*.md</action> **PREVIOUS STORY INTELLIGENCE:** -
+    <action>Find {{previous_story_num}}: scan {implementation_artifacts}/{{epic_folder}}/stories for the story file in epic {{epic_num}} with the highest story number less than {{story_num}}</action>
+    <action>Load previous story file: {implementation_artifacts}/{{epic_folder}}/stories/{{epic_num}}-{{previous_story_num}}-*.md</action> **PREVIOUS STORY INTELLIGENCE:** -
   Dev notes and learnings from previous story - Review feedback and corrections needed - Files that were created/modified and their
   patterns - Testing approaches that worked/didn't work - Problems encountered and solutions found - Code patterns established <action>Extract
   all learnings that could impact current story implementation</action>
@@ -293,6 +298,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 <step n="5" goal="Create comprehensive story file">
   <critical>📝 CREATE ULTIMATE STORY FILE - The developer's master implementation guide!</critical>
 
+  <action>Ensure the parent directory for {default_output_file} exists before writing</action>
   <action>Initialize from template.md:
   {default_output_file}</action>
   <template-output file="{default_output_file}">story_header</template-output>

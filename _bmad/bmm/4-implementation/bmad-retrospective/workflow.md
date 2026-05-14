@@ -38,6 +38,7 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 ### Paths
 
 - `sprint_status_file` = `{implementation_artifacts}/sprint-status.yaml`
+- `epic_folder` = resolved after `epic_number` is known by finding the single directory under `{implementation_artifacts}` matching `epic-{{epic_number}}-*`
 
 ### Input Files
 
@@ -127,6 +128,8 @@ Bob (Scrum Master): "I found stories for Epic {{detected_epic}} in the stories f
 <action>Set {{epic_number}} = confirmed number</action>
 </check>
 
+<action>Resolve {{epic_folder}} by scanning {implementation_artifacts} for the single directory matching `epic-{{epic_number}}-*`; HALT if no matching named epic folder exists or more than one match is found</action>
+
 <action>Once {{epic_number}} is determined, verify epic completion status</action>
 
 <action>Find all stories for epic {{epic_number}} in {sprint_status_file}:
@@ -205,7 +208,7 @@ Bob (Scrum Master): "Before we start the team discussion, let me review all the 
 Charlie (Senior Dev): "Good idea - those dev notes always have gold in them."
 </output>
 
-<action>For each story in epic {{epic_number}}, read the complete story file from {implementation_artifacts}/{{epic_number}}-{{story_num}}-*.md</action>
+<action>For each story in epic {{epic_number}}, read the complete story file from {implementation_artifacts}/{{epic_folder}}/stories/{{epic_number}}-{{story_num}}-*.md</action>
 
 <action>Extract and analyze from each story:</action>
 
@@ -296,7 +299,7 @@ Bob (Scrum Master): "We'll get to all of it. But first, let me load the previous
 <action>Calculate previous epic number: {{prev_epic_num}} = {{epic_number}} - 1</action>
 
 <check if="{{prev_epic_num}} >= 1">
-  <action>Search for previous retrospectives using pattern: {implementation_artifacts}/epic-{{prev_epic_num}}-retro-*.md</action>
+  <action>Search for previous retrospectives using pattern: {implementation_artifacts}/epic-{{prev_epic_num}}-*/epic-{{prev_epic_num}}-retro-*.md</action>
 
   <check if="previous retrospectives found">
     <output>
@@ -1357,11 +1360,11 @@ Bob (Scrum Master): "See you all when prep work is done. Meeting adjourned!"
 - Commitments and next steps
 
 <action>Format retrospective document as readable markdown with clear sections</action>
-<action>Set filename: {implementation_artifacts}/epic-{{epic_number}}-retro-{date}.md</action>
+<action>Set filename: {implementation_artifacts}/{{epic_folder}}/epic-{{epic_number}}-retro-{date}.md</action>
 <action>Save retrospective document</action>
 
 <output>
-✅ Retrospective document saved: {implementation_artifacts}/epic-{{epic_number}}-retro-{date}.md
+✅ Retrospective document saved: {implementation_artifacts}/{{epic_folder}}/epic-{{epic_number}}-retro-{date}.md
 </output>
 
 <action>Update {sprint_status_file} to mark retrospective as completed</action>
@@ -1401,7 +1404,7 @@ Retrospective document was saved successfully, but {sprint_status_file} may need
 
 - Epic {{epic_number}}: {{epic_title}} reviewed
 - Retrospective Status: completed
-- Retrospective saved: {implementation_artifacts}/epic-{{epic_number}}-retro-{date}.md
+- Retrospective saved: {implementation_artifacts}/{{epic_folder}}/epic-{{epic_number}}-retro-{date}.md
 
 **Commitments Made:**
 
@@ -1411,7 +1414,7 @@ Retrospective document was saved successfully, but {sprint_status_file} may need
 
 **Next Steps:**
 
-1. **Review retrospective summary**: {implementation_artifacts}/epic-{{epic_number}}-retro-{date}.md
+1. **Review retrospective summary**: {implementation_artifacts}/{{epic_folder}}/epic-{{epic_number}}-retro-{date}.md
 
 2. **Execute preparation sprint** (Est: {{prep_days}} days)
    - Complete {{critical_count}} critical path items

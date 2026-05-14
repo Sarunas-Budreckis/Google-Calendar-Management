@@ -158,6 +158,21 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task GetCurrentViewDisplayRange_MonthView_ReturnsRenderedGridEdges()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 15)));
+        var viewModel = CreateViewModel(queryService, navigationStateService);
+
+        await viewModel.InitializeAsync();
+
+        viewModel.GetCurrentViewDisplayRange().Should().Be((
+            new DateOnly(2026, 03, 30),
+            new DateOnly(2026, 05, 03)));
+    }
+
+    [Fact]
     public async Task NavigateNextCommand_YearView_AdvancesOneYear_AndUpdatesBreadcrumb()
     {
         var queryService = new RecordingCalendarQueryService();
@@ -250,6 +265,26 @@ public sealed class MainViewModelTests : IDisposable
         viewModel.BreadcrumbLabel.Should().Be("Mar 30\u2013Apr 5, 2026");
         queryService.LastFrom.Should().Be(new DateOnly(2026, 03, 30));
         queryService.LastTo.Should().Be(new DateOnly(2026, 04, 05));
+    }
+
+    [Fact]
+    public async Task NavigateNextCommand_WeekView_PublishesUpdatedDisplayRange()
+    {
+        CalendarViewRangeChangedMessage? lastMessage = null;
+        WeakReferenceMessenger.Default.Register<MainViewModelTests, CalendarViewRangeChangedMessage>(
+            this,
+            (_, message) => lastMessage = message);
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Week, new DateOnly(2026, 03, 26)));
+        var viewModel = CreateViewModel(queryService, navigationStateService);
+
+        await viewModel.InitializeAsync();
+        await viewModel.NavigateNextCommand.ExecuteAsync(null);
+
+        lastMessage.Should().Be(new CalendarViewRangeChangedMessage(
+            new DateOnly(2026, 03, 30),
+            new DateOnly(2026, 04, 05)));
     }
 
     [Fact]
@@ -583,7 +618,7 @@ public sealed class MainViewModelTests : IDisposable
                     false,
                     "new draft",
                     "azure",
-                    "#0088CC",
+                    "#00AAFF",
                     null)
             ]
         };

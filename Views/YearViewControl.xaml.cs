@@ -768,7 +768,7 @@ public sealed partial class YearViewControl : Page
             previewBar.Child = new TextBlock
             {
                 Text = bar.SummaryText,
-                Foreground = new SolidColorBrush(Colors.White),
+                Foreground = new SolidColorBrush(Colors.Black),
                 FontSize = PreviewBarFontSize,
                 VerticalAlignment = VerticalAlignment.Center,
                 MaxLines = 1,

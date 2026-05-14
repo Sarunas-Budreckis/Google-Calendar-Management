@@ -206,14 +206,14 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     [Fact]
     public async Task SelectColorAsync_SavesImmediatelyWithoutWaitingForDebounce()
     {
-        var evt = MakeEvent("evt-1", colorKey: "azure", colorName: "Azure", colorHex: "#0088CC");
+        var evt = MakeEvent("evt-1", colorKey: "azure", colorName: "Azure", colorHex: "#00AAFF");
         _queryServiceMock
             .SetupSequence(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt)
             .ReturnsAsync(evt with
             {
-                ColorKey = "purple",
-                ColorName = "Purple",
+                ColorKey = "navy",
+                ColorName = "Navy",
                 ColorHex = "#3F51B5",
                 IsPending = true,
                 Opacity = 0.6,
@@ -229,22 +229,22 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         await WaitUntilAsync(() => sut.IsPanelVisible);
         sut.EnterEditMode();
 
-        await sut.SelectColorAsync("purple");
+        await sut.SelectColorAsync("navy");
 
         _pendingEventRepositoryMock.Verify(
             repo => repo.UpsertAsync(
-                It.Is<PendingEvent>(pending => pending.GcalEventId == "evt-1" && pending.ColorId == "purple"),
+                It.Is<PendingEvent>(pending => pending.GcalEventId == "evt-1" && pending.ColorId == "navy"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
-        sut.ColorName.Should().Be("Purple");
+        sut.ColorName.Should().Be("Navy");
         sut.ColorHex.Should().Be("#3F51B5");
-        sut.EditColorId.Should().Be("purple");
+        sut.EditColorId.Should().Be("navy");
     }
 
     [Fact]
     public async Task SelectColorAsync_SameColor_DoesNotWritePendingEvent()
     {
-        var evt = MakeEvent("evt-1", colorKey: "azure", colorName: "Azure", colorHex: "#0088CC");
+        var evt = MakeEvent("evt-1", colorKey: "azure", colorName: "Azure", colorHex: "#00AAFF");
         _queryServiceMock
             .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
@@ -255,7 +255,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         await WaitUntilAsync(() => sut.IsPanelVisible);
         sut.EnterEditMode();
 
-        await sut.SelectColorAsync("1");
+        await sut.SelectColorAsync("azure");
 
         _pendingEventRepositoryMock.Verify(
             repo => repo.UpsertAsync(It.IsAny<PendingEvent>(), It.IsAny<CancellationToken>()),
@@ -265,7 +265,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     [Fact]
     public async Task ApplyColorToEventAsync_WhenNotInEditMode_CreatesPendingEventForGoogleEvent()
     {
-        var evt = MakeEvent("evt-1", colorKey: "azure", colorName: "Azure", colorHex: "#0088CC");
+        var evt = MakeEvent("evt-1", colorKey: "azure", colorName: "Azure", colorHex: "#00AAFF");
         _queryServiceMock
             .Setup(service => service.GetEventByIdAsync("evt-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(evt);
@@ -275,13 +275,13 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ApplyColorToEventAsync("evt-1", CalendarEventSourceKind.Google, "purple");
+        await sut.ApplyColorToEventAsync("evt-1", CalendarEventSourceKind.Google, "navy");
 
         _pendingEventRepositoryMock.Verify(
             repo => repo.UpsertAsync(
                 It.Is<PendingEvent>(pending =>
                     pending.GcalEventId == "evt-1" &&
-                    pending.ColorId == "purple" &&
+                    pending.ColorId == "navy" &&
                     pending.Summary == "Test Event"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -617,7 +617,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
             StartLocal: UtcBase.ToLocalTime(),
             EndLocal: UtcBase.AddHours(1).ToLocalTime(),
             IsAllDay: false,
-            ColorHex: "#0088CC",
+            ColorHex: "#00AAFF",
             ColorName: "Azure",
             IsRecurringInstance: false,
             Description: null,
@@ -659,7 +659,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
             StartLocal: UtcBase.ToLocalTime(),
             EndLocal: UtcBase.AddHours(1).ToLocalTime(),
             IsAllDay: false,
-            ColorHex: "#0088CC",
+            ColorHex: "#00AAFF",
             ColorName: "Azure",
             IsRecurringInstance: false,
             Description: null,
@@ -805,7 +805,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
             isPending: true,
             colorKey: "azure",
             colorName: "Azure",
-            colorHex: "#0088CC");
+            colorHex: "#00AAFF");
         _queryServiceMock
             .Setup(service => service.GetEventByIdAsync("pending_color_1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(draft);
@@ -830,7 +830,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
 
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("pending_color_1", CalendarEventSourceKind.Pending, OpenInEditMode: true));
         await WaitUntilAsync(() => sut.IsNewUneditedDraft);
-        await sut.SelectColorAsync("purple");
+        await sut.SelectColorAsync("navy");
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage(null));
         await Task.Delay(50);
 
@@ -839,11 +839,44 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
             repo => repo.UpsertAsync(
                 It.Is<PendingEvent>(pending =>
                     pending.PendingEventId == "pending_color_1" &&
-                    pending.ColorId == "purple"),
+                    pending.ColorId == "navy"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
         _pendingEventRepositoryMock.Verify(
             repo => repo.DeleteByPendingEventIdAsync("pending_color_1", It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task EventSelectedMessage_TitledGeneratedDraft_IsNotTreatedAsUneditedBlankDraft()
+    {
+        var draft = MakeEvent(
+            "pending_generated_sleep",
+            title: "Sleep",
+            sourceKind: CalendarEventSourceKind.Pending,
+            isPending: true,
+            colorKey: "grey",
+            colorName: "Grey",
+            colorHex: "#616161");
+        _queryServiceMock
+            .Setup(service => service.GetEventByIdAsync("pending_generated_sleep", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(draft);
+        var sut = CreateSut();
+
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage(
+            "pending_generated_sleep",
+            CalendarEventSourceKind.Pending,
+            OpenInEditMode: true));
+        await WaitUntilAsync(() => sut.IsEditMode && sut.EditTitle == "Sleep");
+
+        sut.IsNewUneditedDraft.Should().BeFalse();
+
+        await sut.SaveAndExitEditModeAsync();
+        WeakReferenceMessenger.Default.Send(new EventSelectedMessage(null));
+        await Task.Delay(50);
+
+        _pendingEventRepositoryMock.Verify(
+            repo => repo.DeleteByPendingEventIdAsync("pending_generated_sleep", It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

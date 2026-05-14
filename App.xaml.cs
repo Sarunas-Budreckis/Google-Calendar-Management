@@ -55,6 +55,8 @@ namespace GoogleCalendarManagement
             serviceProvider = services.BuildServiceProvider();
             serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
                 .Register(serviceProvider.GetRequiredService<TogglSleepImportHandler>());
+            serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
+                .Register(serviceProvider.GetRequiredService<TogglSleepCardProvider>());
 
             // Create and activate main window (must happen before RunStartupAsync for ContentDialog XamlRoot)
             window = new Window
@@ -192,6 +194,8 @@ namespace GoogleCalendarManagement
             services.AddSingleton<IDataSourceRepository, DataSourceRepository>();
             services.AddSingleton<DataSourceImportHandlerRegistry>();
             services.AddSingleton<DataSourceCardProviderRegistry>();
+            services.AddSingleton<ITogglSleepRepository, TogglSleepRepository>();
+            services.AddSingleton<TogglSleepCardProvider>();
             services.AddSingleton<IPendingEventDraftService, PendingEventDraftService>();
             services.AddSingleton<IPendingEventPublishService, PendingEventPublishService>();
             services.AddSingleton<ISystemStateRepository, SystemStateRepository>();
@@ -211,12 +215,17 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ICalendarDaySelectionService, CalendarDaySelectionService>();
             services.AddSingleton<SettingsViewModel>();
             services.AddSingleton<MainViewModel>();
+            services.AddSingleton<ICalendarViewRangeProvider>(provider => provider.GetRequiredService<MainViewModel>());
             services.AddSingleton<EventDetailsPanelViewModel>();
             services.AddSingleton<DataSourcePanelViewModel>();
+            services.AddTransient<TogglSleepCompactCardViewModel>();
+            services.AddTransient<TogglSleepDrilldownViewModel>();
             services.AddTransient<SettingsPage>();
             services.AddTransient<MainPage>();
             services.AddTransient<EventDetailsPanelControl>();
             services.AddTransient<DataSourcePanelControl>();
+            services.AddTransient<TogglSleepCompactCardControl>();
+            services.AddTransient<TogglSleepDrilldownControl>();
             services.AddTransient<YearViewControl>();
             services.AddTransient<MonthViewControl>();
             services.AddTransient<WeekViewControl>();

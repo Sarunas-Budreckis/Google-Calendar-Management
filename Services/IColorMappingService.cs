@@ -4,6 +4,7 @@ public sealed record CalendarColorOption(
     string Key,
     string DisplayName,
     string Hex,
+    string DisplayHex,
     string ContrastTextHex);
 
 public interface IColorMappingService

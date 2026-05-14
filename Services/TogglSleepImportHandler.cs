@@ -10,15 +10,18 @@ public sealed class TogglSleepImportHandler : IDataSourceImportHandler
     private readonly ITogglSleepImportService _importService;
     private readonly IContentDialogService _dialogService;
     private readonly IWindowService _windowService;
+    private readonly ICalendarViewRangeProvider _viewRangeProvider;
 
     public TogglSleepImportHandler(
         ITogglSleepImportService importService,
         IContentDialogService dialogService,
-        IWindowService windowService)
+        IWindowService windowService,
+        ICalendarViewRangeProvider viewRangeProvider)
     {
         _importService = importService;
         _dialogService = dialogService;
         _windowService = windowService;
+        _viewRangeProvider = viewRangeProvider;
     }
 
     public string SourceKey => TogglSleepImportService.SourceKey;
@@ -59,8 +62,7 @@ public sealed class TogglSleepImportHandler : IDataSourceImportHandler
             return null;
         }
 
-        var defaultTo = DateOnly.FromDateTime(DateTime.Today);
-        var defaultFrom = defaultTo.AddDays(-7);
+        var (defaultFrom, defaultTo) = _viewRangeProvider.GetCurrentViewDisplayRange();
         var fromPicker = new DatePicker
         {
             Header = "Import from",

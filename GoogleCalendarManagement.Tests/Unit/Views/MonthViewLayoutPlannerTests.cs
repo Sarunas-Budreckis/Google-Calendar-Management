@@ -127,7 +127,7 @@ public sealed class MonthViewLayoutPlannerTests
             StartLocal: start,
             EndLocal: end,
             IsAllDay: true,
-            ColorHex: "#0088CC",
+            ColorHex: "#00AAFF",
             ColorName: "Azure",
             IsRecurringInstance: false,
             Description: null,

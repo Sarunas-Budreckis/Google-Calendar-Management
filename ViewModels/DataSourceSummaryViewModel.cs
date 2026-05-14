@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.Input;
 using GoogleCalendarManagement.Services;
 using Microsoft.UI.Xaml;
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Collections.ObjectModel;
 
 namespace GoogleCalendarManagement.ViewModels;
 
@@ -16,7 +17,8 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
         string displayName,
         string lastDataDateLabel,
         string? lastImportedRelativeLabel,
-        DataSourceImportHandlerRegistry handlerRegistry)
+        DataSourceImportHandlerRegistry handlerRegistry,
+        IReadOnlyList<DataSourceDayDataMarkerViewModel>? dayDataMarkers = null)
     {
         DataSourceId = dataSourceId;
         SourceKey = sourceKey;
@@ -24,6 +26,11 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
         LastDataDateLabel = lastDataDateLabel;
         LastImportedRelativeLabel = lastImportedRelativeLabel;
         _handlerRegistry = handlerRegistry;
+        foreach (var marker in dayDataMarkers ?? [])
+        {
+            DayDataMarkers.Add(marker);
+        }
+
         HasImportHandler = _handlerRegistry.HasHandler(SourceKey);
         ImportCommand = new AsyncRelayCommand(ImportAsync, () => IsImportEnabled);
     }
@@ -47,6 +54,13 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
         LastImportedRelativeLabel is null ? Visibility.Collapsed : Visibility.Visible;
 
     public bool HasImportHandler { get; }
+
+    public ObservableCollection<DataSourceDayDataMarkerViewModel> DayDataMarkers { get; } = [];
+
+    public bool HasDataInCurrentView => DayDataMarkers.Any(marker => marker.HasData);
+
+    public Visibility DayDataMarkersVisibility =>
+        DayDataMarkers.Count == 7 ? Visibility.Visible : Visibility.Collapsed;
 
     public bool IsImporting
     {

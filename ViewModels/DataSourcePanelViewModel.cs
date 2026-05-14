@@ -15,6 +15,8 @@ namespace GoogleCalendarManagement.ViewModels;
 public sealed class DataSourcePanelViewModel : ObservableObject
 {
     private const string MinimizedStateKey = "DataSourcePanelMinimized";
+    private const string PanelWidthStateKey = "DataSourcePanelWidth";
+    public const double DefaultPanelWidth = 240.0;
 
     private readonly ISystemStateRepository _systemStateRepository;
     private readonly IDataSourceRepository _dataSourceRepository;
@@ -26,10 +28,14 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IGcalEventRepository _gcalEventRepository;
     private readonly IPendingEventRepository _pendingEventRepository;
+    private readonly ICalendarViewRangeProvider _viewRangeProvider;
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _isMinimized;
     private bool _isLoadingGlobal;
     private bool _isGlobalMode = true;
+    private bool _sourceDataInViewIsExpanded = true;
+    private bool _otherSourcesIsExpanded = true;
+    private double _panelWidth = double.NaN;
     private DateOnly? _currentDay;
     private string _dayLabel = "";
     private string? _dayName;
@@ -45,7 +51,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         ICalendarSelectionService calendarSelectionService,
         IPendingEventDraftService pendingEventDraftService,
         IGcalEventRepository gcalEventRepository,
-        IPendingEventRepository pendingEventRepository)
+        IPendingEventRepository pendingEventRepository,
+        ICalendarViewRangeProvider viewRangeProvider)
     {
         _systemStateRepository = systemStateRepository;
         _dataSourceRepository = dataSourceRepository;
@@ -57,9 +64,12 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         _pendingEventDraftService = pendingEventDraftService;
         _gcalEventRepository = gcalEventRepository;
         _pendingEventRepository = pendingEventRepository;
+        _viewRangeProvider = viewRangeProvider;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         OpenDayNameHeaderCommand = new AsyncRelayCommand(OpenSelectedDayNameEventAsync, () => CurrentDay.HasValue);
         BackFromDrilldownCommand = new RelayCommand(() => DrilldownCard = null);
+        ToggleSourceDataInViewCommand = new RelayCommand(() => SourceDataInViewIsExpanded = !SourceDataInViewIsExpanded);
+        ToggleOtherSourcesCommand = new RelayCommand(() => OtherSourcesIsExpanded = !OtherSourcesIsExpanded);
 
         WeakReferenceMessenger.Default.Register<DataSourcePanelViewModel, DataSourceImportCompletedMessage>(
             this,
@@ -67,15 +77,26 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         WeakReferenceMessenger.Default.Register<DataSourcePanelViewModel, DaySelectedMessage>(
             this,
             static (recipient, message) => recipient.ApplySelectedDay(message.SelectedDay));
+        WeakReferenceMessenger.Default.Register<DataSourcePanelViewModel, CalendarViewRangeChangedMessage>(
+            this,
+            static (recipient, _) => recipient.ReloadSourcesForCurrentViewOnUiThread());
     }
 
     public ObservableCollection<DataSourceSummaryViewModel> Sources { get; } = [];
+
+    public ObservableCollection<DataSourceSummaryViewModel> SourceDataInViewSources { get; } = [];
+
+    public ObservableCollection<DataSourceSummaryViewModel> OtherSources { get; } = [];
 
     public ObservableCollection<DataSourceDayCardViewModel> DayCards { get; } = [];
 
     public IAsyncRelayCommand OpenDayNameHeaderCommand { get; }
 
     public IRelayCommand BackFromDrilldownCommand { get; }
+
+    public IRelayCommand ToggleSourceDataInViewCommand { get; }
+
+    public IRelayCommand ToggleOtherSourcesCommand { get; }
 
     public bool IsMinimized
     {
@@ -87,6 +108,19 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                 OnPropertyChanged(nameof(PanelBodyVisibility));
                 OnPropertyChanged(nameof(RestoreTabVisibility));
                 _ = _systemStateRepository.SetAsync(MinimizedStateKey, value ? "true" : "false");
+            }
+        }
+    }
+
+    public double PanelWidth
+    {
+        get => _panelWidth;
+        set
+        {
+            if (SetProperty(ref _panelWidth, value))
+            {
+                if (!double.IsNaN(value))
+                    _ = _systemStateRepository.SetAsync(PanelWidthStateKey, value.ToString(System.Globalization.CultureInfo.InvariantCulture));
             }
         }
     }
@@ -104,6 +138,10 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                 OnPropertyChanged(nameof(LoadingGlobalVisibility));
                 OnPropertyChanged(nameof(EmptyGlobalStateVisibility));
                 OnPropertyChanged(nameof(SourceListVisibility));
+                OnPropertyChanged(nameof(SourceDataInViewVisibility));
+                OnPropertyChanged(nameof(SourceDataInViewListVisibility));
+                OnPropertyChanged(nameof(OtherSourcesVisibility));
+                OnPropertyChanged(nameof(OtherSourcesListVisibility));
             }
         }
     }
@@ -123,6 +161,10 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                 OnPropertyChanged(nameof(LoadingGlobalVisibility));
                 OnPropertyChanged(nameof(EmptyGlobalStateVisibility));
                 OnPropertyChanged(nameof(SourceListVisibility));
+                OnPropertyChanged(nameof(SourceDataInViewVisibility));
+                OnPropertyChanged(nameof(SourceDataInViewListVisibility));
+                OnPropertyChanged(nameof(OtherSourcesVisibility));
+                OnPropertyChanged(nameof(OtherSourcesListVisibility));
             }
         }
     }
@@ -146,6 +188,52 @@ public sealed class DataSourcePanelViewModel : ObservableObject
 
     public Visibility SourceListVisibility =>
         IsGlobalMode && !IsLoadingGlobal && Sources.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool SourceDataInViewIsExpanded
+    {
+        get => _sourceDataInViewIsExpanded;
+        private set
+        {
+            if (SetProperty(ref _sourceDataInViewIsExpanded, value))
+            {
+                OnPropertyChanged(nameof(SourceDataInViewListVisibility));
+                OnPropertyChanged(nameof(SourceDataInViewChevronGlyph));
+            }
+        }
+    }
+
+    public string SourceDataInViewHeader => $"Source data in view ({SourceDataInViewSources.Count})";
+
+    public string SourceDataInViewChevronGlyph => SourceDataInViewIsExpanded ? "" : "";
+
+    public Visibility SourceDataInViewVisibility =>
+        IsGlobalMode && !IsLoadingGlobal ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility SourceDataInViewListVisibility =>
+        IsGlobalMode && !IsLoadingGlobal && SourceDataInViewIsExpanded ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool OtherSourcesIsExpanded
+    {
+        get => _otherSourcesIsExpanded;
+        private set
+        {
+            if (SetProperty(ref _otherSourcesIsExpanded, value))
+            {
+                OnPropertyChanged(nameof(OtherSourcesListVisibility));
+                OnPropertyChanged(nameof(OtherSourcesChevronGlyph));
+            }
+        }
+    }
+
+    public string OtherSourcesHeader => $"Other data sources ({OtherSources.Count})";
+
+    public string OtherSourcesChevronGlyph => OtherSourcesIsExpanded ? "" : "";
+
+    public Visibility OtherSourcesVisibility =>
+        IsGlobalMode && !IsLoadingGlobal ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility OtherSourcesListVisibility =>
+        IsGlobalMode && !IsLoadingGlobal && OtherSourcesIsExpanded ? Visibility.Visible : Visibility.Collapsed;
 
     public DateOnly? CurrentDay
     {
@@ -205,6 +293,14 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     {
         var stored = await _systemStateRepository.GetAsync(MinimizedStateKey);
         IsMinimized = stored == "true";
+
+        var storedWidth = await _systemStateRepository.GetAsync(PanelWidthStateKey);
+        if (storedWidth is not null && double.TryParse(storedWidth, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var width) && !double.IsNaN(width))
+        {
+            _panelWidth = Math.Clamp(width, 160.0, 600.0);
+            OnPropertyChanged(nameof(PanelWidth));
+        }
+
         ApplySelectedDay(_daySelectionService.SelectedDay);
         if (IsGlobalMode)
         {
@@ -214,6 +310,7 @@ public sealed class DataSourcePanelViewModel : ObservableObject
 
     public async Task LoadDayModeAsync(DateOnly date, CancellationToken ct = default)
     {
+        var previousDrilldownSourceKey = DrilldownCard?.SourceKey;
         CurrentDay = date;
         IsGlobalMode = false;
         DrilldownCard = null;
@@ -228,12 +325,20 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         {
             var integration = await _dataSourceRepository.GetIntegrationAsync(date, source.DataSourceId, ct);
             var provider = _cardProviderRegistry.GetProvider(source.SourceKey);
+            if (provider is IDataSourceCardProviderPreloader preloader)
+            {
+                await preloader.PreloadAsync(date, ct);
+            }
+
             var hasData = provider?.HasDataForDay(date);
             var isGreyedOut = hasData == false;
             var compactSummaryView = provider?.CreateCompactSummaryView(date);
             Func<UIElement> drilldownViewFactory = provider is null
                 ? () => DataSourceDayCardViewModel.CreatePlaceholderDrilldown(source.DisplayName)
                 : () => provider.CreateDrilldownView(date);
+            Func<Task>? addAction = provider is IDataSourceDayActionProvider actionProvider
+                ? () => actionProvider.AddForDayAsync(date)
+                : null;
 
             DayCards.Add(new DataSourceDayCardViewModel(
                 source.DataSourceId,
@@ -245,7 +350,13 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                 _dataSourceRepository,
                 card => DrilldownCard = card,
                 compactSummaryView,
-                drilldownViewFactory));
+                drilldownViewFactory,
+                addAction));
+        }
+
+        if (previousDrilldownSourceKey is not null)
+        {
+            DrilldownCard = DayCards.FirstOrDefault(c => c.SourceKey == previousDrilldownSourceKey);
         }
 
         OnPropertyChanged(nameof(DayModeSourceListVisibility));
@@ -277,17 +388,20 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     {
         IsLoadingGlobal = true;
         Sources.Clear();
+        SourceDataInViewSources.Clear();
+        OtherSources.Clear();
         OnSourceCollectionChanged();
 
         try
         {
             var sources = await _dataSourceRepository.GetAllSourcesAsync(ct);
             var summaries = new List<DataSourceSummaryViewModel>();
+            var viewRange = _viewRangeProvider.GetCurrentViewDisplayRange();
 
             foreach (var source in sources.OrderBy(source => source.DisplayName, StringComparer.CurrentCultureIgnoreCase))
             {
                 var lastImport = await _dataSourceRepository.GetLastImportAsync(source.DataSourceId, ct);
-                summaries.Add(CreateSummary(source, lastImport));
+                summaries.Add(await CreateSummaryAsync(source, lastImport, viewRange.From, viewRange.To, ct));
             }
 
             var existingSourceKeys = sources
@@ -310,6 +424,14 @@ public sealed class DataSourcePanelViewModel : ObservableObject
             foreach (var summary in summaries)
             {
                 Sources.Add(summary);
+                if (summary.HasDataInCurrentView)
+                {
+                    SourceDataInViewSources.Add(summary);
+                }
+                else
+                {
+                    OtherSources.Add(summary);
+                }
             }
         }
         finally
@@ -319,7 +441,12 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         }
     }
 
-    private DataSourceSummaryViewModel CreateSummary(DataSource source, DataSourceImportLog? lastImport)
+    private async Task<DataSourceSummaryViewModel> CreateSummaryAsync(
+        DataSource source,
+        DataSourceImportLog? lastImport,
+        DateOnly viewFrom,
+        DateOnly viewTo,
+        CancellationToken ct)
     {
         var lastDataDateLabel = lastImport is null
             ? "Never imported"
@@ -328,13 +455,23 @@ public sealed class DataSourcePanelViewModel : ObservableObject
             ? null
             : RelativeTimeFormatter.FormatElapsed(lastImport.ImportedAt, _timeProvider.GetLocalNow().DateTime);
 
+        IReadOnlyList<DataSourceDayDataMarkerViewModel> dayDataMarkers = [];
+        if (_cardProviderRegistry.GetProvider(source.SourceKey) is IDataSourceViewDataProvider viewDataProvider)
+        {
+            var dayData = await viewDataProvider.GetDataForRangeAsync(viewFrom, viewTo, ct);
+            dayDataMarkers = dayData
+                .Select(item => new DataSourceDayDataMarkerViewModel(item.Date, item.HasData, item.Count))
+                .ToList();
+        }
+
         return new DataSourceSummaryViewModel(
             source.DataSourceId,
             source.SourceKey,
             source.DisplayName,
             lastDataDateLabel,
             lastImportedRelativeLabel,
-            _importHandlerRegistry);
+            _importHandlerRegistry,
+            dayDataMarkers);
     }
 
     private static string FormatSourceKey(string sourceKey)
@@ -354,6 +491,16 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         }
 
         _dispatcherQueue.TryEnqueue(() => _ = LoadSourcesAsync());
+    }
+
+    private void ReloadSourcesForCurrentViewOnUiThread()
+    {
+        if (!IsGlobalMode)
+        {
+            return;
+        }
+
+        ReloadSourcesOnUiThread();
     }
 
     private void ApplySelectedDay(DateOnly? selectedDay)
@@ -389,6 +536,12 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(EmptyGlobalStateVisibility));
         OnPropertyChanged(nameof(SourceListVisibility));
+        OnPropertyChanged(nameof(SourceDataInViewVisibility));
+        OnPropertyChanged(nameof(SourceDataInViewHeader));
+        OnPropertyChanged(nameof(SourceDataInViewListVisibility));
+        OnPropertyChanged(nameof(OtherSourcesVisibility));
+        OnPropertyChanged(nameof(OtherSourcesHeader));
+        OnPropertyChanged(nameof(OtherSourcesListVisibility));
     }
 
     private async Task OpenSelectedDayNameEventAsync()

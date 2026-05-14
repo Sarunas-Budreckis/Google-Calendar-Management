@@ -99,7 +99,7 @@ public sealed class WeekTimedEventProjectionBuilderTests
                 var startMinute = (index % 2) * 30;
                 var start = new TimeOnly(startHour, startMinute);
                 var end = start.AddMinutes(30);
-                return CreateTimedEvent($"evt-{index}", $"Event {index}", weekStart.AddDays(dayOffset), start, end, "#0088CC");
+                return CreateTimedEvent($"evt-{index}", $"Event {index}", weekStart.AddDays(dayOffset), start, end, "#00AAFF");
             })
             .ToArray();
 

@@ -4,9 +4,9 @@
 
 **Story files MUST be placed at:**
 ```
-docs/epic-{N}/stories/{story_key}.md
+docs/epic-{N}-{slug}/stories/{story_key}.md
 ```
-For example: `docs/epic-3/stories/3-4-create-event-details-panel.md`
+For example: `docs/epic-3-ui-event-management/stories/3-4-create-event-details-panel.md`
 
 **Sprint status file is at:**
 ```
@@ -14,7 +14,7 @@ docs/sprint-status.yaml
 ```
 
 **Do NOT write stories to `_bmad-output/implementation-artifacts/`.**
-The `implementation_artifacts` config variable resolves to `docs/`, and story output paths include the `epic-{N}/stories/` subdirectory.
+The `implementation_artifacts` config variable resolves to `docs/`, and story output paths include the named `epic-{N}-{slug}/stories/` subdirectory.
 
 ## Planning Artifacts
 

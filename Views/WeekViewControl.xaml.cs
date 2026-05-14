@@ -20,6 +20,7 @@ namespace GoogleCalendarManagement.Views;
 public sealed partial class WeekViewControl : Page
 {
     private static CornerRadius ElementCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusElement"];
+    private static CornerRadius HalfElementCornerRadius { get { var r = ElementCornerRadius; return new CornerRadius(r.TopLeft / 2, r.TopRight / 2, r.BottomRight / 2, r.BottomLeft / 2); } }
 
     private const double MinimumDayColumnWidth = 100;
     private const double HorizontalChromeAllowance = 20;
@@ -420,14 +421,14 @@ public sealed partial class WeekViewControl : Page
         {
             Padding = new Thickness(4),
             Opacity = item.Opacity,
-            CornerRadius = ElementCornerRadius,
+            CornerRadius = HalfElementCornerRadius,
             Background = ToBrush(item.DisplayColorHex),
             BorderBrush = item.IsPendingDelete ? PendingDeleteBorderBrush : TransparentPanelBrush,
             BorderThickness = item.IsPendingDelete ? new Thickness(2) : new Thickness(0),
             Child = new TextBlock
             {
                     Text = GetDisplayTitle(item),
-                Foreground = new SolidColorBrush(Colors.White),
+                Foreground = new SolidColorBrush(Colors.Black),
                 FontSize = 12,
                 TextTrimming = TextTrimming.CharacterEllipsis
             }
@@ -522,7 +523,7 @@ public sealed partial class WeekViewControl : Page
         {
             transform.Y = 0;
         }
-        border.CornerRadius = ElementCornerRadius;
+        border.CornerRadius = HalfElementCornerRadius;
         border.Background = ToBrush(item.ColorHex);
         border.BorderBrush = item.IsPendingDelete ? PendingDeleteBorderBrush : item.UseOverlapOutline ? OverlapOutlineBrush : null;
         border.BorderThickness = item.IsPendingDelete || item.UseOverlapOutline ? new Thickness(item.IsPendingDelete ? 2 : 1) : new Thickness(0);
@@ -1411,7 +1412,7 @@ public sealed partial class WeekViewControl : Page
     {
         var timeLabel = new TextBlock
         {
-            Foreground = new SolidColorBrush(Colors.White),
+            Foreground = new SolidColorBrush(Colors.Black),
             FontSize = 11,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             Margin = new Thickness(4, 2, 4, 0),

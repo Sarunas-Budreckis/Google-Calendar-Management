@@ -52,7 +52,7 @@ public sealed class PendingEventPublishServiceTests : IDisposable
         {
             InsertHandler = request =>
             {
-                request.ColorId.Should().Be("10");
+                request.ColorId.Should().Be("2");
                 return Task.FromResult(GoogleCalendarWriteResult.Ok(new GcalEventDto(
                     "evt-new",
                     request.CalendarId,
@@ -228,7 +228,7 @@ public sealed class PendingEventPublishServiceTests : IDisposable
         {
             InsertHandler = request =>
             {
-                request.ColorId.Should().Be("7");
+                request.ColorId.Should().Be("1");
                 return Task.FromResult(GoogleCalendarWriteResult.Ok(new GcalEventDto(
                     "evt-color-1",
                     request.CalendarId,

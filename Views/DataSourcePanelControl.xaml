@@ -8,11 +8,103 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Loaded="DataSourcePanelControl_Loaded">
+    <UserControl.Resources>
+        <DataTemplate x:Key="GlobalSourceCardTemplate">
+            <Border
+                Margin="8,4"
+                Padding="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel
+                        Grid.Column="0"
+                        MinWidth="0"
+                        Spacing="4">
+                        <TextBlock
+                            FontWeight="SemiBold"
+                            Text="{Binding DisplayName}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                        <ItemsControl
+                            ItemsSource="{Binding DayDataMarkers}"
+                            Visibility="{Binding DayDataMarkersVisibility}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="3" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Width="28"
+                                        Height="30"
+                                        Background="{Binding BackgroundBrush}"
+                                        CornerRadius="3">
+                                        <StackPanel
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Spacing="0">
+                                            <TextBlock
+                                                FontSize="9"
+                                                Text="{Binding DayLabel}"
+                                                TextAlignment="Center" />
+                                            <TextBlock
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Text="{Binding CountLabel}"
+                                                TextAlignment="Center" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock
+                            Opacity="0.72"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{Binding LastDataDateDisplayLabel}"
+                            TextWrapping="WrapWholeWords" />
+                        <TextBlock
+                            Opacity="0.58"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{Binding LastImportedDisplayLabel}"
+                            TextWrapping="WrapWholeWords"
+                            Visibility="{Binding LastImportedVisibility}" />
+                    </StackPanel>
+
+                    <StackPanel
+                        Grid.Column="1"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="6">
+                        <Button
+                            Command="{Binding ImportCommand}"
+                            Content="{Binding ImportButtonContent}"
+                            IsEnabled="{Binding IsImportEnabled}" />
+                        <ProgressRing
+                            Width="18"
+                            Height="18"
+                            IsActive="{Binding IsImporting}"
+                            Visibility="{Binding ImportProgressVisibility}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
 
     <Grid>
         <!-- Full panel (visible when not minimized) -->
         <Border
-            Width="280"
+            Width="{x:Bind ViewModel.PanelWidth, Mode=OneWay}"
+            MinWidth="160"
+            HorizontalAlignment="Left"
             VerticalAlignment="Stretch"
             Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -31,20 +123,26 @@
                     Padding="12,8"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="0,0,0,1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <TextBlock
+                        Grid.Row="0"
                         Grid.Column="0"
                         VerticalAlignment="Center"
                         Style="{StaticResource SubtitleTextBlockStyle}"
-                        Text="Data Sources"
-                        Visibility="{x:Bind ViewModel.GlobalModeVisibility, Mode=OneWay}" />
+                        Text="Data Sources" />
 
                     <StackPanel
+                        Grid.Row="1"
                         Grid.Column="0"
+                        Margin="0,4,0,0"
                         MinWidth="0"
                         VerticalAlignment="Center"
                         Spacing="2"
@@ -64,7 +162,9 @@
                     </StackPanel>
 
                     <Button
+                        Grid.Row="0"
                         Grid.Column="1"
+                        Grid.RowSpan="2"
                         Width="32"
                         Height="32"
                         Padding="0"
@@ -81,9 +181,16 @@
                 <Grid
                     Grid.Row="1"
                     Visibility="{x:Bind ViewModel.GlobalModeVisibility, Mode=OneWay}">
+                    <TextBlock
+                        Margin="12,6,12,0"
+                        Opacity="0.72"
+                        Text="No day selected"
+                        TextWrapping="WrapWholeWords"
+                        VerticalAlignment="Top" />
+
                     <ScrollViewer Visibility="{x:Bind ViewModel.EmptyGlobalStateVisibility, Mode=OneWay}">
                         <TextBlock
-                            Margin="12,24"
+                            Margin="12,48,12,24"
                             HorizontalAlignment="Center"
                             Opacity="0.6"
                             Text="No data sources configured"
@@ -91,61 +198,59 @@
                             TextWrapping="WrapWholeWords" />
                     </ScrollViewer>
 
-                    <ListView
-                        Padding="0,4"
-                        ItemsSource="{x:Bind ViewModel.Sources, Mode=OneWay}"
-                        SelectionMode="None"
+                    <ScrollViewer
+                        Padding="0,30,0,4"
                         Visibility="{x:Bind ViewModel.SourceListVisibility, Mode=OneWay}">
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Padding="12,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel
-                                        Grid.Column="0"
-                                        MinWidth="0"
-                                        Spacing="2">
+                        <StackPanel Spacing="8">
+                            <StackPanel Visibility="{x:Bind ViewModel.SourceDataInViewVisibility, Mode=OneWay}">
+                                <Button
+                                    Margin="8,0"
+                                    Padding="4,6"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Command="{x:Bind ViewModel.ToggleSourceDataInViewCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon
+                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                            FontSize="11"
+                                            Glyph="{x:Bind ViewModel.SourceDataInViewChevronGlyph, Mode=OneWay}" />
                                         <TextBlock
                                             FontWeight="SemiBold"
-                                            Text="{Binding DisplayName}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="NoWrap" />
-                                        <TextBlock
-                                            Opacity="0.72"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="{Binding LastDataDateDisplayLabel}"
-                                            TextWrapping="WrapWholeWords" />
-                                        <TextBlock
-                                            Opacity="0.58"
-                                            Style="{StaticResource CaptionTextBlockStyle}"
-                                            Text="{Binding LastImportedDisplayLabel}"
-                                            TextWrapping="WrapWholeWords"
-                                            Visibility="{Binding LastImportedVisibility}" />
+                                            Text="{x:Bind ViewModel.SourceDataInViewHeader, Mode=OneWay}" />
                                     </StackPanel>
+                                </Button>
+                                <ItemsControl
+                                    ItemTemplate="{StaticResource GlobalSourceCardTemplate}"
+                                    ItemsSource="{x:Bind ViewModel.SourceDataInViewSources, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.SourceDataInViewListVisibility, Mode=OneWay}" />
+                            </StackPanel>
 
-                                    <StackPanel
-                                        Grid.Column="1"
-                                        Margin="8,0,0,0"
-                                        VerticalAlignment="Center"
-                                        Orientation="Horizontal"
-                                        Spacing="6">
-                                        <Button
-                                            Command="{Binding ImportCommand}"
-                                            Content="{Binding ImportButtonContent}"
-                                            IsEnabled="{Binding IsImportEnabled}" />
-                                        <ProgressRing
-                                            Width="18"
-                                            Height="18"
-                                            IsActive="{Binding IsImporting}"
-                                            Visibility="{Binding ImportProgressVisibility}" />
+                            <!-- Other data sources: no outer margin so cards stay full-width -->
+                            <StackPanel
+                                Visibility="{x:Bind ViewModel.OtherSourcesVisibility, Mode=OneWay}">
+                                <Button
+                                    Margin="8,0"
+                                    Padding="4,6"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    Command="{x:Bind ViewModel.ToggleOtherSourcesCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon
+                                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                            FontSize="11"
+                                            Glyph="{x:Bind ViewModel.OtherSourcesChevronGlyph, Mode=OneWay}" />
+                                        <TextBlock
+                                            FontWeight="SemiBold"
+                                            Text="{x:Bind ViewModel.OtherSourcesHeader, Mode=OneWay}" />
                                     </StackPanel>
-                                </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                                </Button>
+                                <ItemsControl
+                                    ItemTemplate="{StaticResource GlobalSourceCardTemplate}"
+                                    ItemsSource="{x:Bind ViewModel.OtherSources, Mode=OneWay}"
+                                    Visibility="{x:Bind ViewModel.OtherSourcesListVisibility, Mode=OneWay}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
 
                     <Grid
                         Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
@@ -164,20 +269,27 @@
                     Grid.Row="1"
                     Visibility="{x:Bind ViewModel.DayModeVisibility, Mode=OneWay}">
                     <ListView
-                        Padding="0,4"
+                        Padding="0,1"
                         ItemsSource="{x:Bind ViewModel.DayCards, Mode=OneWay}"
                         SelectionMode="None"
                         Visibility="{x:Bind ViewModel.DayModeSourceListVisibility, Mode=OneWay}">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="MinHeight" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <Border
-                                    Margin="8,4"
-                                    Padding="8"
+                                    Margin="4,1"
+                                    Padding="4"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
-                                    CornerRadius="6">
-                                    <Grid ColumnSpacing="8">
+                                    CornerRadius="5">
+                                    <Grid ColumnSpacing="3">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
@@ -186,36 +298,56 @@
 
                                         <CheckBox
                                             Grid.Column="0"
+                                            Width="16"
+                                            Height="18"
+                                            MinWidth="0"
+                                            Padding="0"
                                             VerticalAlignment="Top"
                                             Command="{Binding ToggleIntegrationCommand}"
                                             IsChecked="{Binding IsIntegrated, Mode=OneWay}"
-                                            IsEnabled="{Binding IsIntegrationEnabled}" />
+                                            IsEnabled="{Binding IsIntegrationEnabled}"
+                                            ToolTipService.ToolTip="Mark Integrated" />
 
                                         <StackPanel
                                             Grid.Column="1"
+                                            HorizontalAlignment="Stretch"
                                             MinWidth="0"
-                                            Spacing="4">
+                                            Spacing="2">
                                             <TextBlock
+                                                HorizontalAlignment="Left"
+                                                FontSize="12"
                                                 FontWeight="SemiBold"
+                                                TextAlignment="Left"
                                                 Text="{Binding DisplayName}"
                                                 TextTrimming="CharacterEllipsis"
                                                 TextWrapping="NoWrap" />
                                             <ContentPresenter Content="{Binding CompactSummaryView}" />
                                         </StackPanel>
 
-                                        <Button
+                                        <!-- Add button on top, drill-down below -->
+                                        <StackPanel
                                             Grid.Column="2"
-                                            Width="32"
-                                            Height="32"
-                                            Padding="0"
                                             VerticalAlignment="Top"
-                                            Command="{Binding ExpandCommand}"
-                                            ToolTipService.ToolTip="Open details">
-                                            <FontIcon
-                                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                FontSize="12"
-                                                Glyph="&#xE76C;" />
-                                        </Button>
+                                            Spacing="1">
+                                            <Button
+                                                Padding="4,1"
+                                                Command="{Binding AddCommand}"
+                                                Content="Add"
+                                                FontSize="11"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Visibility="{Binding AddButtonVisibility}" />
+                                            <Button
+                                                Width="20"
+                                                Height="20"
+                                                Padding="0"
+                                                Command="{Binding ExpandCommand}"
+                                                ToolTipService.ToolTip="Drill down">
+                                                <FontIcon
+                                                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                    FontSize="8"
+                                                    Glyph="&#xE76C;" />
+                                            </Button>
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -265,6 +397,20 @@
                         </ScrollViewer>
                     </Grid>
                 </Grid>
+
+                <!-- Resize handle — transparent strip at right edge, spans full height -->
+                <Rectangle
+                    Grid.RowSpan="2"
+                    Width="6"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Stretch"
+                    Fill="Transparent"
+                    PointerEntered="ResizeHandle_PointerEntered"
+                    PointerExited="ResizeHandle_PointerExited"
+                    PointerPressed="ResizeHandle_PointerPressed"
+                    PointerMoved="ResizeHandle_PointerMoved"
+                    PointerReleased="ResizeHandle_PointerReleased"
+                    PointerCaptureLost="ResizeHandle_PointerCaptureLost" />
             </Grid>
         </Border>
 

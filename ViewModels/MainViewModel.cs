@@ -16,7 +16,7 @@ using Windows.Storage;
 
 namespace GoogleCalendarManagement.ViewModels;
 
-public sealed class MainViewModel : ObservableObject
+public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
 {
     private const int YearViewPreloadRadius = 5;
     private readonly ICalendarQueryService _calendarQueryService;
@@ -404,6 +404,11 @@ public sealed class MainViewModel : ObservableObject
     public (DateOnly From, DateOnly To) GetVisibleDateRange()
     {
         return GetDateRange(CurrentViewMode, CurrentDate);
+    }
+
+    public (DateOnly From, DateOnly To) GetCurrentViewDisplayRange()
+    {
+        return GetDisplayDateRange(CurrentViewMode, CurrentDate);
     }
 
     public async Task<(DateOnly From, DateOnly To)> GetExportDateRangeDefaultsAsync(CancellationToken ct = default)
@@ -950,6 +955,7 @@ public sealed class MainViewModel : ObservableObject
                 UpdateSyncPresentation(yearViewData.SyncStatusMap, yearViewData.LastSyncTime);
                 CurrentEvents = yearViewData.Events;
                 BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
+                PublishViewRangeChanged();
                 await _navigationStateService.SaveAsync(CreateNavigationState(), ct);
                 await LoadPendingPublishItemsAsync(ct);
                 StartYearViewPreloads(CurrentDate.Year);
@@ -967,6 +973,7 @@ public sealed class MainViewModel : ObservableObject
             UpdateSyncPresentation(syncStatusTask.Result, lastSyncTask.Result);
             CurrentEvents = eventsTask.Result;
             BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
+            PublishViewRangeChanged();
             await _navigationStateService.SaveAsync(CreateNavigationState(), ct);
             await LoadPendingPublishItemsAsync(ct);
         }
@@ -980,6 +987,7 @@ public sealed class MainViewModel : ObservableObject
             _logger.LogError(ex, "Unable to refresh the calendar view for {ViewMode} on {Date}.", CurrentViewMode, CurrentDate);
             CurrentEvents = [];
             BreadcrumbLabel = BuildBreadcrumb(CurrentViewMode, CurrentDate);
+            PublishViewRangeChanged();
         }
         finally
         {
@@ -1485,6 +1493,12 @@ public sealed class MainViewModel : ObservableObject
         return GetDateRange(CurrentViewMode, CurrentDate);
     }
 
+    private void PublishViewRangeChanged()
+    {
+        var (from, to) = GetCurrentViewDisplayRange();
+        WeakReferenceMessenger.Default.Send(new CalendarViewRangeChangedMessage(from, to));
+    }
+
     private void UpdateSyncValidation()
     {
         var from = DateOnly.FromDateTime(SelectedSyncFromDate.Date);
@@ -1508,6 +1522,18 @@ public sealed class MainViewModel : ObservableObject
             ViewMode.Day => (date, date),
             _ => (date, date)
         };
+    }
+
+    private static (DateOnly From, DateOnly To) GetDisplayDateRange(ViewMode viewMode, DateOnly date)
+    {
+        if (viewMode != ViewMode.Month)
+        {
+            return GetDateRange(viewMode, date);
+        }
+
+        var firstDay = new DateOnly(date.Year, date.Month, 1);
+        var lastDay = new DateOnly(date.Year, date.Month, DateTime.DaysInMonth(date.Year, date.Month));
+        return (GetWeekRange(firstDay).From, GetWeekRange(lastDay).To);
     }
 
     /// <summary>

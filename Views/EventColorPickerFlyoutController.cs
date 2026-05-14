@@ -191,7 +191,7 @@ public sealed class EventColorPickerFlyoutController
             Width = SwatchSize,
             Height = SwatchSize,
             CornerRadius = new CornerRadius(999),
-            Background = CreateBrush(option.Hex),
+            Background = CreateBrush(option.DisplayHex),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Child = checkIcon

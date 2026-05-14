@@ -84,7 +84,7 @@ public sealed class CalendarQueryServiceTests : IDisposable
 
         events.Should().ContainSingle();
         events[0].Title.Should().BeEmpty();
-        events[0].ColorHex.Should().Be("#0088CC");
+        events[0].ColorHex.Should().Be("#00AAFF");
         events[0].ColorKey.Should().Be("azure");
     }
 

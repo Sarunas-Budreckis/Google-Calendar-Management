@@ -20,8 +20,9 @@ namespace GoogleCalendarManagement.Views;
 public sealed partial class DayViewControl : Page
 {
     private static CornerRadius ElementCornerRadius => (CornerRadius)Application.Current.Resources["AppCornerRadiusElement"];
+    private static CornerRadius HalfElementCornerRadius { get { var r = ElementCornerRadius; return new CornerRadius(r.TopLeft / 2, r.TopRight / 2, r.BottomRight / 2, r.BottomLeft / 2); } }
 
-    private const double EventBottomGap = 3.0;
+    private const double EventBottomGap = 2.0;
     private const double MinimumEventHeight = 15.0;
     private const double StandardTopPadding = 6.0;
     private const double ShortEventContentHeightEstimate = 16.0;
@@ -241,14 +242,14 @@ public sealed partial class DayViewControl : Page
                 Tag = item.EventId,
                 Padding = new Thickness(8),
                 Opacity = item.Opacity,
-                CornerRadius = ElementCornerRadius,
+                CornerRadius = HalfElementCornerRadius,
                 Background = ToBrush(item.DisplayColorHex),
                 BorderBrush = item.IsPendingDelete ? PendingDeleteBorderBrush : TransparentPanelBrush,
                 BorderThickness = item.IsPendingDelete ? new Thickness(2) : new Thickness(0),
                 Child = new TextBlock
                 {
                     Text = GetDisplayTitle(item),
-                    Foreground = new SolidColorBrush(Colors.White)
+                    Foreground = new SolidColorBrush(Colors.Black)
                 }
             };
 
@@ -309,7 +310,7 @@ public sealed partial class DayViewControl : Page
             var topOffset = minutesFromDayStart / 60.0 * TimeFocusedViewLayoutMetrics.HourRowHeight;
             var pixelHeight = durationMinutes / 60.0 * TimeFocusedViewLayoutMetrics.HourRowHeight;
             var eventHeight = Math.Max(MinimumEventHeight, pixelHeight - EventBottomGap);
-            var white = new SolidColorBrush(Colors.White);
+            var black = new SolidColorBrush(Colors.Black);
 
             UIElement content;
             Thickness padding;
@@ -322,7 +323,7 @@ public sealed partial class DayViewControl : Page
                 content = new TextBlock
                 {
                     Text = $"{GetDisplayTitle(item)}, {GetDisplayStartTime(item, segment).ToString("t", culture)}",
-                    Foreground = white,
+                    Foreground = black,
                     FontSize = 11,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                     TextTrimming = TextTrimming.CharacterEllipsis
@@ -342,7 +343,7 @@ public sealed partial class DayViewControl : Page
                         new TextBlock
                         {
                             Text = GetDisplayTitle(item),
-                            Foreground = white,
+                            Foreground = black,
                             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                             FontSize = 12,
                             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -352,7 +353,7 @@ public sealed partial class DayViewControl : Page
                         new TextBlock
                         {
                             Text = $"{GetDisplayStartTime(item, segment).ToString("t", culture)} - {GetDisplayEndTime(item, segment).ToString("t", culture)}",
-                            Foreground = white,
+                            Foreground = black,
                             FontSize = 11
                         }
                     }
@@ -368,7 +369,7 @@ public sealed partial class DayViewControl : Page
                 Opacity = item.Opacity,
                 VerticalAlignment = VerticalAlignment.Top,
                 Padding = padding,
-                CornerRadius = ElementCornerRadius,
+                CornerRadius = HalfElementCornerRadius,
                 Background = ToBrush(item.DisplayColorHex),
                 BorderBrush = item.IsPendingDelete ? PendingDeleteBorderBrush : TransparentPanelBrush,
                 BorderThickness = item.IsPendingDelete ? new Thickness(2) : new Thickness(0),
@@ -1029,10 +1030,10 @@ public sealed partial class DayViewControl : Page
 
     private static (Border PreviewBorder, TextBlock TimeLabel) CreateDraftPreviewElement()
     {
-        var white = new SolidColorBrush(Colors.White);
+        var black = new SolidColorBrush(Colors.Black);
         var timeLabel = new TextBlock
         {
-            Foreground = white,
+            Foreground = black,
             FontSize = 11,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             Margin = new Thickness(6, 4, 6, 4)

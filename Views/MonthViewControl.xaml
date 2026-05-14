@@ -28,11 +28,12 @@
                         Margin="0,0,6,0"
                         VerticalAlignment="Center"
                         FontSize="12"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        Foreground="White" />
                     <TextBlock
                         Grid.Column="2"
                         VerticalAlignment="Center"
                         FontSize="12"
+                        Foreground="White"
                         MaxLines="1"
                         TextTrimming="CharacterEllipsis" />
                 </Grid>

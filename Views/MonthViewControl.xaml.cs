@@ -422,7 +422,7 @@ public sealed partial class MonthViewControl : Page
             Child = new TextBlock
             {
                 Text = GetDisplayTitle(item),
-                Foreground = new SolidColorBrush(Colors.White),
+                Foreground = new SolidColorBrush(Colors.Black),
                 FontSize = 12,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 MaxLines = 1
@@ -548,7 +548,9 @@ public sealed partial class MonthViewControl : Page
 
         dot.Fill = ToBrush(item.DisplayColorHex);
         timeTextBlock.Text = item.StartLocal.ToString("h:mm tt", culture);
+        timeTextBlock.Foreground = new SolidColorBrush(Colors.White);
         titleTextBlock.Text = GetDisplayTitle(item);
+        titleTextBlock.Foreground = new SolidColorBrush(Colors.White);
     }
 
     private void TimedEventRow_Tapped(object sender, TappedRoutedEventArgs e)
@@ -703,7 +705,7 @@ public sealed partial class MonthViewControl : Page
             Child = new TextBlock
             {
                 Text = GetDisplayTitle(item),
-                Foreground = new SolidColorBrush(Colors.White),
+                Foreground = new SolidColorBrush(Colors.Black),
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 MaxLines = 1
             }
@@ -751,7 +753,7 @@ public sealed partial class MonthViewControl : Page
         {
             Text = item.StartLocal.ToString("h:mm tt", culture),
             Margin = new Thickness(0, 0, 6, 0),
-            Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Foreground = new SolidColorBrush(Colors.White),
             VerticalAlignment = VerticalAlignment.Center
         };
         Grid.SetColumn(timeText, 1);
@@ -760,6 +762,7 @@ public sealed partial class MonthViewControl : Page
         var titleText = new TextBlock
         {
             Text = GetDisplayTitle(item),
+            Foreground = new SolidColorBrush(Colors.White),
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxLines = 1,
             VerticalAlignment = VerticalAlignment.Center

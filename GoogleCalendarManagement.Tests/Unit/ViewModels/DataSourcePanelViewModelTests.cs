@@ -238,6 +238,138 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadDayMode_WhenCardProviderHasNoData_GreysIntegrationCheckbox()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources = [new DataSource { DataSourceId = 7, SourceKey = "toggl_sleep", DisplayName = "Toggl Sleep" }]
+        };
+        var cardProviderRegistry = new DataSourceCardProviderRegistry();
+        cardProviderRegistry.Register(new StubCardProvider("toggl_sleep", hasData: false));
+        var viewModel = CreateViewModel(repository, cardProviderRegistry: cardProviderRegistry);
+
+        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+
+        var card = viewModel.DayCards.Single();
+        card.IsGreyedOut.Should().BeTrue();
+        card.IsIntegrationEnabled.Should().BeFalse();
+        card.ToggleIntegrationCommand.CanExecute(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task LoadDayMode_UsesIntegrationStatusForSelectedDate()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources = [new DataSource { DataSourceId = 7, SourceKey = "toggl", DisplayName = "Toggl" }],
+            Integrations =
+            {
+                [(new DateOnly(2026, 05, 13), 7)] = true,
+                [(new DateOnly(2026, 05, 14), 7)] = false
+            }
+        };
+        var viewModel = CreateViewModel(repository);
+
+        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+        viewModel.DayCards.Single().IsIntegrated.Should().BeTrue();
+
+        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 14));
+        viewModel.DayCards.Single().IsIntegrated.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task LoadSources_GroupsCurrentViewDataSourcesAndOtherSources()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources =
+            [
+                new DataSource { DataSourceId = 7, SourceKey = "toggl_sleep", DisplayName = "Toggl Sleep" },
+                new DataSource { DataSourceId = 8, SourceKey = "oura", DisplayName = "Oura" }
+            ]
+        };
+        var cardProviderRegistry = new DataSourceCardProviderRegistry();
+        cardProviderRegistry.Register(new StubCardProvider("toggl_sleep", hasData: true)
+        {
+            RangeData =
+            [
+                new DataSourceDayData(new DateOnly(2026, 05, 11), false),
+                new DataSourceDayData(new DateOnly(2026, 05, 12), true, 2),
+                new DataSourceDayData(new DateOnly(2026, 05, 13), false),
+                new DataSourceDayData(new DateOnly(2026, 05, 14), false),
+                new DataSourceDayData(new DateOnly(2026, 05, 15), false),
+                new DataSourceDayData(new DateOnly(2026, 05, 16), false),
+                new DataSourceDayData(new DateOnly(2026, 05, 17), false)
+            ]
+        });
+        var viewModel = CreateViewModel(repository, cardProviderRegistry: cardProviderRegistry);
+
+        await viewModel.LoadSourcesAsync();
+
+        viewModel.SourceDataInViewSources.Select(source => source.DisplayName).Should().Equal("Toggl Sleep");
+        viewModel.OtherSources.Select(source => source.DisplayName).Should().Equal("Oura");
+        viewModel.SourceDataInViewSources.Single().DayDataMarkers.Should().HaveCount(7);
+        viewModel.SourceDataInViewSources.Single().DayDataMarkers[1].CountLabel.Should().Be("2");
+    }
+
+    [Fact]
+    public async Task CalendarViewRangeChangedMessage_WhenGlobalMode_ReloadsWeekMarkersForNewRange()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources = [new DataSource { DataSourceId = 7, SourceKey = "toggl_sleep", DisplayName = "Toggl Sleep" }]
+        };
+        var rangeProvider = new StubCalendarViewRangeProvider
+        {
+            Range = (new DateOnly(2026, 05, 11), new DateOnly(2026, 05, 17))
+        };
+        var cardProviderRegistry = new DataSourceCardProviderRegistry();
+        cardProviderRegistry.Register(new StubCardProvider("toggl_sleep", hasData: true)
+        {
+            RangeDataFactory = (from, _) =>
+            [
+                new DataSourceDayData(from, true, from.Day == 11 ? 1 : 3),
+                new DataSourceDayData(from.AddDays(1), false),
+                new DataSourceDayData(from.AddDays(2), false),
+                new DataSourceDayData(from.AddDays(3), false),
+                new DataSourceDayData(from.AddDays(4), false),
+                new DataSourceDayData(from.AddDays(5), false),
+                new DataSourceDayData(from.AddDays(6), false)
+            ]
+        });
+        var viewModel = CreateViewModel(
+            repository,
+            cardProviderRegistry: cardProviderRegistry,
+            viewRangeProvider: rangeProvider);
+        await viewModel.LoadSourcesAsync();
+
+        rangeProvider.Range = (new DateOnly(2026, 05, 18), new DateOnly(2026, 05, 24));
+        WeakReferenceMessenger.Default.Send(new CalendarViewRangeChangedMessage(rangeProvider.Range.From, rangeProvider.Range.To));
+        await repository.WaitForGetAllSourcesCallsAsync(2);
+
+        viewModel.SourceDataInViewSources.Single().DayDataMarkers[0].Date.Should().Be(new DateOnly(2026, 05, 18));
+        viewModel.SourceDataInViewSources.Single().DayDataMarkers[0].CountLabel.Should().Be("3");
+    }
+
+    [Fact]
+    public async Task LoadDayMode_WhenProviderSupportsAdd_AddCommandInvokesProviderAction()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources = [new DataSource { DataSourceId = 7, SourceKey = "toggl_sleep", DisplayName = "Toggl Sleep" }]
+        };
+        var provider = new StubCardProvider("toggl_sleep", hasData: true) { SupportsAdd = true };
+        var cardProviderRegistry = new DataSourceCardProviderRegistry();
+        cardProviderRegistry.Register(provider);
+        var viewModel = CreateViewModel(repository, cardProviderRegistry: cardProviderRegistry);
+
+        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+        await viewModel.DayCards.Single().AddCommand.ExecuteAsync(null);
+
+        provider.AddedDates.Should().Equal(new DateOnly(2026, 05, 13));
+    }
+
+    [Fact]
     public async Task ExpandCard_SetsDrilldownCard()
     {
         var repository = new StubDataSourceRepository
@@ -273,6 +405,162 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         viewModel.DayModeDrilldownVisibility.Should().Be(Visibility.Collapsed);
     }
 
+    [Fact]
+    public async Task LoadDayMode_WhenDrilledDown_RestoresDrilldownOnDayChange()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources = [new DataSource { DataSourceId = 1, SourceKey = "toggl", DisplayName = "Toggl" }]
+        };
+        var viewModel = CreateViewModel(repository);
+
+        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+        viewModel.DayCards.Single().ExpandCommand.Execute(null);
+        viewModel.DrilldownCard.Should().NotBeNull();
+
+        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 14));
+
+        viewModel.DrilldownCard.Should().NotBeNull();
+        viewModel.DrilldownCard!.SourceKey.Should().Be("toggl");
+        viewModel.DayModeDrilldownVisibility.Should().Be(Visibility.Visible);
+        viewModel.DayModeSourceListVisibility.Should().Be(Visibility.Collapsed);
+    }
+
+    [Fact]
+    public async Task LoadDayMode_WhenNotDrilledDown_DoesNotRestoreDrilldownOnDayChange()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources = [new DataSource { DataSourceId = 1, SourceKey = "toggl", DisplayName = "Toggl" }]
+        };
+        var viewModel = CreateViewModel(repository);
+
+        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 14));
+
+        viewModel.DrilldownCard.Should().BeNull();
+        viewModel.DayModeSourceListVisibility.Should().Be(Visibility.Visible);
+    }
+
+    [Fact]
+    public async Task SourceDataInViewHeader_ShowsCount()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources =
+            [
+                new DataSource { DataSourceId = 7, SourceKey = "toggl_sleep", DisplayName = "Toggl Sleep" },
+                new DataSource { DataSourceId = 8, SourceKey = "oura", DisplayName = "Oura" }
+            ]
+        };
+        var cardProviderRegistry = new DataSourceCardProviderRegistry();
+        cardProviderRegistry.Register(new StubCardProvider("toggl_sleep", hasData: true)
+        {
+            RangeData = [new DataSourceDayData(new DateOnly(2026, 05, 12), true, 1)]
+        });
+        var viewModel = CreateViewModel(repository, cardProviderRegistry: cardProviderRegistry);
+
+        await viewModel.LoadSourcesAsync();
+
+        viewModel.SourceDataInViewHeader.Should().Be("Source data in view (1)");
+    }
+
+    [Fact]
+    public async Task SourceDataInViewSection_AlwaysVisibleWithZeroItems()
+    {
+        var viewModel = CreateViewModel(new StubDataSourceRepository());
+
+        await viewModel.LoadSourcesAsync();
+
+        viewModel.SourceDataInViewSources.Should().BeEmpty();
+        viewModel.SourceDataInViewVisibility.Should().Be(Visibility.Visible);
+        viewModel.SourceDataInViewHeader.Should().Be("Source data in view (0)");
+    }
+
+    [Fact]
+    public async Task ToggleSourceDataInView_TogglesListVisibility()
+    {
+        var viewModel = CreateViewModel(new StubDataSourceRepository());
+        await viewModel.LoadSourcesAsync();
+
+        viewModel.SourceDataInViewIsExpanded.Should().BeTrue();
+        viewModel.SourceDataInViewListVisibility.Should().Be(Visibility.Visible);
+
+        viewModel.ToggleSourceDataInViewCommand.Execute(null);
+
+        viewModel.SourceDataInViewIsExpanded.Should().BeFalse();
+        viewModel.SourceDataInViewListVisibility.Should().Be(Visibility.Collapsed);
+
+        viewModel.ToggleSourceDataInViewCommand.Execute(null);
+
+        viewModel.SourceDataInViewIsExpanded.Should().BeTrue();
+        viewModel.SourceDataInViewListVisibility.Should().Be(Visibility.Visible);
+    }
+
+    [Fact]
+    public async Task OtherSourcesHeader_ShowsCount()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources =
+            [
+                new DataSource { DataSourceId = 7, SourceKey = "toggl_sleep", DisplayName = "Toggl Sleep" },
+                new DataSource { DataSourceId = 8, SourceKey = "oura", DisplayName = "Oura" }
+            ]
+        };
+        var cardProviderRegistry = new DataSourceCardProviderRegistry();
+        cardProviderRegistry.Register(new StubCardProvider("toggl_sleep", hasData: true)
+        {
+            RangeData = [new DataSourceDayData(new DateOnly(2026, 05, 12), true, 1)]
+        });
+        var viewModel = CreateViewModel(repository, cardProviderRegistry: cardProviderRegistry);
+
+        await viewModel.LoadSourcesAsync();
+
+        viewModel.OtherSourcesHeader.Should().Be("Other data sources (1)");
+    }
+
+    [Fact]
+    public async Task OtherSourcesSection_AlwaysVisibleWithZeroOtherItems()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources = [new DataSource { DataSourceId = 7, SourceKey = "toggl_sleep", DisplayName = "Toggl Sleep" }]
+        };
+        var cardProviderRegistry = new DataSourceCardProviderRegistry();
+        cardProviderRegistry.Register(new StubCardProvider("toggl_sleep", hasData: true)
+        {
+            RangeData = [new DataSourceDayData(new DateOnly(2026, 05, 12), true, 1)]
+        });
+        var viewModel = CreateViewModel(repository, cardProviderRegistry: cardProviderRegistry);
+
+        await viewModel.LoadSourcesAsync();
+
+        viewModel.OtherSources.Should().BeEmpty();
+        viewModel.OtherSourcesVisibility.Should().Be(Visibility.Visible);
+        viewModel.OtherSourcesHeader.Should().Be("Other data sources (0)");
+    }
+
+    [Fact]
+    public async Task ToggleOtherSources_TogglesListVisibility()
+    {
+        var viewModel = CreateViewModel(new StubDataSourceRepository());
+        await viewModel.LoadSourcesAsync();
+
+        viewModel.OtherSourcesIsExpanded.Should().BeTrue();
+        viewModel.OtherSourcesListVisibility.Should().Be(Visibility.Visible);
+
+        viewModel.ToggleOtherSourcesCommand.Execute(null);
+
+        viewModel.OtherSourcesIsExpanded.Should().BeFalse();
+        viewModel.OtherSourcesListVisibility.Should().Be(Visibility.Collapsed);
+
+        viewModel.ToggleOtherSourcesCommand.Execute(null);
+
+        viewModel.OtherSourcesIsExpanded.Should().BeTrue();
+        viewModel.OtherSourcesListVisibility.Should().Be(Visibility.Visible);
+    }
+
     public void Dispose()
     {
         WeakReferenceMessenger.Default.Reset();
@@ -287,7 +575,8 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         ICalendarSelectionService? calendarSelectionService = null,
         IPendingEventDraftService? pendingEventDraftService = null,
         IGcalEventRepository? gcalEventRepository = null,
-        IPendingEventRepository? pendingEventRepository = null)
+        IPendingEventRepository? pendingEventRepository = null,
+        ICalendarViewRangeProvider? viewRangeProvider = null)
     {
         return new DataSourcePanelViewModel(
             new StubSystemStateRepository(),
@@ -299,7 +588,8 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
             calendarSelectionService ?? new StubCalendarSelectionService(),
             pendingEventDraftService ?? new StubPendingEventDraftService(),
             gcalEventRepository ?? new StubGcalEventRepository(),
-            pendingEventRepository ?? new StubPendingEventRepository());
+            pendingEventRepository ?? new StubPendingEventRepository(),
+            viewRangeProvider ?? new StubCalendarViewRangeProvider());
     }
 
     private sealed class StubSystemStateRepository : ISystemStateRepository
@@ -415,6 +705,65 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         public void AutoSelectDay(DateOnly date) => SelectedDay = date;
         public void RestoreManualSelection() => SelectedDay = ManuallySelectedDay;
         public void ClearSelection() => SelectedDay = null;
+    }
+
+    private sealed class StubCardProvider : IDataSourceCardProvider, IDataSourceCardProviderPreloader, IDataSourceViewDataProvider, IDataSourceDayActionProvider
+    {
+        private readonly bool _hasData;
+
+        public StubCardProvider(string sourceKey, bool hasData)
+        {
+            SourceKey = sourceKey;
+            _hasData = hasData;
+        }
+
+        public string SourceKey { get; }
+
+        public bool Preloaded { get; private set; }
+
+        public IReadOnlyList<DataSourceDayData> RangeData { get; init; } = [];
+
+        public Func<DateOnly, DateOnly, IReadOnlyList<DataSourceDayData>>? RangeDataFactory { get; init; }
+
+        public bool SupportsAdd { get; init; }
+
+        public List<DateOnly> AddedDates { get; } = [];
+
+        public Task PreloadAsync(DateOnly date, CancellationToken ct = default)
+        {
+            Preloaded = true;
+            return Task.CompletedTask;
+        }
+
+        public UIElement? CreateCompactSummaryView(DateOnly date) => null;
+
+        public UIElement CreateDrilldownView(DateOnly date)
+        {
+            return DataSourceDayCardViewModel.CreatePlaceholderDrilldown(SourceKey);
+        }
+
+        public bool? HasDataForDay(DateOnly date) => Preloaded ? _hasData : null;
+
+        public Task<IReadOnlyList<DataSourceDayData>> GetDataForRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
+            => Task.FromResult(RangeDataFactory?.Invoke(from, to) ?? RangeData);
+
+        public Task AddForDayAsync(DateOnly date, CancellationToken ct = default)
+        {
+            if (SupportsAdd)
+            {
+                AddedDates.Add(date);
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubCalendarViewRangeProvider : ICalendarViewRangeProvider
+    {
+        public (DateOnly From, DateOnly To) Range { get; set; } =
+            (new DateOnly(2026, 05, 11), new DateOnly(2026, 05, 17));
+
+        public (DateOnly From, DateOnly To) GetCurrentViewDisplayRange() => Range;
     }
 
     private sealed class StubCalendarSelectionService : ICalendarSelectionService

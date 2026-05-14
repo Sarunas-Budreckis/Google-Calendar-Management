@@ -495,7 +495,7 @@ public sealed partial class MainPage : Page
             colorItem.Icon = new FontIcon
             {
                 Glyph = "",
-                Foreground = new SolidColorBrush(ParseHexToColor(colorOption.Hex))
+                Foreground = new SolidColorBrush(ParseHexToColor(colorOption.DisplayHex))
             };
             colorItem.Click += async (_, _) =>
                 await ViewModel.ChangePendingPublishItemColorAsync(item, colorOption.Key);

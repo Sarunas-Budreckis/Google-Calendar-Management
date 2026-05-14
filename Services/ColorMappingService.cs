@@ -3,21 +3,24 @@ namespace GoogleCalendarManagement.Services;
 public sealed class ColorMappingService : IColorMappingService
 {
     private const string FallbackKey = "azure";
-    private const string FallbackHex = "#0088CC";
+    private const string FallbackHex = "#00AAFF";
     private const string FallbackName = "Azure";
     private const string ContrastTextHex = "#FFFFFF";
 
     private static readonly IReadOnlyList<CalendarColorOption> OrderedPickerColors =
     [
-        new("azure", "Azure", "#0088CC", ContrastTextHex),
-        new("purple", "Purple", "#3F51B5", ContrastTextHex),
-        new("grey", "Grey", "#616161", ContrastTextHex),
-        new("yellow", "Yellow", "#F6BF26", ContrastTextHex),
-        new("navy", "Navy", "#33B679", ContrastTextHex),
-        new("sage", "Sage", "#0B8043", ContrastTextHex),
-        new("flamingo", "Flamingo", "#E67C73", ContrastTextHex),
-        new("orange", "Orange", "#F4511E", ContrastTextHex),
-        new("lavender", "Lavender", "#8E24AA", ContrastTextHex)
+        new("red",      "Red",      "#CC0000", "#DA5234", ContrastTextHex),
+        new("flamingo", "Flamingo", "#DF7B71", "#D6837A", ContrastTextHex),
+        new("orange",   "Orange",   "#EA4F0A", "#E3683E", ContrastTextHex),
+        new("banana",   "Banana",   "#F6BF26", "#E7BA51", ContrastTextHex),
+        new("sage",     "Sage",     "#33B679", "#55B080", ContrastTextHex),
+        new("basil",    "Basil",    "#0B8043", "#489160", ContrastTextHex),
+        new("peacock",  "Peacock",  "#039BE5", "#4B99D2", ContrastTextHex),
+        new("navy",     "Navy",     "#3F51B5", "#6E72C3", ContrastTextHex),
+        new("lavender", "Lavender", "#7986CB", "#828BC2", ContrastTextHex),
+        new("grape",    "Grape",    "#8E24AA", "#A75ABA", ContrastTextHex),
+        new("graphite", "Graphite", "#616161", "#7C7C7C", ContrastTextHex),
+        new("azure",    "Azure",    "#00AAFF", "#00AAFF", ContrastTextHex)
     ];
 
     private static readonly IReadOnlyDictionary<string, CalendarColorOption> PickerColorMap =
@@ -26,25 +29,38 @@ public sealed class ColorMappingService : IColorMappingService
     private static readonly IReadOnlyDictionary<string, string> AliasToCanonicalKeyMap =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "azure",    "azure" },
-            { "1",        "azure" },
-            { "purple",   "purple" },
-            { "9",        "purple" },
-            { "grey",     "grey" },
-            { "8",        "grey" },
-            { "yellow",   "yellow" },
-            { "5",        "yellow" },
-            { "navy",     "navy" },
-            { "2",        "navy" },
+            { "red",      "red" },
+            { "tomato",   "red" },
+            { "11",       "red" },
             { "sage",     "sage" },
-            { "10",       "sage" },
+            { "2",        "sage" },
             { "flamingo", "flamingo" },
             { "4",        "flamingo" },
             { "orange",   "orange" },
+            { "tangerine", "orange" },
             { "6",        "orange" },
+            { "banana",   "banana" },
+            { "yellow",   "banana" },
+            { "5",        "banana" },
+            { "basil",    "basil" },
+            { "10",       "basil" },
+            { "peacock",  "peacock" },
+            { "7",        "peacock" },
+            { "navy",     "navy" },
+            { "blueberry", "navy" },
+            { "blue",     "navy" },
+            { "purple",   "navy" },
+            { "9",        "navy" },
             { "lavender", "lavender" },
-            { "3",        "lavender" },
-            { "7",        "lavender" }
+            { "1",        "lavender" },
+            { "grape",    "grape" },
+            { "3",        "grape" },
+            { "graphite", "graphite" },
+            { "grey",     "graphite" },
+            { "gray",     "graphite" },
+            { "8",        "graphite" },
+            { "azure",    "azure" },
+            { "0",        "azure" }
         };
 
     private static readonly IReadOnlyDictionary<string, string> ColorMap =
@@ -56,15 +72,18 @@ public sealed class ColorMappingService : IColorMappingService
     private static readonly IReadOnlyDictionary<string, string> CanonicalToGoogleColorIdMap =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "azure", "1" },
-            { "navy", "2" },
-            { "lavender", "7" },
+            { "red", "11" },
             { "flamingo", "4" },
-            { "yellow", "5" },
             { "orange", "6" },
-            { "grey", "8" },
-            { "purple", "9" },
-            { "sage", "10" }
+            { "banana", "5" },
+            { "sage", "2" },
+            { "basil", "10" },
+            { "peacock", "7" },
+            { "navy", "9" },
+            { "lavender", "1" },
+            { "grape", "3" },
+            { "graphite", "8" },
+            { "azure", "0" }
         };
 
     public IReadOnlyList<CalendarColorOption> PickerColors => OrderedPickerColors;
@@ -75,7 +94,7 @@ public sealed class ColorMappingService : IColorMappingService
     {
         var colorKey = NormalizeColorKey(colorId);
         return PickerColorMap.TryGetValue(colorKey, out var option)
-            ? option.Hex
+            ? option.DisplayHex
             : FallbackHex;
     }
 
