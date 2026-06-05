@@ -24,11 +24,12 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock
                                     Grid.Column="0"
                                     FontWeight="SemiBold"
-                                    Text="{Binding StartLabel}"
+                                    Text="{Binding TimeRangeLabel}"
                                     TextTrimming="CharacterEllipsis"
                                     TextWrapping="NoWrap" />
                                 <TextBlock
@@ -36,12 +37,15 @@
                                     Opacity="0.72"
                                     Text="{Binding DurationLabel}"
                                     TextWrapping="NoWrap" />
+                                <Button
+                                    Grid.Column="2"
+                                    MinWidth="0"
+                                    Padding="8,2"
+                                    Command="{Binding AddCommand}"
+                                    Content="Add"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Visibility="{Binding AddButtonVisibility}" />
                             </Grid>
-                            <TextBlock
-                                Opacity="0.76"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="{Binding EndLabel}"
-                                TextWrapping="NoWrap" />
                             <TextBlock
                                 Opacity="0.72"
                                 Style="{StaticResource CaptionTextBlockStyle}"
@@ -59,6 +63,33 @@
             Text="No sleep data for this day."
             TextWrapping="WrapWholeWords"
             Visibility="{Binding EmptyStateVisibility}" />
+
+        <StackPanel
+            Spacing="6"
+            Visibility="{Binding QualityInputVisibility}">
+            <TextBlock
+                FontWeight="SemiBold"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="Sleep Quality (0–10)" />
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <NumberBox
+                    x:Name="QualityBox"
+                    Grid.Column="0"
+                    Minimum="0"
+                    Maximum="10"
+                    SpinButtonPlacementMode="Compact"
+                    PlaceholderText="Not set"
+                    ValueChanged="QualityBox_ValueChanged" />
+                <Button
+                    Grid.Column="1"
+                    Content="Clear"
+                    Click="ClearQuality_Click" />
+            </Grid>
+        </StackPanel>
 
         <Button
             HorizontalAlignment="Stretch"

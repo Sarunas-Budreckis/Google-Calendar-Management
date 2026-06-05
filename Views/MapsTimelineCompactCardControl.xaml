@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GoogleCalendarManagement.Views.MapsTimelineCompactCardControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <StackPanel
+            Spacing="2"
+            Visibility="{Binding HasDataVisibility}">
+            <TextBlock
+                Opacity="0.76"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="Timeline available"
+                TextWrapping="NoWrap" />
+            <TextBlock
+                Opacity="0.6"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{Binding StatusLabel}"
+                TextWrapping="NoWrap" />
+        </StackPanel>
+
+        <TextBlock
+            Opacity="0.54"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="No data for this day"
+            TextWrapping="WrapWholeWords"
+            Visibility="{Binding NoDataVisibility}" />
+    </Grid>
+</UserControl>

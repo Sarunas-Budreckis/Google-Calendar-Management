@@ -1,7 +1,7 @@
 # Story 7.6: iOS Call Log Import (iMazing)
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** Draft
+**Status:** review
 **Dependencies:** Story 7.1 (data_source registry), Story 5.5 (left panel day mode)
 
 ---
@@ -103,3 +103,105 @@ iMazing exports call logs as CSV with the columns: Call Type, Date, Duration, Nu
 - iMazing CSV Date field parses to `DateTime` via `CsvHelper`; ensure timezone handling (assume local time for now, note as future improvement)
 - Future automation note: design `ICallLogProvider` interface so iMazing CSV and a future iCloud scraper are interchangeable import sources
 - The 10-minute filter for candidate events is at generation time, not import time — all calls are stored regardless of duration
+
+---
+
+## Tasks / Subtasks
+
+- [x] Task 1: DB schema — entities + EF configurations + DbSets
+  - [x] `CallLogImport` entity and `CallLogImportConfiguration`
+  - [x] `CallLogEntry` entity and `CallLogEntryConfiguration`
+  - [x] Register `CallLogImports` and `CallLogEntries` DbSets in `CalendarDbContext`
+  - [x] Update `CalendarDbContextModelSnapshot.cs` (tables already created by `20260604130000_AddCiv5SessionPoint`)
+- [x] Task 2: Repository — `ICallLogRepository` + `CallLogRepository`
+  - [x] `GetEntriesForDateAsync` (for day card / drilldown)
+  - [x] `GetEntryCountsForRangeAsync` (for global mode view data)
+  - [x] `GetExistingDedupKeysAsync` (for import service dedup)
+- [x] Task 3: Import service — `ICallLogImportService` + `CallLogImportService`
+  - [x] CSV parsing using CsvHelper with column mapping from `iPhoneCallLogParser`
+  - [x] Duplicate detection (date + number + duration_seconds)
+  - [x] `CallLogImport` record creation
+  - [x] `data_source_import_log` entry via `WriteImportLogAsync`
+  - [x] `DataSourceImportCompletedMessage` broadcast
+- [x] Task 4: Import handler — `CallLogImportHandler` (file picker + `IDataSourceImportHandler`)
+  - [x] `FileOpenPicker` for CSV file selection
+  - [x] Success / duplicate / error dialog via `IContentDialogService`
+- [x] Task 5: Card provider — `CallLogCardProvider`
+  - [x] Implements `IDataSourceCardProvider`, `IDataSourceCardProviderPreloader`, `IDataSourceViewDataProvider`, `IDataSourceDayActionProvider`
+  - [x] `AddForDayAsync` creates candidate events for qualifying calls (≥ 10 min)
+- [x] Task 6: ViewModels
+  - [x] `CallLogCompactCardViewModel` — total calls + formatted duration
+  - [x] `CallLogEntryViewModel` — display data for one call row
+  - [x] `CallLogDrilldownViewModel` — chronological call list + `CreateCandidateEventsCommand`
+- [x] Task 7: Views (XAML)
+  - [x] `CallLogCompactCardControl.xaml/.cs`
+  - [x] `CallLogDrilldownControl.xaml/.cs`
+- [x] Task 8: DI registration in `App.xaml.cs`
+- [x] Task 9: Unit tests
+  - [x] `CallLogImportServiceTests` — CSV parsing, dedup, import log, message broadcast
+  - [x] `CallLogCompactCardViewModelTests` — display logic, duration formatting
+
+---
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Ported the iMazing CSV parsing pattern from `iPhoneCallLogParser.cs` into `CallLogImportService` using CsvHelper with the same column header mappings. Duration is stored as integer seconds. The schema (`call_log_import` + `call_log_entry`) was already created by the `20260604130000_AddCiv5SessionPoint` migration, so no separate migration was needed — only entities, configurations, and DbSet registrations.
+
+Duplicate detection uses an in-memory HashSet of `(Date, Number, DurationSeconds)` tuples loaded from the DB before each import.
+
+The card provider integrates into the existing `IDataSourceCardProvider` pattern with preloading and view-range data support. Candidate event generation filters calls ≥ 10 minutes, uses Azure color, and does not apply 8/15 rounding per AC.
+
+### Debug Log
+
+- Pre-existing `[ObservableProperty]` MVVMTK0045 errors in `SpotifyCompactCardViewModel` and `SpotifyDrilldownViewModel` blocked build — fixed by converting to manual `SetProperty` properties.
+- Pre-existing missing `TestDbContextFactory` in `TogglPhoneClassificationServiceTests` — added.
+- Pre-existing `StubPendingEventRepository` missing `GetSleepEventForDateAsync` in `DataSourcePanelViewModelTests` — added stub.
+- Pre-existing `Civ5SaveScannerService.DetermineGameMode` was `internal` but tests called it as `public` — changed to `public`.
+- Pre-existing `MapsTimelineParserTests` used `BeLessOrEqualTo`/`BeGreaterOrEqualTo` which don't exist on `DateOnlyAssertions` in FluentAssertions 8.x — replaced with `BeOnOrBefore`/`BeOnOrAfter`.
+- Pre-existing `SettingsViewModelTests` missing `IStatsFmApiClient` argument — added `Mock.Of<IStatsFmApiClient>()`.
+- `20260604140000_AddCallLogSchema` migration created tables that already exist in `20260604130000_AddCiv5SessionPoint` — deleted duplicate migration.
+- 2 remaining test failures in `EventDetailsPanelViewModelTests` are pre-existing and unrelated to this story.
+
+### Completion Notes
+
+All 18 CallLog unit tests pass (6 import service + 12 compact card/entry). Total: 463 passing, 2 pre-existing failures in `EventDetailsPanelViewModelTests`.
+
+### File List
+
+- `GoogleCalendarManagement.csproj` — added CsvHelper 33.0.1
+- `Data/Entities/CallLogImport.cs` — new
+- `Data/Entities/CallLogEntry.cs` — new
+- `Data/Configurations/CallLogImportConfiguration.cs` — new
+- `Data/Configurations/CallLogEntryConfiguration.cs` — new
+- `Data/CalendarDbContext.cs` — added `CallLogImports` and `CallLogEntries` DbSets
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs` — added CallLogImport and CallLogEntry model definitions
+- `Services/ICallLogRepository.cs` — new
+- `Services/CallLogRepository.cs` — new
+- `Services/CallLogImportResult.cs` — new
+- `Services/ICallLogImportService.cs` — new
+- `Services/CallLogImportService.cs` — new (CSV parsing, dedup, import log)
+- `Services/CallLogImportHandler.cs` — new (file picker + IDataSourceImportHandler)
+- `Services/CallLogCardProvider.cs` — new (IDataSourceCardProvider + preloader + view data + day action)
+- `ViewModels/CallLogCompactCardViewModel.cs` — new
+- `ViewModels/CallLogEntryViewModel.cs` — new
+- `ViewModels/CallLogDrilldownViewModel.cs` — new
+- `Views/CallLogCompactCardControl.xaml` — new
+- `Views/CallLogCompactCardControl.xaml.cs` — new
+- `Views/CallLogDrilldownControl.xaml` — new
+- `Views/CallLogDrilldownControl.xaml.cs` — new
+- `App.xaml.cs` — registered CallLog services, import handler, card provider
+- `ViewModels/SpotifyCompactCardViewModel.cs` — fixed pre-existing MVVMTK0045 build error
+- `ViewModels/SpotifyDrilldownViewModel.cs` — fixed pre-existing MVVMTK0045 build error
+- `Services/Civ5SaveScannerService.cs` — changed `DetermineGameMode` from `internal` to `public`
+- `GoogleCalendarManagement.Tests/Unit/Services/CallLogImportServiceTests.cs` — new
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/CallLogCompactCardViewModelTests.cs` — new
+- `GoogleCalendarManagement.Tests/Unit/Services/TogglPhoneClassificationServiceTests.cs` — added missing `TestDbContextFactory`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/DataSourcePanelViewModelTests.cs` — added `GetSleepEventForDateAsync` to stub
+- `GoogleCalendarManagement.Tests/Unit/SettingsViewModelTests.cs` — added `IStatsFmApiClient` mock arg
+- `GoogleCalendarManagement.Tests/Unit/Services/MapsTimelineParserTests.cs` — fixed FluentAssertions API
+
+### Change Log
+
+- 2026-06-04: Implemented story 7.6 — iOS Call Log import via iMazing CSV, compact card, drilldown, candidate event generation with 10-min filter, Azure color, no 8/15 rounding. Added CsvHelper dependency. Fixed pre-existing build/test issues unblocking the build.

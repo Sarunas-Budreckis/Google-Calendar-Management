@@ -53,6 +53,235 @@ public sealed class TogglSleepDrilldownViewModelTests
     }
 
     [Fact]
+    public async Task LoadAsync_LoadsQualityFromRepository()
+    {
+        var repository = new StubTogglSleepRepository
+        {
+            Entries = [CreateEntry(id: 1, startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc))]
+        };
+        var qualityRepository = new StubTogglSleepQualityRepository { Quality = 7 };
+        var viewModel = CreateViewModel(repository, qualityRepository: qualityRepository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+
+        viewModel.Quality.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenNoQualityStored_QualityIsNull()
+    {
+        var repository = new StubTogglSleepRepository
+        {
+            Entries = [CreateEntry(id: 1, startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc))]
+        };
+        var viewModel = CreateViewModel(repository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+
+        viewModel.Quality.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LoadAsync_WhenNoEntries_DoesNotLoadStoredQuality()
+    {
+        var qualityRepository = new StubTogglSleepQualityRepository { Quality = 7 };
+        var viewModel = CreateViewModel(new StubTogglSleepRepository(), qualityRepository: qualityRepository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+
+        viewModel.Quality.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetQualityAsync_SavesQualityToRepository()
+    {
+        var repository = new StubTogglSleepRepository
+        {
+            Entries = [CreateEntry(id: 1, startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc))]
+        };
+        var qualityRepository = new StubTogglSleepQualityRepository();
+        var viewModel = CreateViewModel(repository, qualityRepository: qualityRepository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+        await viewModel.SetQualityAsync(8);
+
+        viewModel.Quality.Should().Be(8);
+        qualityRepository.UpsertedDate.Should().Be(new DateOnly(2026, 05, 13));
+        qualityRepository.UpsertedQuality.Should().Be(8);
+    }
+
+    [Fact]
+    public async Task SetQualityAsync_WhenPendingEventExists_UpdatesEventTitleToSleepWithRating()
+    {
+        var date = new DateOnly(2026, 05, 13);
+        var repository = new StubTogglSleepRepository
+        {
+            Entries = [CreateEntry(id: 1, startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc))]
+        };
+        var existingEvent = new PendingEvent { PendingEventId = "pending_sleep_1", Summary = "Sleep" };
+        var pendingRepository = new StubPendingEventRepository { SleepEventForDate = existingEvent };
+        var viewModel = CreateViewModel(repository, pendingRepository: pendingRepository);
+
+        await viewModel.LoadAsync(date);
+        await viewModel.SetQualityAsync(7);
+
+        pendingRepository.UpsertedDraft.Should().NotBeNull();
+        pendingRepository.UpsertedDraft!.Summary.Should().Be("Sleep – 7/10");
+    }
+
+    [Fact]
+    public async Task SetQualityAsync_WhenClearedAndPendingEventExists_RevertsEventTitleToSleep()
+    {
+        var date = new DateOnly(2026, 05, 13);
+        var repository = new StubTogglSleepRepository
+        {
+            Entries = [CreateEntry(id: 1, startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc))]
+        };
+        var existingEvent = new PendingEvent { PendingEventId = "pending_sleep_1", Summary = "Sleep – 7/10" };
+        var pendingRepository = new StubPendingEventRepository { SleepEventForDate = existingEvent };
+        var viewModel = CreateViewModel(repository, pendingRepository: pendingRepository);
+
+        await viewModel.LoadAsync(date);
+        await viewModel.SetQualityAsync(null);
+
+        pendingRepository.UpsertedDraft!.Summary.Should().Be("Sleep");
+    }
+
+    [Fact]
+    public async Task SetQualityAsync_WhenCleared_StripsOnlyQualitySuffix()
+    {
+        var date = new DateOnly(2026, 05, 13);
+        var repository = new StubTogglSleepRepository
+        {
+            Entries = [CreateEntry(id: 1, startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc))]
+        };
+        var existingEvent = new PendingEvent { PendingEventId = "pending_sleep_1", Summary = "Sleep recovery – 7/10" };
+        var pendingRepository = new StubPendingEventRepository { SleepEventForDate = existingEvent };
+        var viewModel = CreateViewModel(repository, pendingRepository: pendingRepository);
+
+        await viewModel.LoadAsync(date);
+        await viewModel.SetQualityAsync(null);
+
+        pendingRepository.UpsertedDraft!.Summary.Should().Be("Sleep recovery");
+    }
+
+    [Fact]
+    public async Task SetQualityAsync_WhenQualityOutOfRange_ThrowsAndDoesNotSave()
+    {
+        var repository = new StubTogglSleepRepository
+        {
+            Entries = [CreateEntry(id: 1, startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc))]
+        };
+        var qualityRepository = new StubTogglSleepQualityRepository();
+        var viewModel = CreateViewModel(repository, qualityRepository: qualityRepository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+        var act = async () => await viewModel.SetQualityAsync(11);
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+        qualityRepository.UpsertedDate.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetQualityAsync_WhenNoEntries_DoesNotSave()
+    {
+        var qualityRepository = new StubTogglSleepQualityRepository();
+        var viewModel = CreateViewModel(new StubTogglSleepRepository(), qualityRepository: qualityRepository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+        await viewModel.SetQualityAsync(7);
+
+        qualityRepository.UpsertedDate.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetQualityAsync_WhenPendingEventUpdated_SendsEventUpdatedMessage()
+    {
+        var repository = new StubTogglSleepRepository
+        {
+            Entries = [CreateEntry(id: 1, startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc))]
+        };
+        var existingEvent = new PendingEvent { PendingEventId = "pending_sleep_1", Summary = "Sleep" };
+        var pendingRepository = new StubPendingEventRepository { SleepEventForDate = existingEvent };
+        EventUpdatedMessage? receivedMessage = null;
+        WeakReferenceMessenger.Default.Register<TogglSleepDrilldownViewModelTests, EventUpdatedMessage>(
+            this,
+            (_, msg) => receivedMessage = msg);
+        var viewModel = CreateViewModel(repository, pendingRepository: pendingRepository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+        await viewModel.SetQualityAsync(5);
+
+        receivedMessage.Should().NotBeNull();
+        receivedMessage!.EventId.Should().Be("pending_sleep_1");
+    }
+
+    [Fact]
+    public async Task SetQualityAsync_WhenNoPendingEventAndNoLinkedGcalEvent_NoEventUpdated()
+    {
+        var repository = new StubTogglSleepRepository
+        {
+            Entries = [CreateEntry(id: 1, startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc))]
+        };
+        var pendingRepository = new StubPendingEventRepository();
+        EventUpdatedMessage? receivedMessage = null;
+        WeakReferenceMessenger.Default.Register<TogglSleepDrilldownViewModelTests, EventUpdatedMessage>(
+            this,
+            (_, msg) => receivedMessage = msg);
+        var viewModel = CreateViewModel(repository, pendingRepository: pendingRepository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+        await viewModel.SetQualityAsync(5);
+
+        receivedMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SetQualityAsync_WhenLinkedGcalEventExists_CreatesOrUpdatesPendingEventWithTitle()
+    {
+        var linkedGcalEventId = "gcal_abc123";
+        var gcalEvent = new GcalEvent
+        {
+            GcalEventId = linkedGcalEventId,
+            CalendarId = "primary",
+            Summary = "Sleep",
+            StartDatetime = new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+            EndDatetime = new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc),
+            IsAllDay = false
+        };
+        var repository = new StubTogglSleepRepository
+        {
+            Entries =
+            [
+                CreateEntry(id: 1,
+                    startUtc: new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
+                    endUtc: new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc),
+                    linkedEventId: linkedGcalEventId,
+                    linkedEventType: "gcal")
+            ]
+        };
+        var pendingRepository = new StubPendingEventRepository();
+        var gcalRepository = new StubGcalEventRepository { EventById = gcalEvent };
+        var viewModel = CreateViewModel(repository, pendingRepository: pendingRepository, gcalEventRepository: gcalRepository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+        await viewModel.SetQualityAsync(7);
+
+        pendingRepository.UpsertedDraft.Should().NotBeNull();
+        pendingRepository.UpsertedDraft!.GcalEventId.Should().Be(linkedGcalEventId);
+        pendingRepository.UpsertedDraft!.Summary.Should().Be("Sleep – 7/10");
+    }
+
+    [Fact]
     public async Task CreateCandidateEventCommand_WhenOneEntry_CreatesDraftWithEntryTimes()
     {
         var entry = CreateEntry(
@@ -75,6 +304,26 @@ public sealed class TogglSleepDrilldownViewModelTests
         pendingRepository.UpsertedDraft.SourceSystem.Should().Be("toggl");
         pendingRepository.UpsertedDraft.ColorId.Should().Be("grey");
         pendingRepository.UpsertedDraft.IsAllDay.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CreateCandidateEventCommand_WhenQualityAlreadySet_IncludesQualityInDraftTitle()
+    {
+        var entry = CreateEntry(
+            id: 1,
+            startUtc: new DateTime(2026, 05, 13, 04, 30, 00, DateTimeKind.Utc),
+            endUtc: new DateTime(2026, 05, 13, 12, 15, 00, DateTimeKind.Utc));
+        var repository = new StubTogglSleepRepository { Entries = [entry] };
+        var draftService = new StubPendingEventDraftService();
+        var pendingRepository = new StubPendingEventRepository();
+        var qualityRepository = new StubTogglSleepQualityRepository { Quality = 8 };
+        var viewModel = CreateViewModel(repository, draftService: draftService,
+            pendingRepository: pendingRepository, qualityRepository: qualityRepository);
+
+        await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
+        await viewModel.CreateCandidateEventCommand.ExecuteAsync(null);
+
+        pendingRepository.UpsertedDraft!.Summary.Should().Be("Sleep – 8/10");
     }
 
     [Fact]
@@ -173,18 +422,28 @@ public sealed class TogglSleepDrilldownViewModelTests
 
     private static TogglSleepDrilldownViewModel CreateViewModel(
         ITogglSleepRepository repository,
+        ITogglSleepQualityRepository? qualityRepository = null,
         IPendingEventDraftService? draftService = null,
         IPendingEventRepository? pendingRepository = null,
+        IGcalEventRepository? gcalEventRepository = null,
         ICalendarSelectionService? selectionService = null)
     {
         return new TogglSleepDrilldownViewModel(
             repository,
+            qualityRepository ?? new StubTogglSleepQualityRepository(),
             draftService ?? new StubPendingEventDraftService(),
             pendingRepository ?? new StubPendingEventRepository(),
+            gcalEventRepository ?? new StubGcalEventRepository(),
             selectionService ?? new StubCalendarSelectionService());
     }
 
-    private static TogglEntry CreateEntry(long id, DateTime startUtc, DateTime endUtc, string description = "Sleep")
+    private static TogglEntry CreateEntry(
+        long id,
+        DateTime startUtc,
+        DateTime endUtc,
+        string description = "Sleep",
+        string? linkedEventId = null,
+        string? linkedEventType = null)
     {
         return new TogglEntry
         {
@@ -192,7 +451,9 @@ public sealed class TogglSleepDrilldownViewModelTests
             StartTime = startUtc,
             EndTime = endUtc,
             DurationSeconds = (int)(endUtc - startUtc).TotalSeconds,
-            Description = description
+            Description = description,
+            LinkedEventId = linkedEventId,
+            LinkedEventType = linkedEventType
         };
     }
 
@@ -205,6 +466,23 @@ public sealed class TogglSleepDrilldownViewModelTests
 
         public Task<IReadOnlyDictionary<DateOnly, int>> GetSleepEntryCountsForRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyDictionary<DateOnly, int>>(new Dictionary<DateOnly, int>());
+    }
+
+    private sealed class StubTogglSleepQualityRepository : ITogglSleepQualityRepository
+    {
+        public int? Quality { get; init; }
+        public DateOnly? UpsertedDate { get; private set; }
+        public int? UpsertedQuality { get; private set; }
+
+        public Task<int?> GetQualityForDateAsync(DateOnly date, CancellationToken ct = default)
+            => Task.FromResult(Quality);
+
+        public Task UpsertQualityAsync(DateOnly date, int? quality, CancellationToken ct = default)
+        {
+            UpsertedDate = date;
+            UpsertedQuality = quality;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubPendingEventDraftService : IPendingEventDraftService
@@ -227,6 +505,7 @@ public sealed class TogglSleepDrilldownViewModelTests
     private sealed class StubPendingEventRepository : IPendingEventRepository
     {
         public PendingEvent? UpsertedDraft { get; private set; }
+        public PendingEvent? SleepEventForDate { get; init; }
 
         public Task<PendingEvent?> GetByPendingEventIdAsync(string pendingEventId, CancellationToken ct = default)
             => Task.FromResult<PendingEvent?>(null);
@@ -236,6 +515,9 @@ public sealed class TogglSleepDrilldownViewModelTests
 
         public Task<PendingEvent?> GetDayNameEventAsync(DateOnly date, CancellationToken ct = default)
             => Task.FromResult<PendingEvent?>(null);
+
+        public Task<PendingEvent?> GetSleepEventForDateAsync(DateOnly date, CancellationToken ct = default)
+            => Task.FromResult(SleepEventForDate);
 
         public Task UpsertAsync(PendingEvent pendingEvent, CancellationToken ct = default)
         {
@@ -248,6 +530,20 @@ public sealed class TogglSleepDrilldownViewModelTests
 
         public Task DeleteByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
             => Task.CompletedTask;
+    }
+
+    private sealed class StubGcalEventRepository : IGcalEventRepository
+    {
+        public GcalEvent? EventById { get; init; }
+
+        public Task<IList<GcalEvent>> GetByDateRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
+            => Task.FromResult<IList<GcalEvent>>([]);
+
+        public Task<GcalEvent?> GetByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
+            => Task.FromResult(EventById?.GcalEventId == gcalEventId ? EventById : null);
+
+        public Task<(DateOnly From, DateOnly To)?> GetStoredDateRangeAsync(CancellationToken ct = default)
+            => Task.FromResult<(DateOnly, DateOnly)?>(null);
     }
 
     private sealed class StubCalendarSelectionService : ICalendarSelectionService

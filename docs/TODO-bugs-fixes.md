@@ -4,3 +4,7 @@
 - [ ] edit the delete selection to diagonal stripes? instead of red highlight
 - [ ] Lavendar color / color picker
 - [ ] Right panel also closable
+- [ ] Click should not create event, only drag
+- [ ] epic 8? arbitrary linking between calendar events and data sources (spotify in days, toggl to gcal links, jira?)
+- [ ] App Icon should always appear
+- [ ] 

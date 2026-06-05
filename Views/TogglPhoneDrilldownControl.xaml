@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GoogleCalendarManagement.Views.TogglPhoneDrilldownControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel
+        Padding="12"
+        Spacing="12">
+
+        <Grid Visibility="{Binding TimelineVisibility}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="32" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Hour labels on left -->
+            <Canvas
+                x:Name="HourLabelCanvas"
+                Grid.Column="0"
+                Height="480"
+                Width="32" />
+
+            <!-- Dot timeline on right -->
+            <Border
+                Grid.Column="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1,0,0,0">
+                <Canvas
+                    x:Name="TimelineCanvas"
+                    Height="480"
+                    Width="100" />
+            </Border>
+        </Grid>
+
+        <TextBlock
+            Margin="0,8,0,0"
+            Opacity="0.6"
+            Text="No phone data for this day."
+            TextWrapping="WrapWholeWords"
+            Visibility="{Binding EmptyStateVisibility}" />
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                Grid.Column="0"
+                HorizontalAlignment="Stretch"
+                Command="{Binding CreateCandidateEventsCommand}"
+                Content="Create Candidate Events"
+                Style="{StaticResource AccentButtonStyle}" />
+            <Button
+                Grid.Column="1"
+                x:Name="ManageRulesButton"
+                Content="Manage Rules"
+                Click="ManageRulesButton_Click" />
+        </Grid>
+
+    </StackPanel>
+</UserControl>

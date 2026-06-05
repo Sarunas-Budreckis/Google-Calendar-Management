@@ -55,8 +55,28 @@ namespace GoogleCalendarManagement
             serviceProvider = services.BuildServiceProvider();
             serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
                 .Register(serviceProvider.GetRequiredService<TogglSleepImportHandler>());
+            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
+                .Register(serviceProvider.GetRequiredService<TogglTransitImportHandler>());
+            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
+                .Register(serviceProvider.GetRequiredService<MapsTimelineImportHandler>());
+            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
+                .Register(serviceProvider.GetRequiredService<SpotifyImportHandler>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
                 .Register(serviceProvider.GetRequiredService<TogglSleepCardProvider>());
+            serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
+                .Register(serviceProvider.GetRequiredService<TogglTransitCardProvider>());
+            serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
+                .Register(serviceProvider.GetRequiredService<MapsTimelineCardProvider>());
+            serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
+                .Register(serviceProvider.GetRequiredService<TogglPhoneCardProvider>());
+            serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
+                .Register(serviceProvider.GetRequiredService<SpotifyCardProvider>());
+            serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
+                .Register(serviceProvider.GetRequiredService<Civ5CardProvider>());
+            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
+                .Register(serviceProvider.GetRequiredService<CallLogImportHandler>());
+            serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
+                .Register(serviceProvider.GetRequiredService<CallLogCardProvider>());
 
             // Create and activate main window (must happen before RunStartupAsync for ContentDialog XamlRoot)
             window = new Window
@@ -195,6 +215,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton<DataSourceImportHandlerRegistry>();
             services.AddSingleton<DataSourceCardProviderRegistry>();
             services.AddSingleton<ITogglSleepRepository, TogglSleepRepository>();
+            services.AddSingleton<ITogglSleepQualityRepository, TogglSleepQualityRepository>();
             services.AddSingleton<TogglSleepCardProvider>();
             services.AddSingleton<IPendingEventDraftService, PendingEventDraftService>();
             services.AddSingleton<IPendingEventPublishService, PendingEventPublishService>();
@@ -205,10 +226,24 @@ namespace GoogleCalendarManagement
             services.AddTransient<IIcsImportService, IcsImportService>();
             services.AddHttpClient<ITogglApiClient, TogglApiClient>(client =>
             {
-                client.BaseAddress = new Uri("https://api.track.toggl.com/api/v9/");
+                client.BaseAddress = new Uri("https://api.track.toggl.com/");
             });
             services.AddSingleton<ITogglSleepImportService, TogglSleepImportService>();
             services.AddSingleton<TogglSleepImportHandler>();
+            services.AddSingleton<ITogglTransitRepository, TogglTransitRepository>();
+            services.AddSingleton<EightFifteenRuleService>();
+            services.AddSingleton<TogglTransitCardProvider>();
+            services.AddSingleton<ITogglTransitImportService, TogglTransitImportService>();
+            services.AddSingleton<TogglTransitImportHandler>();
+            services.AddSingleton<IMapsTimelineRepository, MapsTimelineRepository>();
+            services.AddSingleton<MapsTimelineParser>();
+            services.AddSingleton<MapsTimelineImportHandler>();
+            services.AddSingleton<MapsTimelineCardProvider>();
+            services.AddSingleton<ITogglPhoneRuleRepository, TogglPhoneRuleRepository>();
+            services.AddSingleton<ITogglPhoneClassificationService, TogglPhoneClassificationService>();
+            services.AddSingleton<ITogglPhoneRepository, TogglPhoneRepository>();
+            services.AddSingleton<TogglSlidingWindowService>();
+            services.AddSingleton<TogglPhoneCardProvider>();
             services.AddSingleton<ISyncStatusService, SyncStatusService>();
             services.AddSingleton<INavigationStateService, NavigationStateService>();
             services.AddSingleton<ICalendarSelectionService, CalendarSelectionService>();
@@ -226,6 +261,47 @@ namespace GoogleCalendarManagement
             services.AddTransient<DataSourcePanelControl>();
             services.AddTransient<TogglSleepCompactCardControl>();
             services.AddTransient<TogglSleepDrilldownControl>();
+            services.AddTransient<TogglTransitCompactCardViewModel>();
+            services.AddTransient<TogglTransitDrilldownViewModel>();
+            services.AddTransient<TogglTransitCompactCardControl>();
+            services.AddTransient<TogglTransitDrilldownControl>();
+            services.AddTransient<MapsTimelineCompactCardViewModel>();
+            services.AddTransient<MapsTimelineDrilldownViewModel>();
+            services.AddTransient<MapsTimelineCompactCardControl>();
+            services.AddTransient<MapsTimelineDrilldownControl>();
+            services.AddTransient<TogglPhoneRulesViewModel>();
+            services.AddTransient<TogglPhoneCompactCardViewModel>();
+            services.AddTransient<TogglPhoneDrilldownViewModel>();
+            services.AddTransient<TogglPhoneCompactCardControl>();
+            services.AddTransient<TogglPhoneDrilldownControl>();
+            services.AddTransient<TogglPhoneRulesControl>();
+            services.AddSingleton<ICiv5SessionRepository, Civ5SessionRepository>();
+            services.AddSingleton<ICiv5SaveScannerService, Civ5SaveScannerService>();
+            services.AddSingleton<Civ5CardProvider>();
+            services.AddTransient<Civ5CompactCardViewModel>();
+            services.AddTransient<Civ5DrilldownViewModel>();
+            services.AddTransient<Civ5CompactCardControl>();
+            services.AddTransient<Civ5DrilldownControl>();
+            services.AddSingleton<ICallLogRepository, CallLogRepository>();
+            services.AddSingleton<ICallLogImportService, CallLogImportService>();
+            services.AddSingleton<CallLogImportHandler>();
+            services.AddSingleton<CallLogCardProvider>();
+            services.AddTransient<CallLogCompactCardViewModel>();
+            services.AddTransient<CallLogDrilldownViewModel>();
+            services.AddTransient<CallLogCompactCardControl>();
+            services.AddTransient<CallLogDrilldownControl>();
+            services.AddHttpClient<IStatsFmApiClient, StatsFmApiClient>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.stats.fm/");
+            });
+            services.AddSingleton<ISpotifyStreamRepository, SpotifyStreamRepository>();
+            services.AddSingleton<ISpotifyImportService, SpotifyImportService>();
+            services.AddSingleton<SpotifyImportHandler>();
+            services.AddSingleton<SpotifyCardProvider>();
+            services.AddTransient<SpotifyCompactCardViewModel>();
+            services.AddTransient<SpotifyDrilldownViewModel>();
+            services.AddTransient<SpotifyCompactCardControl>();
+            services.AddTransient<SpotifyDrilldownControl>();
             services.AddTransient<YearViewControl>();
             services.AddTransient<MonthViewControl>();
             services.AddTransient<WeekViewControl>();

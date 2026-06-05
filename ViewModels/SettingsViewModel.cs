@@ -15,27 +15,35 @@ public sealed class SettingsViewModel : ObservableObject
     private readonly IContentDialogService _dialogService;
     private readonly IConfigRepository _configRepository;
     private readonly ITogglApiClient _togglApiClient;
+    private readonly IStatsFmApiClient _statsFmApiClient;
     private bool _isConnected;
     private bool _isTestingTogglConnection;
     private string _togglApiToken = "";
     private string? _togglConnectionTestResult;
+    private bool _isTestingStatsFmConnection;
+    private string _statsFmApiToken = "";
+    private string? _statsFmConnectionTestResult;
     private Task? _initializationTask;
 
     public SettingsViewModel(
         IGoogleCalendarService googleCalendarService,
         IContentDialogService dialogService,
         IConfigRepository configRepository,
-        ITogglApiClient togglApiClient)
+        ITogglApiClient togglApiClient,
+        IStatsFmApiClient statsFmApiClient)
     {
         _googleCalendarService = googleCalendarService;
         _dialogService = dialogService;
         _configRepository = configRepository;
         _togglApiClient = togglApiClient;
+        _statsFmApiClient = statsFmApiClient;
 
         ConnectGoogleCalendarCommand = new AsyncRelayCommand(ConnectGoogleCalendarAsync);
         DisconnectGoogleCalendarCommand = new AsyncRelayCommand(ReconnectGoogleCalendarAsync, () => IsConnected);
         SaveTogglApiTokenCommand = new AsyncRelayCommand<string?>(SaveTogglApiTokenAsync);
         TestTogglConnectionCommand = new AsyncRelayCommand<string?>(TestTogglConnectionAsync, _ => !IsTestingTogglConnection);
+        SaveStatsFmTokenCommand = new AsyncRelayCommand<string?>(SaveStatsFmTokenAsync);
+        TestStatsFmConnectionCommand = new AsyncRelayCommand<string?>(TestStatsFmConnectionAsync, _ => !IsTestingStatsFmConnection);
     }
 
     public bool IsConnected
@@ -69,6 +77,10 @@ public sealed class SettingsViewModel : ObservableObject
 
     public IAsyncRelayCommand<string?> TestTogglConnectionCommand { get; }
 
+    public IAsyncRelayCommand<string?> SaveStatsFmTokenCommand { get; }
+
+    public IAsyncRelayCommand<string?> TestStatsFmConnectionCommand { get; }
+
     public string TogglApiToken
     {
         get => _togglApiToken;
@@ -97,6 +109,36 @@ public sealed class SettingsViewModel : ObservableObject
     {
         get => _togglConnectionTestResult;
         private set => SetProperty(ref _togglConnectionTestResult, value);
+    }
+
+    public string StatsFmApiToken
+    {
+        get => _statsFmApiToken;
+        set => SetProperty(ref _statsFmApiToken, value);
+    }
+
+    public bool IsTestingStatsFmConnection
+    {
+        get => _isTestingStatsFmConnection;
+        private set
+        {
+            if (SetProperty(ref _isTestingStatsFmConnection, value))
+            {
+                OnPropertyChanged(nameof(CanTestStatsFmConnection));
+                OnPropertyChanged(nameof(StatsFmConnectionProgressVisibility));
+                TestStatsFmConnectionCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool CanTestStatsFmConnection => !IsTestingStatsFmConnection;
+
+    public Visibility StatsFmConnectionProgressVisibility => IsTestingStatsFmConnection ? Visibility.Visible : Visibility.Collapsed;
+
+    public string? StatsFmConnectionTestResult
+    {
+        get => _statsFmConnectionTestResult;
+        private set => SetProperty(ref _statsFmConnectionTestResult, value);
     }
 
     public Task InitializeAsync()
@@ -131,8 +173,11 @@ public sealed class SettingsViewModel : ObservableObject
         var result = await _googleCalendarService.IsAuthenticatedAsync();
         IsConnected = result.Success && result.Data;
 
-        var storedToken = await _configRepository.GetConfigValueAsync(TogglSleepImportService.TogglApiTokenConfigKey);
-        TogglApiToken = string.IsNullOrWhiteSpace(storedToken) ? "" : MaskedTokenValue;
+        var storedTogglToken = await _configRepository.GetConfigValueAsync(TogglSleepImportService.TogglApiTokenConfigKey);
+        TogglApiToken = string.IsNullOrWhiteSpace(storedTogglToken) ? "" : MaskedTokenValue;
+
+        var storedStatsFmToken = await _configRepository.GetConfigValueAsync(SpotifyImportService.StatsFmTokenConfigKey);
+        StatsFmApiToken = string.IsNullOrWhiteSpace(storedStatsFmToken) ? "" : MaskedTokenValue;
     }
 
     private async Task SaveTogglApiTokenAsync(string? token)
@@ -185,6 +230,59 @@ public sealed class SettingsViewModel : ObservableObject
         finally
         {
             IsTestingTogglConnection = false;
+        }
+    }
+
+    private async Task SaveStatsFmTokenAsync(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token == MaskedTokenValue)
+        {
+            StatsFmConnectionTestResult = "Enter a stats.fm token before saving.";
+            return;
+        }
+
+        await _configRepository.SetConfigValueAsync(
+            SpotifyImportService.StatsFmTokenConfigKey,
+            token.Trim(),
+            configType: "secret",
+            description: "Encrypted stats.fm bearer token",
+            encrypt: true);
+
+        StatsFmApiToken = MaskedTokenValue;
+        StatsFmConnectionTestResult = "Token saved.";
+    }
+
+    private async Task TestStatsFmConnectionAsync(string? token)
+    {
+        IsTestingStatsFmConnection = true;
+        StatsFmConnectionTestResult = null;
+
+        try
+        {
+            var tokenToTest = token;
+            if (string.IsNullOrWhiteSpace(tokenToTest) || tokenToTest == MaskedTokenValue)
+            {
+                tokenToTest = await _configRepository.GetConfigValueAsync(SpotifyImportService.StatsFmTokenConfigKey);
+            }
+
+            if (string.IsNullOrWhiteSpace(tokenToTest))
+            {
+                StatsFmConnectionTestResult = "Enter a stats.fm token before testing.";
+                return;
+            }
+
+            var userId = await _statsFmApiClient.TestConnectionAsync(tokenToTest.Trim());
+            StatsFmConnectionTestResult = $"Connected as user: {userId}";
+        }
+        catch (Exception ex) when (ex is StatsFmApiException or HttpRequestException or TaskCanceledException)
+        {
+            StatsFmConnectionTestResult = ex is TaskCanceledException
+                ? "Connection test timed out."
+                : ex.Message;
+        }
+        finally
+        {
+            IsTestingStatsFmConnection = false;
         }
     }
 }

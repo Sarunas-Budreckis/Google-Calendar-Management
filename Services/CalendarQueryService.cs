@@ -28,8 +28,8 @@ public sealed class CalendarQueryService : ICalendarQueryService
 
     public async Task<IList<CalendarEventDisplayModel>> GetEventsForRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
     {
-        var rangeStartUtc = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var rangeEndExclusiveUtc = to.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var rangeStartUtc = ToLocalDayBoundaryUtc(from);
+        var rangeEndExclusiveUtc = ToLocalDayBoundaryUtc(to.AddDays(1));
 
         await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
         var googleRows = await (
@@ -265,6 +265,13 @@ public sealed class CalendarQueryService : ICalendarQueryService
             DateTimeKind.Local => value.ToUniversalTime(),
             _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
         };
+    }
+
+    private static DateTime ToLocalDayBoundaryUtc(DateOnly date)
+    {
+        return date
+            .ToDateTime(TimeOnly.MinValue, DateTimeKind.Local)
+            .ToUniversalTime();
     }
 
     private sealed record GoogleCalendarQueryRow(GcalEvent GcalEvent, PendingEvent? PendingEvent);

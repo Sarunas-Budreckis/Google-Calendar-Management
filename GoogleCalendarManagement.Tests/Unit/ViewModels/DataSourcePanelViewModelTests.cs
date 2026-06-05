@@ -165,6 +165,29 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task MoveDayCard_WithValidIndexes_ReordersDayCards()
+    {
+        var repository = new StubDataSourceRepository
+        {
+            Sources =
+            [
+                new DataSource { DataSourceId = 1, SourceKey = "toggl", DisplayName = "Toggl" },
+                new DataSource { DataSourceId = 2, SourceKey = "maps", DisplayName = "Maps" },
+                new DataSource { DataSourceId = 3, SourceKey = "spotify", DisplayName = "Spotify" }
+            ]
+        };
+        var viewModel = CreateViewModel(repository);
+
+        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+
+        viewModel.DayCards.Select(card => card.DisplayName).Should().Equal("Maps", "Spotify", "Toggl");
+
+        viewModel.MoveDayCard(2, 0);
+
+        viewModel.DayCards.Select(card => card.DisplayName).Should().Equal("Toggl", "Maps", "Spotify");
+    }
+
+    [Fact]
     public async Task OnDayDeselected_ReturnsTaGlobalMode()
     {
         var repository = new StubDataSourceRepository
@@ -836,6 +859,9 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
 
         public Task DeleteByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
             => Task.CompletedTask;
+
+        public Task<PendingEvent?> GetSleepEventForDateAsync(DateOnly date, CancellationToken ct = default)
+            => Task.FromResult<PendingEvent?>(null);
     }
 
     private sealed class RecordingImportHandler : IDataSourceImportHandler

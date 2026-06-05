@@ -1,4 +1,9 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Messaging;
+using GoogleCalendarManagement.Data.Entities;
+using GoogleCalendarManagement.Messages;
+using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using Microsoft.UI.Xaml;
 
@@ -7,18 +12,34 @@ namespace GoogleCalendarManagement.ViewModels;
 public sealed class TogglSleepCompactCardViewModel : ObservableObject
 {
     private readonly ITogglSleepRepository _repository;
+    private readonly ITogglSleepQualityRepository _qualityRepository;
+    private readonly IPendingEventDraftService? _pendingEventDraftService;
+    private readonly IPendingEventRepository? _pendingEventRepository;
+    private readonly ICalendarSelectionService? _calendarSelectionService;
     private string _startLabel = "";
     private string _endLabel = "";
     private string _durationLabel = "";
     private string _countLabel = "";
+    private string _qualityLabel = "";
     private bool _hasSingleEntry;
     private bool _hasMultipleEntries;
     private bool _hasNoEntries = true;
 
-    public TogglSleepCompactCardViewModel(ITogglSleepRepository repository)
+    public TogglSleepCompactCardViewModel(
+        ITogglSleepRepository repository,
+        ITogglSleepQualityRepository qualityRepository,
+        IPendingEventDraftService? pendingEventDraftService = null,
+        IPendingEventRepository? pendingEventRepository = null,
+        ICalendarSelectionService? calendarSelectionService = null)
     {
         _repository = repository;
+        _qualityRepository = qualityRepository;
+        _pendingEventDraftService = pendingEventDraftService;
+        _pendingEventRepository = pendingEventRepository;
+        _calendarSelectionService = calendarSelectionService;
     }
+
+    public ObservableCollection<TogglSleepEntryViewModel> Entries { get; } = [];
 
     public string StartLabel
     {
@@ -44,6 +65,20 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
         private set => SetProperty(ref _countLabel, value);
     }
 
+    public string QualityLabel
+    {
+        get => _qualityLabel;
+        private set
+        {
+            if (SetProperty(ref _qualityLabel, value))
+            {
+                OnPropertyChanged(nameof(QualityLabelVisibility));
+            }
+        }
+    }
+
+    public Visibility QualityLabelVisibility => !string.IsNullOrEmpty(_qualityLabel) ? Visibility.Visible : Visibility.Collapsed;
+
     public bool HasSingleEntry
     {
         get => _hasSingleEntry;
@@ -52,6 +87,7 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
             if (SetProperty(ref _hasSingleEntry, value))
             {
                 OnPropertyChanged(nameof(SingleEntryVisibility));
+                OnPropertyChanged(nameof(EntriesVisibility));
             }
         }
     }
@@ -64,6 +100,7 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
             if (SetProperty(ref _hasMultipleEntries, value))
             {
                 OnPropertyChanged(nameof(MultipleEntriesVisibility));
+                OnPropertyChanged(nameof(EntriesVisibility));
             }
         }
     }
@@ -82,11 +119,18 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
 
     public Visibility SingleEntryVisibility => HasSingleEntry ? Visibility.Visible : Visibility.Collapsed;
     public Visibility MultipleEntriesVisibility => HasMultipleEntries ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility EntriesVisibility => HasSingleEntry || HasMultipleEntries ? Visibility.Visible : Visibility.Collapsed;
     public Visibility NoEntriesVisibility => HasNoEntries ? Visibility.Visible : Visibility.Collapsed;
 
     public async Task LoadAsync(DateOnly date, CancellationToken ct = default)
     {
         var entries = await _repository.GetSleepEntriesForDateAsync(date, ct);
+        Entries.Clear();
+        Func<TogglEntry, Task>? addAction = HasAddSupport ? AddEntryAsync : null;
+        foreach (var entry in entries)
+        {
+            Entries.Add(TogglSleepEntryViewModel.FromEntry(entry, addAction));
+        }
 
         HasSingleEntry = entries.Count == 1;
         HasMultipleEntries = entries.Count > 1;
@@ -100,12 +144,65 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
             EndLabel = TogglSleepTimeFormatter.FormatEndTime(entry.StartTime, end);
             DurationLabel = TogglSleepTimeFormatter.FormatDuration(entry);
             CountLabel = "";
+        }
+        else
+        {
+            StartLabel = "";
+            EndLabel = "";
+            DurationLabel = "";
+            CountLabel = entries.Count > 1 ? $"{entries.Count} sleep entries" : "";
+        }
+
+        if (entries.Count == 0)
+        {
+            QualityLabel = "";
             return;
         }
 
-        StartLabel = "";
-        EndLabel = "";
-        DurationLabel = "";
-        CountLabel = entries.Count > 1 ? $"{entries.Count} sleep entries" : "";
+        var quality = await _qualityRepository.GetQualityForDateAsync(date, ct);
+        QualityLabel = quality.HasValue ? $"{quality}/10" : "";
+    }
+
+    private bool HasAddSupport =>
+        _pendingEventDraftService is not null &&
+        _pendingEventRepository is not null &&
+        _calendarSelectionService is not null;
+
+    private async Task AddEntryAsync(TogglEntry entry)
+    {
+        if (_pendingEventDraftService is null ||
+            _pendingEventRepository is null ||
+            _calendarSelectionService is null)
+        {
+            return;
+        }
+
+        var startLocal = CalendarDraftTiming.RoundToNearestQuarterHour(
+            NormalizeUtc(entry.StartTime).ToLocalTime());
+        var endLocal = CalendarDraftTiming.RoundToNearestQuarterHour(
+            NormalizeUtc(entry.EndTime ?? entry.StartTime).ToLocalTime());
+        if (endLocal <= startLocal)
+        {
+            endLocal = startLocal.AddMinutes(15);
+        }
+
+        var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal, "Sleep");
+        draft.Summary = "Sleep";
+        draft.IsAllDay = false;
+        draft.SourceSystem = "toggl";
+        draft.ColorId = "grey";
+        await _pendingEventRepository.UpsertAsync(draft);
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
+        _calendarSelectionService.Select(draft.PendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+    }
+
+    private static DateTime NormalizeUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
     }
 }

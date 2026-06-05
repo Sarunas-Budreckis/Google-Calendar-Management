@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml;
 
 namespace GoogleCalendarManagement.Services;
 
-public sealed class TogglSleepCardProvider : IDataSourceCardProvider, IDataSourceCardProviderPreloader, IDataSourceViewDataProvider, IDataSourceDayActionProvider
+public sealed class TogglSleepCardProvider : IDataSourceCardProvider, IDataSourceCardProviderPreloader, IDataSourceViewDataProvider
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ITogglSleepRepository _repository;

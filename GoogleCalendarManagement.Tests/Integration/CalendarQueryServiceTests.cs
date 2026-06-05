@@ -275,6 +275,75 @@ public sealed class CalendarQueryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetEventsForRangeAsync_IncludesPendingDraftWhoseUtcDateDiffersFromLocalDay()
+    {
+        var requestedDate = new DateOnly(2026, 01, 15);
+        var localStart = CreateLocalTimeThatCrossesUtcDate(requestedDate);
+        var localEnd = localStart.AddMinutes(30);
+
+        await using (var context = await _contextFactory.CreateDbContextAsync())
+        {
+            context.PendingEvents.Add(new PendingEvent
+            {
+                PendingEventId = "pending_local_boundary",
+                CalendarId = "primary",
+                Summary = "Local boundary draft",
+                StartDatetime = localStart.ToUniversalTime(),
+                EndDatetime = localEnd.ToUniversalTime(),
+                IsAllDay = false,
+                ColorId = "azure",
+                AppCreated = true,
+                SourceSystem = "manual",
+                ReadyToPublish = false,
+                CreatedAt = new DateTime(2026, 01, 15, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
+
+        var events = await service.GetEventsForRangeAsync(requestedDate, requestedDate);
+
+        events.Should().ContainSingle(evt => evt.EventId == "pending_local_boundary");
+        events.Single(evt => evt.EventId == "pending_local_boundary").StartLocal.Date.Should().Be(requestedDate.ToDateTime(TimeOnly.MinValue));
+    }
+
+    [Fact]
+    public async Task GetEventsForRangeAsync_ExcludesTimedEventWhoseUtcDateMatchesButLocalDayIsPrevious()
+    {
+        var requestedDate = new DateOnly(2026, 01, 15);
+        var localStart = CreateLocalTimeThatCrossesUtcDate(requestedDate.AddDays(-1));
+        var localEnd = localStart.AddMinutes(30);
+
+        await using (var context = await _contextFactory.CreateDbContextAsync())
+        {
+            context.PendingEvents.Add(new PendingEvent
+            {
+                PendingEventId = "pending_previous_local_day",
+                CalendarId = "primary",
+                Summary = "Previous local day",
+                StartDatetime = localStart.ToUniversalTime(),
+                EndDatetime = localEnd.ToUniversalTime(),
+                IsAllDay = false,
+                ColorId = "azure",
+                AppCreated = true,
+                SourceSystem = "manual",
+                ReadyToPublish = false,
+                CreatedAt = new DateTime(2026, 01, 15, 8, 30, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 01, 15, 8, 45, 0, DateTimeKind.Utc)
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
+
+        var events = await service.GetEventsForRangeAsync(requestedDate, requestedDate);
+
+        events.Should().NotContain(evt => evt.EventId == "pending_previous_local_day");
+    }
+
+    [Fact]
     public async Task GetEventsForRangeAsync_PendingDeleteEventRemainsVisibleWithDeleteFlag()
     {
         await using (var context = await _contextFactory.CreateDbContextAsync())
@@ -402,6 +471,18 @@ public sealed class CalendarQueryServiceTests : IDisposable
         await using var context = await _contextFactory.CreateDbContextAsync();
         context.GcalEvents.AddRange(events);
         await context.SaveChangesAsync();
+    }
+
+    private static DateTime CreateLocalTimeThatCrossesUtcDate(DateOnly localDate)
+    {
+        var offset = TimeZoneInfo.Local.GetUtcOffset(localDate.ToDateTime(new TimeOnly(12, 0)));
+        var localTime = offset < TimeSpan.Zero
+            ? new TimeOnly(20, 0)
+            : offset > TimeSpan.Zero
+                ? new TimeOnly(2, 0)
+                : new TimeOnly(20, 0);
+
+        return localDate.ToDateTime(localTime, DateTimeKind.Local);
     }
 
     private sealed class TestDbContextFactory : IDbContextFactory<CalendarDbContext>

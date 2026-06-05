@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-05-13T16:46:23-05:00
+last_updated: 2026-06-04T21:40:46-05:00
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
@@ -82,6 +82,7 @@ development_status:
   4-8-year-view-drag-to-create: ready-for-dev
   4-9-recurring-event-editing-single-instance: backlog
   4-10-overlapping-event-layout: ready-for-dev
+  4-11-instant-sync-toggle: ready-for-dev
   epic-4-retrospective: optional
 
   epic-5: contexted  # Data Source Left Panel & Single-Day Select — scope doc at docs/epic-5-day-select-left-data-panel/epic-overview.md
@@ -92,6 +93,7 @@ development_status:
   5-5-left-panel-day-mode: review
   5-6-toggl-sleep-import: review
   5-7-toggl-sleep-card-and-drilldown: review
+  5-8-toggl-reports-api-historical-import: review
   epic-5-retrospective: optional
 
   epic-6: backlog  # Batch Day Management — scope doc at docs/epic-6-batch-multi-select/epic-overview.md
@@ -103,3 +105,15 @@ development_status:
   6-6-batch-mark-integration-action: backlog
   6-7-batch-select-events: backlog
   epic-6-retrospective: optional
+
+  epic-7: contexted  # Additional Data Source Integrations
+  7-1-toggl-data-schema-enhancement: review
+  7-2-toggl-sleep-quality-ui: review
+  7-3-toggl-driving: in-progress
+  7-4-toggl-phone: review
+  7-5-toggl-phone-date-range-rules: review
+  7-6-ios-call-log-import: review
+  7-7-google-maps-timeline-import: review
+  7-10-spotify-stats-fm: review
+  7-11-civilization-5-saves: review
+  epic-7-retrospective: optional

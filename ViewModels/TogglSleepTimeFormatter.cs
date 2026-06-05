@@ -15,8 +15,13 @@ internal static class TogglSleepTimeFormatter
         var localEnd = ToLocal(end);
         var dayDelta = (localEnd.Date - localStart.Date).Days;
         return dayDelta > 0
-            ? $"{localEnd:h:mm tt} +{dayDelta}"
+            ? $"{localEnd:h:mm tt} +{dayDelta}D"
             : localEnd.ToString("h:mm tt");
+    }
+
+    public static string FormatTimeRange(DateTime start, DateTime end)
+    {
+        return $"{FormatTime(start)} - {FormatEndTime(start, end)}";
     }
 
     public static string FormatDuration(TogglEntry entry)

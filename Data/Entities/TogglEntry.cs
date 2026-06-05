@@ -15,5 +15,9 @@ public class TogglEntry
     public DateTime? LastSyncedAt { get; set; }
     public DateTime CreatedAt { get; set; }
 
+    public TogglDataType? TogglDataType { get; set; }
+    public string? LinkedEventId { get; set; }
+    public string? LinkedEventType { get; set; }
+
     public GcalEvent? PublishedGcalEvent { get; set; }
 }

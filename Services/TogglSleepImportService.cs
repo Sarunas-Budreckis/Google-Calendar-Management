@@ -152,6 +152,7 @@ public sealed class TogglSleepImportService : ITogglSleepImportService
     private static bool IsCompletedSleepEntry(TogglTimeEntryDto entry)
     {
         return entry.Duration >= 0 &&
+               HasValidTogglDateTime(entry.Start) &&
                entry.Description?.Contains("sleep", StringComparison.OrdinalIgnoreCase) == true;
     }
 
@@ -171,8 +172,15 @@ public sealed class TogglSleepImportService : ITogglSleepImportService
         }
     }
 
-    private static DateTime ParseTogglDateTime(string value)
+    private static DateTime ParseTogglDateTime(string? value)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
         return DateTimeOffset.Parse(value, CultureInfo.InvariantCulture).UtcDateTime;
+    }
+
+    private static bool HasValidTogglDateTime(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value) &&
+               DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
     }
 }

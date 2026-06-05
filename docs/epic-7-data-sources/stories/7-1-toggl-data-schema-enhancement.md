@@ -1,7 +1,7 @@
 # Story 7.1: Toggl Data Schema Enhancement
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** Draft
+**Status:** review
 **Dependencies:** Story 5.1 (data source infrastructure), Story 5.6 (Toggl Sleep import)
 
 ---
@@ -69,3 +69,89 @@ A separate `toggl_sleep_quality` table is introduced here so that the Sleep UI s
 - The `toggl_sleep_quality` table is written by Story 7.2 and read by Story 5.7 (drilldown). No UI is wired in this story
 - Data source registry seeding: use `HasData` in `OnModelCreating` or a one-time migration seed; avoid re-inserting if already present (upsert on `source_key`)
 - Index `toggl_data.toggl_data_type` for efficient per-type queries
+
+---
+
+## Tasks / Subtasks
+
+- [x] Task 1: Add `TogglDataType` enum and new properties to `TogglEntry` entity
+  - [x] 1.1 Create `TogglDataType` enum with values `TogglSleep`, `TogglTransit`, `TogglPhone`
+  - [x] 1.2 Add `TogglDataType?`, `LinkedEventId`, `LinkedEventType` properties to `TogglEntry`
+
+- [x] Task 2: Update `TogglEntryConfiguration` with new column mappings and index
+  - [x] 2.1 Map `toggl_data_type` as nullable string with enum converter
+  - [x] 2.2 Map `linked_event_id` and `linked_event_type` columns
+  - [x] 2.3 Add index on `toggl_data_type`
+
+- [x] Task 3: Create `TogglSleepQuality` entity and EF Core configuration
+  - [x] 3.1 Create `Data/Entities/TogglSleepQuality.cs`
+  - [x] 3.2 Create `Data/Configurations/TogglSleepQualityConfiguration.cs` (table `toggl_sleep_quality`, `date` PK, quality check constraint 0–10)
+
+- [x] Task 4: Register `TogglSleepQuality` DbSet in `CalendarDbContext`
+
+- [x] Task 5: Generate and write EF Core migration `AddTogglDataSchemaEnhancement`
+  - [x] 5.1 Add columns to `toggl_data` (toggl_data_type, linked_event_id, linked_event_type)
+  - [x] 5.2 Create `toggl_sleep_quality` table
+  - [x] 5.3 Backfill `toggl_data_type = 'toggl_sleep'` where description LIKE 'sleep' (case-insensitive)
+  - [x] 5.4 Seed `data_source` rows with INSERT OR IGNORE for all 11 Epic 7 sources
+  - [x] 5.5 Add index on `toggl_data.toggl_data_type`
+  - [x] 5.6 Reversible Down() migration
+
+- [x] Task 6: Build and run tests
+
+---
+
+## Dev Notes
+
+- `TogglEntry` maps to `toggl_data` (see `Data/Configurations/TogglEntryConfiguration.cs`)
+- `DataSource` maps to `data_source` table; existing sources for Epic 5 were seeded in migration `20260513161426_AddDataSourceTier3Tables`
+- Use `INSERT OR IGNORE INTO data_source` in raw SQL in the migration to safely seed without re-inserting — the `idx_data_source_key` unique index guards `source_key`
+- `toggl_sleep` source key already exists from Epic 5 — the 11 new keys are for Epic 7 sources only
+- Enum string conversion: use `HasConversion<string>()` in configuration so SQLite stores the snake_case value; define the enum values to match the DB strings via a custom converter or use a backing field
+
+---
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Implemented via EF Core entity updates + manually written migration (no `dotnet ef migrations add` command needed — migration files written directly to match the project pattern).
+
+### Debug Log
+
+| Issue | Resolution |
+|-------|-----------|
+| — | — |
+
+### Completion Notes
+
+- Added `TogglDataType` enum and 3 new properties to `TogglEntry`
+- Updated `TogglEntryConfiguration` with new column mappings, enum→string converter, and `idx_toggl_type` index
+- Created `TogglSleepQuality` entity with `Date` PK, nullable `Quality` (0–10 check), `UpdatedAt`
+- Created `TogglSleepQualityConfiguration` mapping table `toggl_sleep_quality`
+- Registered `TogglSleepQuality` DbSet in `CalendarDbContext`
+- Wrote migration `20260604120000_AddTogglDataSchemaEnhancement` with Up/Down, backfill, data_source seeding
+- Updated model snapshot
+
+---
+
+## File List
+
+- `Data/Entities/TogglEntry.cs` (modified)
+- `Data/Entities/TogglDataType.cs` (new)
+- `Data/Entities/TogglSleepQuality.cs` (new)
+- `Data/Configurations/TogglEntryConfiguration.cs` (modified)
+- `Data/Configurations/TogglSleepQualityConfiguration.cs` (new)
+- `Data/CalendarDbContext.cs` (modified)
+- `Data/Migrations/20260604120000_AddTogglDataSchemaEnhancement.cs` (new)
+- `Data/Migrations/20260604120000_AddTogglDataSchemaEnhancement.Designer.cs` (new)
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs` (modified)
+- `docs/epic-7-data-sources/stories/7-1-toggl-data-schema-enhancement.md` (modified)
+
+---
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-06-04 | Story 7.1 implemented: toggl_data schema enhancement, toggl_sleep_quality table, Epic 7 data_source seeding |

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GoogleCalendarManagement.Views.CallLogDrilldownControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel
+        Padding="12"
+        Spacing="12">
+        <ItemsControl
+            ItemsSource="{Binding Entries}"
+            Visibility="{Binding EntriesVisibility}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border
+                        Margin="0,0,0,8"
+                        Padding="10"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+                        <StackPanel Spacing="4">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    FontWeight="SemiBold"
+                                    Text="{Binding ContactLabel}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Opacity="0.72"
+                                    Text="{Binding DurationLabel}"
+                                    TextWrapping="NoWrap" />
+                            </Grid>
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <TextBlock
+                                    Opacity="0.76"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{Binding TimeLabel}"
+                                    TextWrapping="NoWrap" />
+                                <TextBlock
+                                    Opacity="0.54"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{Binding CallTypeLabel}"
+                                    TextWrapping="NoWrap" />
+                                <TextBlock
+                                    Opacity="0.54"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{Binding ServiceLabel}"
+                                    TextWrapping="NoWrap" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock
+            Margin="0,8,0,0"
+            Opacity="0.6"
+            Text="No call data for this day."
+            TextWrapping="WrapWholeWords"
+            Visibility="{Binding EmptyStateVisibility}" />
+
+        <Button
+            HorizontalAlignment="Stretch"
+            Command="{Binding CreateCandidateEventsCommand}"
+            Content="Create Candidate Events"
+            Style="{StaticResource AccentButtonStyle}"
+            Visibility="{Binding EntriesVisibility}" />
+    </StackPanel>
+</UserControl>

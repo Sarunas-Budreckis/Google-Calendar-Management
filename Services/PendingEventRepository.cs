@@ -47,6 +47,26 @@ public sealed class PendingEventRepository : IPendingEventRepository
             .FirstOrDefaultAsync(ct);
     }
 
+    public async Task<PendingEvent?> GetSleepEventForDateAsync(DateOnly date, CancellationToken ct = default)
+    {
+        var localStart = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local);
+        var localEndExclusive = localStart.AddDays(1);
+        var utcStart = localStart.ToUniversalTime();
+        var utcEndExclusive = localEndExclusive.ToUniversalTime();
+
+        await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
+        return await context.PendingEvents
+            .AsNoTracking()
+            .Where(pendingEvent =>
+                pendingEvent.Summary != null &&
+                pendingEvent.Summary.StartsWith("Sleep") &&
+                pendingEvent.StartDatetime.HasValue &&
+                pendingEvent.StartDatetime.Value >= utcStart &&
+                pendingEvent.StartDatetime.Value < utcEndExclusive)
+            .OrderByDescending(pendingEvent => pendingEvent.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task UpsertAsync(PendingEvent pendingEvent, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(pendingEvent);

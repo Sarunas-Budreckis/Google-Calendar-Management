@@ -40,6 +40,7 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     private string _dayLabel = "";
     private string? _dayName;
     private DataSourceDayCardViewModel? _drilldownCard;
+    private string? _pendingDrilldownSourceKey;
 
     public DataSourcePanelViewModel(
         ISystemStateRepository systemStateRepository,
@@ -80,6 +81,9 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         WeakReferenceMessenger.Default.Register<DataSourcePanelViewModel, CalendarViewRangeChangedMessage>(
             this,
             static (recipient, _) => recipient.ReloadSourcesForCurrentViewOnUiThread());
+        WeakReferenceMessenger.Default.Register<DataSourcePanelViewModel, DataSourceDayOpenRequestedMessage>(
+            this,
+            static (recipient, message) => recipient.RequestDaySourceDrilldown(message));
     }
 
     public ObservableCollection<DataSourceSummaryViewModel> Sources { get; } = [];
@@ -89,6 +93,16 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     public ObservableCollection<DataSourceSummaryViewModel> OtherSources { get; } = [];
 
     public ObservableCollection<DataSourceDayCardViewModel> DayCards { get; } = [];
+
+    public void MoveDayCard(int oldIndex, int newIndex)
+    {
+        if (oldIndex < 0 || oldIndex >= DayCards.Count || newIndex < 0 || newIndex >= DayCards.Count || oldIndex == newIndex)
+        {
+            return;
+        }
+
+        DayCards.Move(oldIndex, newIndex);
+    }
 
     public IAsyncRelayCommand OpenDayNameHeaderCommand { get; }
 
@@ -310,7 +324,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
 
     public async Task LoadDayModeAsync(DateOnly date, CancellationToken ct = default)
     {
-        var previousDrilldownSourceKey = DrilldownCard?.SourceKey;
+        var previousDrilldownSourceKey = _pendingDrilldownSourceKey ?? DrilldownCard?.SourceKey;
+        _pendingDrilldownSourceKey = null;
         CurrentDay = date;
         IsGlobalMode = false;
         DrilldownCard = null;
@@ -460,7 +475,15 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         {
             var dayData = await viewDataProvider.GetDataForRangeAsync(viewFrom, viewTo, ct);
             dayDataMarkers = dayData
-                .Select(item => new DataSourceDayDataMarkerViewModel(item.Date, item.HasData, item.Count))
+                .Select(item => new DataSourceDayDataMarkerViewModel(
+                    item.Date,
+                    item.HasData,
+                    item.Count,
+                    date =>
+                    {
+                        WeakReferenceMessenger.Default.Send(new DataSourceDayOpenRequestedMessage(date, source.SourceKey));
+                        return Task.CompletedTask;
+                    }))
                 .ToList();
         }
 
@@ -530,6 +553,16 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         }
 
         _dispatcherQueue.TryEnqueue(() => _ = LoadDayModeAsync(selectedDay.Value));
+    }
+
+    private void RequestDaySourceDrilldown(DataSourceDayOpenRequestedMessage message)
+    {
+        _pendingDrilldownSourceKey = message.SourceKey;
+
+        if (CurrentDay == message.Date && !IsGlobalMode)
+        {
+            DrilldownCard = DayCards.FirstOrDefault(c => string.Equals(c.SourceKey, message.SourceKey, StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     private void OnSourceCollectionChanged()

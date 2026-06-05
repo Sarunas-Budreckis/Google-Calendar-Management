@@ -152,6 +152,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
             PlaceholderText = "New event"
         };
         _editTitleTextBox.TextChanged += EditTitleTextBox_TextChanged;
+        _editTitleTextBox.KeyDown += EditTitleTextBox_KeyDown;
         _titleErrorTextBlock = CreateErrorTextBlock();
         _editSingleDatePicker = new DatePicker();
         _editSingleDatePicker.DateChanged += EditSingleDatePicker_DateChanged;
@@ -567,6 +568,15 @@ public sealed partial class EventDetailsPanelControl : UserControl
         if (!_isSyncingEditors && _editTitleTextBox is not null)
         {
             ViewModel.EditTitle = _editTitleTextBox.Text;
+        }
+    }
+
+    private async void EditTitleTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Enter)
+        {
+            e.Handled = true;
+            await ViewModel.SaveAndExitEditModeAsync();
         }
     }
 

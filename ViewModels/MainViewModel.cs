@@ -123,6 +123,9 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
         WeakReferenceMessenger.Default.Register<MainViewModel, RequestUndoToastMessage>(
             this,
             static (recipient, message) => recipient.OnRequestUndoToast(message));
+        WeakReferenceMessenger.Default.Register<MainViewModel, DataSourceDayOpenRequestedMessage>(
+            this,
+            static (recipient, message) => _ = recipient.OpenDataSourceDayAsync(message));
     }
 
     public ViewMode CurrentViewMode
@@ -433,6 +436,11 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
         CurrentDate = date;
         CurrentViewMode = mode;
         await RefreshAsync();
+    }
+
+    private Task OpenDataSourceDayAsync(DataSourceDayOpenRequestedMessage message)
+    {
+        return NavigateToAsync(message.Date, ViewMode.Day);
     }
 
     public void RequestSyncFlyout()
@@ -885,8 +893,27 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
 
     private async Task SwitchViewModeAsync(ViewMode mode)
     {
+        if (mode == ViewMode.Day && CurrentViewMode != ViewMode.Day)
+        {
+            CurrentDate = ResolveDayViewDateOnSwitch(CurrentViewMode, CurrentDate);
+        }
+
         CurrentViewMode = mode;
         await RefreshAsync();
+    }
+
+    private DateOnly ResolveDayViewDateOnSwitch(ViewMode previousMode, DateOnly previousDate)
+    {
+        if (_calendarDaySelectionService?.ManuallySelectedDay is { } selectedDay)
+        {
+            return selectedDay;
+        }
+
+        var today = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
+        var (from, to) = GetDateRange(previousMode, previousDate);
+        return today >= from && today <= to
+            ? today
+            : from;
     }
 
     private async Task NavigatePreviousAsync()

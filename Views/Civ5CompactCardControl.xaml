@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GoogleCalendarManagement.Views.Civ5CompactCardControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <TextBlock
+            Opacity="0.76"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="{Binding SummaryLabel}"
+            TextWrapping="WrapWholeWords"
+            Visibility="{Binding DataVisibility}" />
+
+        <TextBlock
+            Opacity="0.54"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Text="No Civ 5 activity"
+            TextWrapping="WrapWholeWords"
+            Visibility="{Binding NoDataVisibility}" />
+    </Grid>
+</UserControl>

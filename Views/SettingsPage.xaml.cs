@@ -28,4 +28,14 @@ public sealed partial class SettingsPage : Page
     {
         _ = ViewModel.TestTogglConnectionCommand.ExecuteAsync(TogglApiTokenBox.Password);
     }
+
+    private void SaveStatsFmTokenButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        _ = ViewModel.SaveStatsFmTokenCommand.ExecuteAsync(StatsFmApiTokenBox.Password);
+    }
+
+    private void TestStatsFmConnectionButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        _ = ViewModel.TestStatsFmConnectionCommand.ExecuteAsync(StatsFmApiTokenBox.Password);
+    }
 }

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GoogleCalendarManagement.Views.Civ5DrilldownControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel
+        Padding="12"
+        Spacing="12">
+
+        <!-- Scan button + status -->
+        <StackPanel Spacing="4">
+            <Button
+                HorizontalAlignment="Stretch"
+                Command="{Binding ScanSavesCommand}"
+                Content="Scan Saves" />
+            <TextBlock
+                Opacity="0.6"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{Binding ScanStatusMessage}"
+                TextWrapping="WrapWholeWords"
+                Visibility="{Binding ScanStatusVisibility}" />
+        </StackPanel>
+
+        <!-- 24-hour timeline (populated in code-behind) -->
+        <ScrollViewer
+            MaxHeight="360"
+            HorizontalScrollMode="Disabled"
+            Visibility="{Binding PointsVisibility}">
+            <Canvas
+                x:Name="TimelineCanvas"
+                Width="200"
+                Height="480" />
+        </ScrollViewer>
+
+        <!-- Empty state -->
+        <TextBlock
+            Margin="0,8,0,0"
+            Opacity="0.6"
+            Text="No Civ 5 save points for this day."
+            TextWrapping="WrapWholeWords"
+            Visibility="{Binding EmptyStateVisibility}" />
+
+        <!-- Create candidate events button -->
+        <Button
+            HorizontalAlignment="Stretch"
+            Command="{Binding CreateCandidateEventsCommand}"
+            Content="Create Candidate Events"
+            Style="{StaticResource AccentButtonStyle}" />
+
+    </StackPanel>
+</UserControl>

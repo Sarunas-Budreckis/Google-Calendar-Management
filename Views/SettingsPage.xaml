@@ -93,6 +93,48 @@
                             TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </Border>
+
+                <Border
+                    Padding="24"
+                    CornerRadius="{StaticResource AppCornerRadiusLarge}"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="16">
+                        <TextBlock
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="Spotify (via stats.fm)" />
+
+                        <TextBlock
+                            Text="Configure a stats.fm bearer token to import your Spotify listening history. The token can be obtained from the Authorization header in your browser's dev tools while logged in to stats.fm."
+                            TextWrapping="WrapWholeWords" />
+
+                        <PasswordBox
+                            x:Name="StatsFmApiTokenBox"
+                            Header="stats.fm API token"
+                            Password="{x:Bind ViewModel.StatsFmApiToken, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            PlaceholderText="Paste stats.fm bearer token" />
+
+                        <StackPanel
+                            Orientation="Horizontal"
+                            Spacing="12">
+                            <Button
+                                Content="Save token"
+                                Click="SaveStatsFmTokenButton_Click" />
+                            <Button
+                                Content="Test connection"
+                                Click="TestStatsFmConnectionButton_Click"
+                                IsEnabled="{x:Bind ViewModel.CanTestStatsFmConnection, Mode=OneWay}" />
+                            <ProgressRing
+                                Width="24"
+                                Height="24"
+                                IsActive="{x:Bind ViewModel.IsTestingStatsFmConnection, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.StatsFmConnectionProgressVisibility, Mode=OneWay}" />
+                        </StackPanel>
+
+                        <TextBlock
+                            Text="{x:Bind ViewModel.StatsFmConnectionTestResult, Mode=OneWay}"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
     </Grid>

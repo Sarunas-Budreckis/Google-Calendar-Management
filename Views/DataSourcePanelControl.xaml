@@ -42,26 +42,35 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border
+                                    <Button
                                         Width="28"
                                         Height="30"
-                                        Background="{Binding BackgroundBrush}"
-                                        CornerRadius="3">
-                                        <StackPanel
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Spacing="0">
-                                            <TextBlock
-                                                FontSize="9"
-                                                Text="{Binding DayLabel}"
-                                                TextAlignment="Center" />
-                                            <TextBlock
-                                                FontSize="11"
-                                                FontWeight="SemiBold"
-                                                Text="{Binding CountLabel}"
-                                                TextAlignment="Center" />
-                                        </StackPanel>
-                                    </Border>
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Command="{Binding OpenCommand}"
+                                        ToolTipService.ToolTip="Open day">
+                                        <Border
+                                            Width="28"
+                                            Height="30"
+                                            Background="{Binding BackgroundBrush}"
+                                            CornerRadius="3">
+                                            <StackPanel
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Spacing="0">
+                                                <TextBlock
+                                                    FontSize="9"
+                                                    Text="{Binding DayLabel}"
+                                                    TextAlignment="Center" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    Text="{Binding CountLabel}"
+                                                    TextAlignment="Center" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -268,91 +277,143 @@
                 <Grid
                     Grid.Row="1"
                     Visibility="{x:Bind ViewModel.DayModeVisibility, Mode=OneWay}">
-                    <ListView
-                        Padding="0,1"
-                        ItemsSource="{x:Bind ViewModel.DayCards, Mode=OneWay}"
-                        SelectionMode="None"
-                        Visibility="{x:Bind ViewModel.DayModeSourceListVisibility, Mode=OneWay}">
-                        <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="Padding" Value="0" />
-                                <Setter Property="MinHeight" Value="0" />
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                            </Style>
-                        </ListView.ItemContainerStyle>
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <Border
-                                    Margin="4,1"
-                                    Padding="4"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="5">
-                                    <Grid ColumnSpacing="3">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
+                    <Grid Visibility="{x:Bind ViewModel.DayModeSourceListVisibility, Mode=OneWay}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
 
-                                        <CheckBox
-                                            Grid.Column="0"
-                                            Width="16"
-                                            Height="18"
-                                            MinWidth="0"
-                                            Padding="0"
-                                            VerticalAlignment="Top"
-                                            Command="{Binding ToggleIntegrationCommand}"
-                                            IsChecked="{Binding IsIntegrated, Mode=OneWay}"
-                                            IsEnabled="{Binding IsIntegrationEnabled}"
-                                            ToolTipService.ToolTip="Mark Integrated" />
+                        <Grid
+                            Grid.Row="0"
+                            Margin="4,6,4,2"
+                            Padding="4,0"
+                            ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="64" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Grid.Column="1"
+                                Opacity="0.72"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="Integrated"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Grid.Column="2"
+                                Opacity="0.72"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="Data Source"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Grid.Column="3"
+                                Opacity="0.72"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="Options"
+                                TextTrimming="CharacterEllipsis" />
+                        </Grid>
 
-                                        <StackPanel
-                                            Grid.Column="1"
-                                            HorizontalAlignment="Stretch"
-                                            MinWidth="0"
-                                            Spacing="2">
+                        <ListView
+                            x:Name="DayCardsListView"
+                            Grid.Row="1"
+                            Padding="0,1"
+                            ItemsSource="{x:Bind ViewModel.DayCards, Mode=OneWay}"
+                            SelectionMode="None">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="MinHeight" Value="0" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border
+                                        Margin="4,1"
+                                        Padding="4"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="5">
+                                        <Grid ColumnSpacing="6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="16" />
+                                                <ColumnDefinition Width="64" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
                                             <TextBlock
-                                                HorizontalAlignment="Left"
-                                                FontSize="12"
-                                                FontWeight="SemiBold"
-                                                TextAlignment="Left"
-                                                Text="{Binding DisplayName}"
-                                                TextTrimming="CharacterEllipsis"
-                                                TextWrapping="NoWrap" />
-                                            <ContentPresenter Content="{Binding CompactSummaryView}" />
-                                        </StackPanel>
+                                                Grid.Column="0"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Opacity="0.58"
+                                                PointerCaptureLost="DayCardDragHandle_PointerCaptureLost"
+                                                PointerMoved="DayCardDragHandle_PointerMoved"
+                                                PointerPressed="DayCardDragHandle_PointerPressed"
+                                                PointerReleased="DayCardDragHandle_PointerReleased"
+                                                Text="⋮"
+                                                ToolTipService.ToolTip="Drag to reorder" />
 
-                                        <!-- Add button on top, drill-down below -->
-                                        <StackPanel
-                                            Grid.Column="2"
-                                            VerticalAlignment="Top"
-                                            Spacing="1">
-                                            <Button
-                                                Padding="4,1"
-                                                Command="{Binding AddCommand}"
-                                                Content="Add"
-                                                FontSize="11"
-                                                Style="{StaticResource AccentButtonStyle}"
-                                                Visibility="{Binding AddButtonVisibility}" />
-                                            <Button
-                                                Width="20"
-                                                Height="20"
+                                            <CheckBox
+                                                Grid.Column="1"
+                                                Width="22"
+                                                Height="22"
+                                                MinWidth="0"
                                                 Padding="0"
-                                                Command="{Binding ExpandCommand}"
-                                                ToolTipService.ToolTip="Drill down">
-                                                <FontIcon
-                                                    FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                                    FontSize="8"
-                                                    Glyph="&#xE76C;" />
-                                            </Button>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Top"
+                                                Command="{Binding ToggleIntegrationCommand}"
+                                                IsChecked="{Binding IsIntegrated, Mode=OneWay}"
+                                                IsEnabled="{Binding IsIntegrationEnabled}"
+                                                ToolTipService.ToolTip="Mark Integrated" />
+
+                                            <StackPanel
+                                                Grid.Column="2"
+                                                HorizontalAlignment="Stretch"
+                                                MinWidth="0"
+                                                Spacing="2">
+                                                <TextBlock
+                                                    HorizontalAlignment="Left"
+                                                    FontSize="12"
+                                                    FontWeight="SemiBold"
+                                                    TextAlignment="Left"
+                                                    Text="{Binding DisplayName}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    TextWrapping="NoWrap" />
+                                                <ContentPresenter Content="{Binding CompactSummaryView}" />
+                                            </StackPanel>
+
+                                            <StackPanel
+                                                Grid.Column="3"
+                                                VerticalAlignment="Top"
+                                                Spacing="1">
+                                                <Button
+                                                    Padding="4,1"
+                                                    Command="{Binding AddCommand}"
+                                                    Content="Add"
+                                                    FontSize="11"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    Visibility="{Binding AddButtonVisibility}" />
+                                                <Button
+                                                    Width="24"
+                                                    Height="24"
+                                                    Padding="0"
+                                                    Command="{Binding ExpandCommand}"
+                                                    ToolTipService.ToolTip="Drill down">
+                                                    <FontIcon
+                                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                        FontSize="8"
+                                                        Glyph="&#xE76C;" />
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
 
                     <Grid Visibility="{x:Bind ViewModel.DayModeDrilldownVisibility, Mode=OneWay}">
                         <Grid.RowDefinitions>

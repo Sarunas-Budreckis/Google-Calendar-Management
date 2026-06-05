@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GoogleCalendarManagement.Views.VerticalDotTimelineControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto"
+        MaxHeight="400">
+        <Grid>
+            <!-- Hour tick marks on the left -->
+            <Canvas
+                x:Name="HourCanvas"
+                Width="36"
+                Height="960"
+                HorizontalAlignment="Left" />
+            <!-- Dot area to the right of hour labels -->
+            <Canvas
+                x:Name="DotCanvas"
+                Margin="40,0,0,0"
+                Height="960"
+                HorizontalAlignment="Left"
+                Width="160" />
+        </Grid>
+    </ScrollViewer>
+</UserControl>

@@ -1,11 +1,32 @@
 using GoogleCalendarManagement.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace GoogleCalendarManagement.Data.Configurations;
 
 public class TogglEntryConfiguration : IEntityTypeConfiguration<TogglEntry>
 {
+    private static readonly ValueConverter<TogglDataType, string> TogglDataTypeConverter = new(
+        v => ToDatabaseValue(v),
+        s => FromDatabaseValue(s));
+
+    private static string ToDatabaseValue(TogglDataType value) => value switch
+    {
+        TogglDataType.TogglSleep => "toggl_sleep",
+        TogglDataType.TogglTransit => "toggl_transit",
+        TogglDataType.TogglPhone => "toggl_phone",
+        _ => throw new InvalidOperationException($"Unsupported Toggl data type: {value}")
+    };
+
+    private static TogglDataType FromDatabaseValue(string value) => value switch
+    {
+        "toggl_sleep" => TogglDataType.TogglSleep,
+        "toggl_transit" => TogglDataType.TogglTransit,
+        "toggl_phone" => TogglDataType.TogglPhone,
+        _ => throw new InvalidOperationException($"Unsupported Toggl data type value: {value}")
+    };
+
     public void Configure(EntityTypeBuilder<TogglEntry> builder)
     {
         builder.ToTable("toggl_data");
@@ -24,8 +45,15 @@ public class TogglEntryConfiguration : IEntityTypeConfiguration<TogglEntry>
         builder.Property(e => e.LastSyncedAt).HasColumnName("last_synced_at");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+        builder.Property(e => e.TogglDataType)
+            .HasColumnName("toggl_data_type")
+            .HasConversion(TogglDataTypeConverter);
+        builder.Property(e => e.LinkedEventId).HasColumnName("linked_event_id");
+        builder.Property(e => e.LinkedEventType).HasColumnName("linked_event_type");
+
         builder.HasIndex(e => new { e.StartTime, e.EndTime }).HasDatabaseName("idx_toggl_date");
         builder.HasIndex(e => e.Description).HasDatabaseName("idx_toggl_description");
+        builder.HasIndex(e => e.TogglDataType).HasDatabaseName("idx_toggl_type");
 
         builder.HasOne(e => e.PublishedGcalEvent)
             .WithMany()

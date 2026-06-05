@@ -1,7 +1,7 @@
 # Story 7.11: Civilization 5 Saves
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** Draft
+**Status:** review
 **Dependencies:** Story 7.1 (data_source registry), Story 5.5 (left panel day mode)
 
 ---
@@ -105,3 +105,132 @@ Data stored: only timestamps and minimal metadata — no filenames, no file cont
 - The 30-minute coalescing gap is an initial value — make it configurable in the `data_source` row or app settings
 - Save point deduplication is on `file_modified_at` + `game_mode`; if a save is later modified (unlikely for completed saves), a new point is added
 - Unit tests: coalescing with exactly 30-min gap (boundary), mixed-mode window detection, deduplication
+
+---
+
+## Tasks / Subtasks
+
+- [x] Task 1: Create `Civ5SessionPoint` entity and EF Core configuration
+  - [x] 1.1 Create `Data/Entities/Civ5SessionPoint.cs`
+  - [x] 1.2 Create `Data/Configurations/Civ5SessionPointConfiguration.cs`
+
+- [x] Task 2: Add DbSet to CalendarDbContext and write migration
+  - [x] 2.1 Add `DbSet<Civ5SessionPoint> Civ5SessionPoints` to `CalendarDbContext`
+  - [x] 2.2 Write `Data/Migrations/20260604130000_AddCiv5SessionPoint.cs` with Up/Down
+  - [x] 2.3 Write `Data/Migrations/20260604130000_AddCiv5SessionPoint.Designer.cs`
+  - [x] 2.4 Update `Data/Migrations/CalendarDbContextModelSnapshot.cs`
+
+- [x] Task 3: Create `ICiv5SessionRepository` and `Civ5SessionRepository`
+  - [x] 3.1 Define `ICiv5SessionRepository` with methods for date queries and bulk insert
+  - [x] 3.2 Implement `Civ5SessionRepository`
+
+- [x] Task 4: Create `Civ5SessionCoalescer` (pure, testable coalescing logic)
+  - [x] 4.1 Implement `CoalesceIntoWindows` (30-min sliding window → `Civ5CandidateWindow` list)
+  - [x] 4.2 Implement mixed-mode title detection
+
+- [x] Task 5: Create `ICiv5SaveScannerService` and `Civ5SaveScannerService`
+  - [x] 5.1 Scan both root paths recursively for `.Civ5Save` and `.CivBeyondSwordSave` files
+  - [x] 5.2 Determine `game_mode` from immediate subfolder name
+  - [x] 5.3 Deduplicate against existing `(file_modified_at, game_mode)` pairs
+  - [x] 5.4 Persist new `Civ5SessionPoint` rows
+  - [x] 5.5 Write `DataSourceImportLog` entry
+
+- [x] Task 6: Create compact card ViewModel and View
+  - [x] 6.1 `ViewModels/Civ5CompactCardViewModel.cs` (point count + mode breakdown label)
+  - [x] 6.2 `Views/Civ5CompactCardControl.xaml` and `.xaml.cs`
+
+- [x] Task 7: Create drilldown ViewModel and View
+  - [x] 7.1 `ViewModels/Civ5SessionPointViewModel.cs` (time label, mode, canvas position, tooltip)
+  - [x] 7.2 `ViewModels/Civ5DrilldownViewModel.cs` (Scan + Create Candidate Events commands)
+  - [x] 7.3 `Views/Civ5DrilldownControl.xaml` and `.xaml.cs` (canvas timeline, code-behind layout)
+
+- [x] Task 8: Create `Civ5CardProvider` and register all services in DI
+  - [x] 8.1 `Services/Civ5CardProvider.cs` implementing all four provider interfaces
+  - [x] 8.2 Register entity, repository, scanner, card provider, VMs and views in `App.xaml.cs`
+
+- [x] Task 9: Write unit tests
+  - [x] 9.1 Coalescer tests: gap < 30 min merges, gap > 30 splits, exactly 30 splits, mixed-mode title
+  - [x] 9.2 Game_mode detection tests via `Civ5SaveScannerService.DetermineGameMode`
+  - [x] 9.3 22 tests total, all passing
+
+---
+
+## Dev Notes
+
+- `civ5` source_key was seeded in migration `20260604120000_AddTogglDataSchemaEnhancement` (Story 7.1) — `EnsureDataSourceAsync` should just look it up, not re-insert
+- Pattern: follow `TogglSleepCardProvider` for the card provider; follow `TogglSleepDrilldownViewModel` for the drilldown VM
+- Drilldown timeline: use a Canvas with code-behind layout (programmatic `Canvas.SetTop`) — XAML binding attached properties in ItemsControl is unreliable in WinUI 3
+- Coalescing: "within 30 minutes" means `nextPoint.FileModifiedAt - currentWindowEnd < 30 min` (exclusive); exactly 30 min = new window
+- 8/15 rounding: use existing `CalendarDraftTiming.RoundToNearestQuarterHour`
+- Scanner paths are UTC: `FileInfo.LastWriteTimeUtc`
+- Dedup query: fetch all existing `(file_modified_at, game_mode)` tuples for the candidate timestamps in one query, then filter client-side before insert
+- Migration `20260604130000_AddCiv5SessionPoint` also includes `maps_timeline_raw`, `toggl_phone_rule`, `call_log_import`, `call_log_entry` which were added to DbContext without a prior migration
+
+---
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Followed the TogglSleep pattern throughout. Coalescing logic extracted to `Civ5SessionCoalescer` (pure static class, no EF/DI dependencies) for clean unit testability. Timeline in drilldown uses code-behind Canvas layout rather than XAML binding to attached properties. All new UI controls registered as Transient; repositories/services as Singleton. Migration manually written.
+
+### Debug Log
+
+| Issue | Resolution |
+|-------|-----------|
+| `Color.FromArgb` not found in WinUI 3 | Added `using Windows.UI;` to resolve `Windows.UI.Color` |
+| CalendarDbContext had `MapsTimelineRaw`, `TogglPhoneRule`, `CallLogImport`, `CallLogEntry` without migrations | Included all four tables in migration `20260604130000_AddCiv5SessionPoint` |
+| Snapshot already updated by other stories' work | No snapshot rewrite needed — verified contents matched |
+
+### Completion Notes
+
+- Created `Civ5SessionPoint` entity and `Civ5SessionPointConfiguration` (table `civ5_session_point`, unique index on `file_modified_at + game_mode`)
+- Added `Civ5SessionPoints` DbSet to `CalendarDbContext`
+- Migration `20260604130000_AddCiv5SessionPoint` creates `civ5_session_point` plus 4 other unmigrated tables
+- `ICiv5SessionRepository` / `Civ5SessionRepository`: date-range queries, dedup key fetch, bulk insert
+- `Civ5SessionCoalescer`: static, pure coalescing logic with configurable gap (default 30 min); `GetEventTitle` returns "Civ 5 (mixed)" for multi-mode windows
+- `Civ5SaveScannerService`: filesystem scan with access-denied safety, game_mode from immediate subfolder, dedup, import log, messenger notification
+- `Civ5CompactCardViewModel` + `Civ5CompactCardControl`: count + mode breakdown or "No Civ 5 activity"
+- `Civ5SessionPointViewModel`: time label, mode, CanvasTop (0–480 proportional to time-of-day), tooltip text
+- `Civ5DrilldownViewModel`: `ScanSavesCommand`, `CreateCandidateEventsCommand`, loading, status message
+- `Civ5DrilldownControl`: Canvas with hour labels/ticks/dots drawn in code-behind, CollectionChanged wired to redraw
+- `Civ5CardProvider`: implements `IDataSourceCardProvider`, `IDataSourceCardProviderPreloader`, `IDataSourceViewDataProvider`
+- All registered in `App.xaml.cs` and `Civ5CardProvider` added to `DataSourceCardProviderRegistry`
+- 22 unit tests: 14 coalescer tests + 6 game_mode detection tests + 2 boundary cases — all passing
+
+---
+
+## File List
+
+- `Data/Entities/Civ5SessionPoint.cs` (new)
+- `Data/Configurations/Civ5SessionPointConfiguration.cs` (new)
+- `Data/CalendarDbContext.cs` (modified — added `DbSet<Civ5SessionPoint>`)
+- `Data/Migrations/20260604130000_AddCiv5SessionPoint.cs` (new)
+- `Data/Migrations/20260604130000_AddCiv5SessionPoint.Designer.cs` (new)
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs` (already contained Civ5SessionPoint from other story work — no change needed)
+- `Services/ICiv5SessionRepository.cs` (new)
+- `Services/Civ5SessionRepository.cs` (new)
+- `Services/Civ5SessionCoalescer.cs` (new)
+- `Services/ICiv5SaveScannerService.cs` (new)
+- `Services/Civ5SaveScannerService.cs` (new)
+- `Services/Civ5CardProvider.cs` (new)
+- `ViewModels/Civ5CompactCardViewModel.cs` (new)
+- `ViewModels/Civ5SessionPointViewModel.cs` (new)
+- `ViewModels/Civ5DrilldownViewModel.cs` (new)
+- `Views/Civ5CompactCardControl.xaml` (new)
+- `Views/Civ5CompactCardControl.xaml.cs` (new)
+- `Views/Civ5DrilldownControl.xaml` (new)
+- `Views/Civ5DrilldownControl.xaml.cs` (new)
+- `App.xaml.cs` (modified — registered Civ5 services and card provider)
+- `GoogleCalendarManagement.Tests/Unit/Services/Civ5SessionCoalescerTests.cs` (new)
+- `GoogleCalendarManagement.Tests/Unit/Services/Civ5SaveScannerServiceTests.cs` (new)
+- `docs/epic-7-data-sources/stories/7-11-civilization-5-saves.md` (modified)
+- `docs/sprint-status.yaml` (modified)
+
+---
+
+## Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-06-04 | Story 7.11 implemented: Civ5 scan-based session points, compact card, 24h timeline drilldown, coalescing candidate event generation, 22 unit tests |

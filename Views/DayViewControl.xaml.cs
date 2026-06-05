@@ -30,6 +30,7 @@ public sealed partial class DayViewControl : Page
     private static readonly Brush PendingDeleteBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xC4, 0x2B, 0x1C));
     private static readonly Brush SelectedBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE8, 0xEC, 0xF1));
     private static readonly Brush SelectedForPushBorderBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4C, 0xAF, 0x50));
+    private static readonly Brush GridLineBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4A, 0x4A, 0x4A));
     private static readonly Brush TodayHighlightBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x4E, 0x8F, 0xD8));
     private static readonly Brush TodayHighlightStrokeBrush = new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x73, 0xA8, 0xE4));
     private static readonly Brush TodayTextBrush = new SolidColorBrush(Colors.White);
@@ -290,26 +291,39 @@ public sealed partial class DayViewControl : Page
 
             var slotBorder = new Border
             {
-                BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
-                BorderThickness = new Thickness(0, 0, 0, 1)
+                BorderBrush = GridLineBrush,
+                BorderThickness = new Thickness(0, 1, 0, hour == 23 ? 1 : 0)
             };
             Grid.SetRow(slotBorder, hour);
             Grid.SetColumn(slotBorder, 1);
             DayGrid.Children.Add(slotBorder);
         }
 
-        foreach (var item in dayEvents.Where(evt => !evt.IsAllDay))
+        foreach (var timedItem in BuildDayTimedEventSegments(dayEvents.Where(evt => !evt.IsAllDay)))
         {
-            if (!CalendarViewVisualStateCalculator.TryClipTimedEventToDay(item, ViewModel.CurrentDate, out var segment))
-            {
-                continue;
-            }
+            var item = timedItem.Item;
+            var segment = timedItem.Segment;
 
             var minutesFromDayStart = (segment.VisibleStart - ViewModel.CurrentDate.ToDateTime(TimeOnly.MinValue)).TotalMinutes;
             var durationMinutes = (segment.VisibleEnd - segment.VisibleStart).TotalMinutes;
             var topOffset = minutesFromDayStart / 60.0 * TimeFocusedViewLayoutMetrics.HourRowHeight;
             var pixelHeight = durationMinutes / 60.0 * TimeFocusedViewLayoutMetrics.HourRowHeight;
             var eventHeight = Math.Max(MinimumEventHeight, pixelHeight - EventBottomGap);
+            var hasUsableOverlapWidth =
+                timedItem.OverlapColumnCount > 1 &&
+                DayGrid.ActualWidth > TimeFocusedViewLayoutMetrics.TimeColumnWidth + 16;
+            var laneGap = hasUsableOverlapWidth ? 4.0 : 0.0;
+            var dayColumnWidth = hasUsableOverlapWidth
+                ? DayGrid.ActualWidth - TimeFocusedViewLayoutMetrics.TimeColumnWidth
+                : 0;
+            var laneWidth = hasUsableOverlapWidth
+                ? Math.Max(
+                    1,
+                    (dayColumnWidth - 8 - (laneGap * (timedItem.OverlapColumnCount - 1))) / timedItem.OverlapColumnCount)
+                : double.NaN;
+            var leftOffset = hasUsableOverlapWidth
+                ? 4 + ((laneWidth + laneGap) * timedItem.OverlapColumn)
+                : 4;
             var black = new SolidColorBrush(Colors.Black);
 
             UIElement content;
@@ -364,8 +378,12 @@ public sealed partial class DayViewControl : Page
             {
                 Tag = item.EventId,
                 // Top margin encodes the sub-hour start offset so the block begins at the correct pixel.
-                Margin = new Thickness(4, topOffset, 4, 0),
+                Margin = hasUsableOverlapWidth
+                    ? new Thickness(leftOffset, topOffset, 0, 0)
+                    : new Thickness(4, topOffset, 4, 0),
+                Width = laneWidth,
                 Height = eventHeight,
+                HorizontalAlignment = hasUsableOverlapWidth ? HorizontalAlignment.Left : HorizontalAlignment.Stretch,
                 Opacity = item.Opacity,
                 VerticalAlignment = VerticalAlignment.Top,
                 Padding = padding,
@@ -391,13 +409,9 @@ public sealed partial class DayViewControl : Page
             RegisterEventBorder(item.EventId, eventBlock);
             RegisterInteractiveTimedEventBorder(eventBlock, item);
 
-            var startRow = segment.VisibleStart.Hour;
-            // Span = number of hour-rows the event occupies, accounting for start-minute offset.
-            var totalMinutesFromStartHour = segment.VisibleStart.Minute + (segment.VisibleEnd - segment.VisibleStart).TotalMinutes;
-            var span = (int)Math.Ceiling(totalMinutesFromStartHour / 60.0);
-            Grid.SetRow(eventBlock, startRow);
+            Grid.SetRow(eventBlock, 0);
             Grid.SetColumn(eventBlock, 1);
-            Grid.SetRowSpan(eventBlock, Math.Max(1, Math.Min(span, 24 - startRow)));
+            Grid.SetRowSpan(eventBlock, 24);
             DayGrid.Children.Add(eventBlock);
         }
 
@@ -415,6 +429,87 @@ public sealed partial class DayViewControl : Page
         }
 
         _selectionService.ClearSelection();
+    }
+
+    private IReadOnlyList<DayTimedEventLayoutItem> BuildDayTimedEventSegments(IEnumerable<CalendarEventDisplayModel> events)
+    {
+        var candidates = events
+            .Select(item =>
+            {
+                var hasSegment = CalendarViewVisualStateCalculator.TryClipTimedEventToDay(
+                    item,
+                    ViewModel.CurrentDate,
+                    out var segment);
+                return new { Item = item, HasSegment = hasSegment, Segment = segment };
+            })
+            .Where(item => item.HasSegment)
+            .OrderBy(item => item.Segment.VisibleStart)
+            .ThenBy(item => item.Segment.VisibleEnd)
+            .ToList();
+
+        var result = new List<DayTimedEventLayoutItem>(candidates.Count);
+        var group = new List<(CalendarEventDisplayModel Item, VisibleTimedEventSegment Segment)>();
+        DateTime? groupEnd = null;
+
+        foreach (var candidate in candidates)
+        {
+            if (groupEnd is not null && candidate.Segment.VisibleStart >= groupEnd.Value)
+            {
+                AddOverlapGroup(group, result);
+                group.Clear();
+                groupEnd = null;
+            }
+
+            group.Add((candidate.Item, candidate.Segment));
+            groupEnd = groupEnd is null || candidate.Segment.VisibleEnd > groupEnd.Value
+                ? candidate.Segment.VisibleEnd
+                : groupEnd;
+        }
+
+        if (group.Count > 0)
+        {
+            AddOverlapGroup(group, result);
+        }
+
+        return result
+            .OrderBy(item => item.Segment.VisibleStart)
+            .ThenBy(item => item.Segment.VisibleEnd)
+            .ThenBy(item => item.Item.Title, StringComparer.CurrentCulture)
+            .ToList();
+    }
+
+    private static void AddOverlapGroup(
+        IReadOnlyList<(CalendarEventDisplayModel Item, VisibleTimedEventSegment Segment)> group,
+        ICollection<DayTimedEventLayoutItem> result)
+    {
+        var activeColumns = new List<(int Column, DateTime End)>();
+        var assignments = new List<(CalendarEventDisplayModel Item, VisibleTimedEventSegment Segment, int Column)>();
+        var maxColumn = 0;
+
+        foreach (var item in group.OrderBy(item => item.Segment.VisibleStart).ThenBy(item => item.Segment.VisibleEnd))
+        {
+            activeColumns.RemoveAll(active => active.End <= item.Segment.VisibleStart);
+            var usedColumns = activeColumns.Select(active => active.Column).ToHashSet();
+            var column = 0;
+            while (usedColumns.Contains(column))
+            {
+                column++;
+            }
+
+            activeColumns.Add((column, item.Segment.VisibleEnd));
+            assignments.Add((item.Item, item.Segment, column));
+            maxColumn = Math.Max(maxColumn, column);
+        }
+
+        var columnCount = maxColumn + 1;
+        foreach (var assignment in assignments)
+        {
+            result.Add(new DayTimedEventLayoutItem(
+                assignment.Item,
+                assignment.Segment,
+                assignment.Column,
+                columnCount));
+        }
     }
 
     private void ShowEventColorPicker(FrameworkElement target, CalendarEventDisplayModel item)
@@ -1234,6 +1329,12 @@ public sealed partial class DayViewControl : Page
         Thickness BaseMargin,
         double BaseHeight,
         string? DefaultTimeText);
+
+    private sealed record DayTimedEventLayoutItem(
+        CalendarEventDisplayModel Item,
+        VisibleTimedEventSegment Segment,
+        int OverlapColumn,
+        int OverlapColumnCount);
 
     private sealed record EventInteractionState(
         Border Border,

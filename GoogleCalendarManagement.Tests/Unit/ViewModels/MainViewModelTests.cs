@@ -54,12 +54,15 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task SwitchViewModeCommand_DayView_AutoSelectsCurrentDate()
+    public async Task SwitchViewModeCommand_DayView_WhenManualDaySelected_UsesSelectedDay()
     {
         var queryService = new RecordingCalendarQueryService();
         var navigationStateService = new StubNavigationStateService(
             new NavigationState(ViewMode.Month, new DateOnly(2026, 05, 13)));
         var daySelectionService = new Mock<ICalendarDaySelectionService>();
+        daySelectionService
+            .SetupGet(service => service.ManuallySelectedDay)
+            .Returns(new DateOnly(2026, 05, 21));
         var viewModel = CreateViewModel(
             queryService,
             navigationStateService,
@@ -68,7 +71,54 @@ public sealed class MainViewModelTests : IDisposable
         await viewModel.InitializeAsync();
         await viewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Day);
 
-        daySelectionService.Verify(service => service.AutoSelectDay(new DateOnly(2026, 05, 13)), Times.Once);
+        viewModel.CurrentDate.Should().Be(new DateOnly(2026, 05, 21));
+        queryService.LastFrom.Should().Be(new DateOnly(2026, 05, 21));
+        queryService.LastTo.Should().Be(new DateOnly(2026, 05, 21));
+        daySelectionService.Verify(service => service.AutoSelectDay(new DateOnly(2026, 05, 21)), Times.Once);
+    }
+
+    [Fact]
+    public async Task SwitchViewModeCommand_DayView_WhenNoSelectedDayAndTodayInPeriod_UsesToday()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Month, new DateOnly(2026, 03, 13)));
+        var daySelectionService = new Mock<ICalendarDaySelectionService>();
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            calendarDaySelectionService: daySelectionService.Object,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 0, 0, TimeSpan.Zero)));
+
+        await viewModel.InitializeAsync();
+        await viewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Day);
+
+        viewModel.CurrentDate.Should().Be(new DateOnly(2026, 03, 30));
+        queryService.LastFrom.Should().Be(new DateOnly(2026, 03, 30));
+        queryService.LastTo.Should().Be(new DateOnly(2026, 03, 30));
+        daySelectionService.Verify(service => service.AutoSelectDay(new DateOnly(2026, 03, 30)), Times.Once);
+    }
+
+    [Fact]
+    public async Task SwitchViewModeCommand_DayView_WhenNoSelectedDayAndTodayOutsidePeriod_UsesFirstPeriodDay()
+    {
+        var queryService = new RecordingCalendarQueryService();
+        var navigationStateService = new StubNavigationStateService(
+            new NavigationState(ViewMode.Week, new DateOnly(2026, 05, 13)));
+        var daySelectionService = new Mock<ICalendarDaySelectionService>();
+        var viewModel = CreateViewModel(
+            queryService,
+            navigationStateService,
+            calendarDaySelectionService: daySelectionService.Object,
+            timeProvider: new FixedTimeProvider(new DateTimeOffset(2026, 03, 30, 12, 0, 0, TimeSpan.Zero)));
+
+        await viewModel.InitializeAsync();
+        await viewModel.SwitchViewModeCommand.ExecuteAsync(ViewMode.Day);
+
+        viewModel.CurrentDate.Should().Be(new DateOnly(2026, 05, 11));
+        queryService.LastFrom.Should().Be(new DateOnly(2026, 05, 11));
+        queryService.LastTo.Should().Be(new DateOnly(2026, 05, 11));
+        daySelectionService.Verify(service => service.AutoSelectDay(new DateOnly(2026, 05, 11)), Times.Once);
     }
 
     [Fact]

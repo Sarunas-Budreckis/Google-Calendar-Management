@@ -93,6 +93,38 @@ public sealed class TogglSleepImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ImportAsync_WhenSleepEntryStartIsMissing_SkipsEntry()
+    {
+        _apiClient
+            .Setup(mock => mock.GetTimeEntriesAsync(It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([CreateEntry(42, "sleep", start: null)]);
+        var service = CreateService();
+
+        var result = await service.ImportAsync(DateOnly.Parse("2026-05-01"), DateOnly.Parse("2026-05-02"));
+
+        result.Success.Should().BeTrue();
+        result.RecordsFetched.Should().Be(0);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        (await context.TogglEntries.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenSleepEntryStartIsInvalid_SkipsEntry()
+    {
+        _apiClient
+            .Setup(mock => mock.GetTimeEntriesAsync(It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([CreateEntry(42, "sleep", start: "not-a-date")]);
+        var service = CreateService();
+
+        var result = await service.ImportAsync(DateOnly.Parse("2026-05-01"), DateOnly.Parse("2026-05-02"));
+
+        result.Success.Should().BeTrue();
+        result.RecordsFetched.Should().Be(0);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        (await context.TogglEntries.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task ImportAsync_WritesImportLogOnSuccess()
     {
         _apiClient
@@ -180,12 +212,16 @@ public sealed class TogglSleepImportServiceTests : IDisposable
             TimeProvider.System);
     }
 
-    private static TogglTimeEntryDto CreateEntry(long id, string description, int duration = 3600)
+    private static TogglTimeEntryDto CreateEntry(
+        long id,
+        string description,
+        int duration = 3600,
+        string? start = "2026-05-01T22:00:00Z")
     {
         return new TogglTimeEntryDto(
             Id: id,
             Description: description,
-            Start: "2026-05-01T22:00:00Z",
+            Start: start,
             Stop: "2026-05-01T23:00:00Z",
             Duration: duration,
             ProjectId: null,

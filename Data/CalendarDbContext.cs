@@ -22,6 +22,13 @@ public class CalendarDbContext : DbContext
     public DbSet<DateSourceIntegration> DateSourceIntegrations { get; set; }
     public DbSet<DataSourceImportLog> DataSourceImportLogs { get; set; }
     public DbSet<TogglEntry> TogglEntries { get; set; }
+    public DbSet<TogglSleepQuality> TogglSleepQualities { get; set; }
+    public DbSet<TogglPhoneRule> TogglPhoneRules { get; set; }
+    public DbSet<MapsTimelineRaw> MapsTimelineRaws { get; set; }
+    public DbSet<Civ5SessionPoint> Civ5SessionPoints { get; set; }
+    public DbSet<CallLogImport> CallLogImports { get; set; }
+    public DbSet<CallLogEntry> CallLogEntries { get; set; }
+    public DbSet<SpotifyStream> SpotifyStreams { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
