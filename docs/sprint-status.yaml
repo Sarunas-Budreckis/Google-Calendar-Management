@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-06-04T21:40:46-05:00
+last_updated: 2026-06-05T00:00:00-05:00
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
@@ -110,10 +110,11 @@ development_status:
   7-1-toggl-data-schema-enhancement: review
   7-2-toggl-sleep-quality-ui: review
   7-3-toggl-driving: in-progress
-  7-4-toggl-phone: review
-  7-5-toggl-phone-date-range-rules: review
-  7-6-ios-call-log-import: review
+  7-4-toggl-phone: done
+  7-5-toggl-phone-date-range-rules: done
+  7-6-ios-call-log-import: done
   7-7-google-maps-timeline-import: review
-  7-10-spotify-stats-fm: review
-  7-11-civilization-5-saves: review
+  7-10-spotify-stats-fm: done
+  7-11-civilization-5-saves: in-progress
+  7-12-comfyui-tracking: review
   epic-7-retrospective: optional

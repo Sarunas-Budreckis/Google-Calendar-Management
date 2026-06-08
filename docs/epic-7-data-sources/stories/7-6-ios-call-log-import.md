@@ -1,7 +1,7 @@
 # Story 7.6: iOS Call Log Import (iMazing)
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** review
+**Status:** done
 **Dependencies:** Story 7.1 (data_source registry), Story 5.5 (left panel day mode)
 
 ---
@@ -202,6 +202,16 @@ All 18 CallLog unit tests pass (6 import service + 12 compact card/entry). Total
 - `GoogleCalendarManagement.Tests/Unit/SettingsViewModelTests.cs` — added `IStatsFmApiClient` mock arg
 - `GoogleCalendarManagement.Tests/Unit/Services/MapsTimelineParserTests.cs` — fixed FluentAssertions API
 
+### Review Findings
+
+- [x] [Review][Patch] Removed dead `GetExistingDedupKeysAsync` from `ICallLogRepository` / `CallLogRepository` — method was never called; `CallLogImportService` does its own inline dedup query [`Services/ICallLogRepository.cs`, `Services/CallLogRepository.cs`]
+- [x] [Review][Patch] Simplified `CallLogDrilldownViewModel` to delegate to `CallLogCardProvider.AddForDayAsync` — removed 3 injected services, `_entries` private list, 30-line duplicate event-creation loop, and duplicate `BuildTitle` helper [`ViewModels/CallLogDrilldownViewModel.cs`]
+- [x] [Review][Defer] "Create Candidate Events" button is not idempotent — button UI is transitional and will be replaced by ghost-event flow; deferred to Event Linking epic
+- [x] [Review][Defer] Column name `duration_seconds` deviates from spec which says `duration` — better name, schema already deployed, deferred
+- [x] [Review][Defer] `ICallLogProvider` interface (for future iCloud scraper) not implemented — tech-notes future item, deferred
+- [x] [Review][Defer] `linked_event_id` back-population on GCal push not wired — requires integration with push-to-GCal flow (story 4.4 territory), out of scope for this story, deferred
+
 ### Change Log
 
 - 2026-06-04: Implemented story 7.6 — iOS Call Log import via iMazing CSV, compact card, drilldown, candidate event generation with 10-min filter, Azure color, no 8/15 rounding. Added CsvHelper dependency. Fixed pre-existing build/test issues unblocking the build.
+- 2026-06-05: Code review — applied 2 simplification patches; 1 decision-needed item outstanding; 3 deferred.

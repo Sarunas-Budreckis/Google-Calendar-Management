@@ -17,6 +17,7 @@ public sealed class MapsTimelineImportHandler : IDataSourceImportHandler
 
     private readonly IMapsTimelineRepository _repository;
     private readonly MapsTimelineParser _parser;
+    private readonly MapsTimelineCardProvider _cardProvider;
     private readonly IContentDialogService _dialogService;
     private readonly IWindowService _windowService;
     private readonly ILogger<MapsTimelineImportHandler> _logger;
@@ -24,12 +25,14 @@ public sealed class MapsTimelineImportHandler : IDataSourceImportHandler
     public MapsTimelineImportHandler(
         IMapsTimelineRepository repository,
         MapsTimelineParser parser,
+        MapsTimelineCardProvider cardProvider,
         IContentDialogService dialogService,
         IWindowService windowService,
         ILogger<MapsTimelineImportHandler> logger)
     {
         _repository = repository;
         _parser = parser;
+        _cardProvider = cardProvider;
         _dialogService = dialogService;
         _windowService = windowService;
         _logger = logger;
@@ -91,6 +94,7 @@ public sealed class MapsTimelineImportHandler : IDataSourceImportHandler
         try
         {
             await _repository.SaveAsync(record, ct);
+            _cardProvider.InvalidateCache();
         }
         catch (Exception ex)
         {

@@ -105,8 +105,15 @@ public sealed class TogglPhoneRulesViewModel : ObservableObject
             IsActive = true
         };
 
-        await _ruleRepository.AddRuleAsync(newRule);
-        await LoadAsync();
+        try
+        {
+            await _ruleRepository.AddRuleAsync(newRule);
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            StatusMessage = "Failed to add rule. Check the logs.";
+        }
     }
 
     private async Task ReclassifyAllAsync()
@@ -117,6 +124,10 @@ public sealed class TogglPhoneRulesViewModel : ObservableObject
         {
             await _classificationService.ClassifyAllAsync();
             StatusMessage = "Re-classification complete.";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception)
         {
@@ -208,13 +219,60 @@ public sealed class TogglPhoneRuleItemViewModel : ObservableObject
     public DateOnly? DateFrom
     {
         get => _dateFrom;
-        set => SetProperty(ref _dateFrom, value);
+        set
+        {
+            if (SetProperty(ref _dateFrom, value))
+            {
+                OnPropertyChanged(nameof(DateFromOffset));
+                OnPropertyChanged(nameof(DateRangeLabel));
+            }
+        }
     }
 
     public DateOnly? DateTo
     {
         get => _dateTo;
-        set => SetProperty(ref _dateTo, value);
+        set
+        {
+            if (SetProperty(ref _dateTo, value))
+            {
+                OnPropertyChanged(nameof(DateToOffset));
+                OnPropertyChanged(nameof(DateRangeLabel));
+            }
+        }
+    }
+
+    // DateTimeOffset? adapters for CalendarDatePicker binding
+    public DateTimeOffset? DateFromOffset
+    {
+        get => _dateFrom.HasValue
+            ? new DateTimeOffset(_dateFrom.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            : null;
+        set
+        {
+            var newDate = value.HasValue ? DateOnly.FromDateTime(value.Value.Date) : (DateOnly?)null;
+            if (newDate == _dateFrom) return;
+            _dateFrom = newDate;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(DateFrom));
+            OnPropertyChanged(nameof(DateRangeLabel));
+        }
+    }
+
+    public DateTimeOffset? DateToOffset
+    {
+        get => _dateTo.HasValue
+            ? new DateTimeOffset(_dateTo.Value.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            : null;
+        set
+        {
+            var newDate = value.HasValue ? DateOnly.FromDateTime(value.Value.Date) : (DateOnly?)null;
+            if (newDate == _dateTo) return;
+            _dateTo = newDate;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(DateTo));
+            OnPropertyChanged(nameof(DateRangeLabel));
+        }
     }
 
     public string DateRangeLabel =>

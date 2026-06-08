@@ -33,7 +33,8 @@ public sealed class TogglSleepImportService : ITogglSleepImportService
     public async Task<TogglSleepImportResult> ImportAsync(DateOnly start, DateOnly end, CancellationToken ct = default)
     {
         var source = await EnsureDataSourceAsync(ct);
-        var recordsFetched = 0;
+        var newRecords = 0;
+        var updatedRecords = 0;
         var success = false;
         string? errorMessage = null;
 
@@ -51,29 +52,29 @@ public sealed class TogglSleepImportService : ITogglSleepImportService
                 .DistinctBy(e => e.Id)
                 .ToList();
 
-            recordsFetched = await UpsertSleepEntriesAsync(sleepEntries, ct);
+            (newRecords, updatedRecords) = await UpsertSleepEntriesAsync(sleepEntries, ct);
             success = true;
-            return new TogglSleepImportResult(true, recordsFetched, null);
+            return new TogglSleepImportResult(true, newRecords, updatedRecords, null);
         }
         catch (Exception ex) when (ex is TogglApiException or HttpRequestException or TaskCanceledException or JsonException)
         {
             errorMessage = ex is TaskCanceledException && !ct.IsCancellationRequested
                 ? "The Toggl import timed out. Check your network connection and try again."
                 : ex.Message;
-            return new TogglSleepImportResult(false, recordsFetched, errorMessage);
+            return new TogglSleepImportResult(false, newRecords, updatedRecords, errorMessage);
         }
         finally
         {
-            await WriteImportLogAsync(source.DataSourceId, start, end, recordsFetched, success, errorMessage, ct);
+            await WriteImportLogAsync(source.DataSourceId, start, end, newRecords + updatedRecords, success, errorMessage, CancellationToken.None);
             WeakReferenceMessenger.Default.Send(new DataSourceImportCompletedMessage(source.DataSourceId, SourceKey, success));
         }
     }
 
-    private async Task<int> UpsertSleepEntriesAsync(IReadOnlyCollection<TogglTimeEntryDto> entries, CancellationToken ct)
+    private async Task<(int inserted, int updated)> UpsertSleepEntriesAsync(IReadOnlyCollection<TogglTimeEntryDto> entries, CancellationToken ct)
     {
         if (entries.Count == 0)
         {
-            return 0;
+            return (0, 0);
         }
 
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
@@ -82,12 +83,15 @@ public sealed class TogglSleepImportService : ITogglSleepImportService
             .Where(e => togglIds.Contains(e.TogglId))
             .ToDictionaryAsync(e => e.TogglId, ct);
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var inserted = 0;
+        var updated = 0;
 
         foreach (var dto in entries)
         {
             if (existingEntries.TryGetValue(dto.Id, out var existing))
             {
                 ApplyDto(existing, dto, nowUtc, preserveCreatedAt: true);
+                updated++;
                 continue;
             }
 
@@ -98,10 +102,11 @@ public sealed class TogglSleepImportService : ITogglSleepImportService
             };
             ApplyDto(newEntry, dto, nowUtc, preserveCreatedAt: true);
             context.TogglEntries.Add(newEntry);
+            inserted++;
         }
 
         await context.SaveChangesAsync(ct);
-        return entries.Count;
+        return (inserted, updated);
     }
 
     private async Task<DataSource> EnsureDataSourceAsync(CancellationToken ct)

@@ -67,5 +67,10 @@
             Content="Copy to Viewer &amp; Open"
             Visibility="{Binding CopyButtonVisibility}" />
 
+        <Button
+            HorizontalAlignment="Stretch"
+            Command="{Binding ImportCommand}"
+            Content="Import Timeline" />
+
     </StackPanel>
 </UserControl>

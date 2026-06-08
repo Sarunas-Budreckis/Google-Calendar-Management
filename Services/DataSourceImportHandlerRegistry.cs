@@ -26,11 +26,21 @@ public sealed class DataSourceImportHandlerRegistry
 
     public bool HasHandler(string sourceKey)
     {
+        if (string.Equals(sourceKey, "comfyui", StringComparison.OrdinalIgnoreCase))
+        {
+            sourceKey = ComfyUIFolderScannerService.SourceKey;
+        }
+
         return !string.IsNullOrWhiteSpace(sourceKey) && _handlers.ContainsKey(sourceKey);
     }
 
     public IDataSourceImportHandler? GetHandler(string sourceKey)
     {
+        if (string.Equals(sourceKey, "comfyui", StringComparison.OrdinalIgnoreCase))
+        {
+            sourceKey = ComfyUIFolderScannerService.SourceKey;
+        }
+
         return string.IsNullOrWhiteSpace(sourceKey)
             ? null
             : _handlers.GetValueOrDefault(sourceKey);

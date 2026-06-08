@@ -89,13 +89,8 @@ public sealed class TogglSlidingWindowServiceTests
     [Fact]
     public void ComputeWindows_LowQualityWindow_RetriesWithTighterGap()
     {
-        // Window spans 60 minutes but entries only cover 5 minutes (8% coverage < 50%)
-        // With 5-minute retry gap, only the 5-minute covered portion should form a window
-        var a = Entry(0, 5);       // 5 min entry at start of window
-        var b = Entry(55, 60);     // 5 min entry 50 minutes later (just within 15-min gap? No — 55-5=50 > 15)
-
-        // Actually let me make a window with sparse coverage:
-        // 3 entries, each 2 min, spread over 60 minutes → total coverage = 6 min, window = 60 min → 10% < 50%
+        // 3 entries, each 2 min, spread over 30 min total → 6/30 = 20% coverage < 50%
+        // Retry with 5-min gap: gaps of 12 min each → all sub-windows are 2 min < 5 min → discarded
         var e1 = Entry(0, 2);
         var e2 = Entry(14, 16);   // 12 min gap < 15 → merged with e1
         var e3 = Entry(28, 30);   // 12 min gap < 15 → merged with e2

@@ -484,7 +484,10 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         }
     }
 
-    public async Task<bool> SaveNowAsync(bool keepEditMode = true, CancellationToken ct = default)
+    public async Task<bool> SaveNowAsync(
+        bool keepEditMode = true,
+        CancellationToken ct = default,
+        bool markReadyToPublish = false)
     {
         if (_isSaving || _currentEventId is null || _currentSourceKind is null)
         {
@@ -521,6 +524,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
                 pendingEvent.StartDatetime = draftStartUtc;
                 pendingEvent.EndDatetime = draftEndUtc;
                 pendingEvent.ColorId = EditColorId;
+                pendingEvent.ReadyToPublish = pendingEvent.ReadyToPublish || markReadyToPublish;
                 pendingEvent.UpdatedAt = utcNow;
                 await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
             }
@@ -551,7 +555,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
                         ColorId = EditColorId,
                         AppCreated = false,
                         SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
-                        ReadyToPublish = false,
+                        ReadyToPublish = markReadyToPublish,
                         CreatedAt = utcNow,
                         UpdatedAt = utcNow
                     };
@@ -564,6 +568,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
                     pendingEvent.EndDatetime = endUtc;
                     pendingEvent.IsAllDay = gcalEvent.IsAllDay;
                     pendingEvent.ColorId = EditColorId;
+                    pendingEvent.ReadyToPublish = pendingEvent.ReadyToPublish || markReadyToPublish;
                     pendingEvent.UpdatedAt = utcNow;
                 }
 
@@ -633,7 +638,15 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         if (_hasPendingLocalChanges)
         {
-            var saved = await SaveNowAsync(keepEditMode: false);
+            var saved = await SaveNowAsync(keepEditMode: false, markReadyToPublish: true);
+            if (!saved)
+            {
+                return;
+            }
+        }
+        else if (_currentSourceKind == CalendarEventSourceKind.Pending)
+        {
+            var saved = await SaveNowAsync(keepEditMode: false, markReadyToPublish: true);
             if (!saved)
             {
                 return;

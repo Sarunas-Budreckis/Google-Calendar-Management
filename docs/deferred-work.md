@@ -41,3 +41,34 @@
 - **`DeleteUneditedDraftAsync` has no undo** — Called in multiple places to silently discard unedited new drafts with no confirmation or recovery. Inconsistent with the new candidate-delete undo toast. [`ViewModels/EventDetailsPanelViewModel.cs` ~line 1902]
 - **`DeleteEventByIdAsync` still shows a confirmation dialog for Pending events** — Programmatic delete path has a different UX than the user-initiated `DeleteEventAsync`. [`ViewModels/EventDetailsPanelViewModel.cs` ~line 1812]
 - **`RevertPendingChangesForEventAsync` silently deletes pending edits** — No undo offered when reverting a pending edit via the three-choice dialog. Pre-existing behaviour. [`ViewModels/EventDetailsPanelViewModel.cs` ~line 1880]
+
+## Deferred from: code review of 7-4-toggl-phone (2026-06-05)
+
+- **Duplicate migration timestamp `20260604130000`** — `AddTogglPhoneRule` and `AddCiv5SessionPoint` share the same timestamp; alphabetical ordering happens to be correct, but colliding timestamps are fragile; consider renaming `AddTogglPhoneRule` to a distinct timestamp (e.g., `20260604131000`). [`Data/Migrations/`]
+- **`TogglPhoneDrilldownControl` doesn't use shared `VerticalDotTimelineControl`** — Story note says dot timeline should be reusable (shared with Spotify 7.10); phone drilldown implements its own inline 480px canvas instead. Unify when Spotify drilldown (7.10) is reviewed. [`Views/TogglPhoneDrilldownControl.xaml.cs`]
+- **Tooltip duration fallback `EndTime.Value - StartTime` is `DateTimeKind`-unsafe** — Used when `DurationSeconds` is null; subtracts DateTime values that may have different Kinds (e.g., StartTime=Utc, EndTime=Unspecified from SQLite), producing incorrect tooltip durations. [`ViewModels/TogglPhoneEntryViewModel.cs`]
+- **"Manage Rules" button (7.5) bundled in 7.4 drilldown** — 7.4 and 7.5 were implemented together; "Manage Rules" is outside 7.4 AC but intentional per completion notes. Reviewed as part of 7.5. [`Views/TogglPhoneDrilldownControl.xaml`]
+
+## Deferred from: code review of 7-5-toggl-phone-date-range-rules (2026-06-05)
+
+- **`MaxDurationMinutesText` setter silently ignores invalid input** — Non-numeric, zero, or negative values leave the bound `MaxDurationMinutes` unchanged with no user feedback; displayed text diverges from saved value. [`ViewModels/TogglPhoneRulesViewModel.cs`]
+- **No validation for inverted date range (`DateFrom > DateTo`)** — A rule with DateFrom after DateTo is accepted and saved; it will silently never match any entry. [`ViewModels/TogglPhoneRulesViewModel.cs`]
+- **`DateTimeKind.Unspecified` in `MatchesAnyRule` treated as local** — Consistent with rest of codebase; flag for future hardening. [`Services/TogglPhoneClassificationService.cs`]
+- **DST boundary may undercount entries in `GetPhoneEntryCountsForRangeAsync`** — UTC-to-local conversion near midnight on DST transition days can shift an entry's date; post-filter may drop edge entries. [`Services/TogglPhoneRepository.cs`]
+- **`DeactivateAsync` split-brain UI state on `RefreshAsync` failure** — `IsActive = false` is set before `RefreshAsync`; if refresh throws, the item shows deactivated while the full list is stale. [`ViewModels/TogglPhoneRulesViewModel.cs`]
+- **`UpdateRuleAsync` with externally-deleted row throws `DbUpdateConcurrencyException` with no UX** — Unlikely in single-user desktop app. [`Services/TogglPhoneRuleRepository.cs`]
+- **Null-duration (running timer) entries match open-ended rules on description alone** — May or may not be intended; spec silent on running entries. [`Services/TogglPhoneClassificationService.cs`]
+
+## Deferred from: code review of 7-11-civilization-5-saves (2026-06-05)
+
+- **DST midnight boundary causes ±1h UTC range in `GetPointsForDateAsync`** — `DateTime.SpecifyKind + ToUniversalTime` on local midnight is off by 1h during DST transitions; pre-existing pattern consistent with other data-source repositories. [`Services/Civ5SessionRepository.cs:GetPointsForDateAsync`]
+- **`CollectCandidates` blocks UI thread** — synchronous `Directory.EnumerateFiles` runs on the dispatcher thread after the first `await`; acceptable for typical save volumes but would freeze UI on very large save collections. [`Services/Civ5SaveScannerService.cs:CollectCandidates`]
+
+## Deferred from: code review of 7-10-spotify-stats-fm (2026-06-05)
+
+- **`UpsertStreamsAsync` N+1 database queries** — One `FirstOrDefaultAsync` per stream item (up to 500 per page); acceptable for current volumes but will degrade with large history imports. [`Services/SpotifyImportService.cs:UpsertStreamsAsync`]
+- **`ParseEndTime` has no null/format guard** — `DateTimeOffset.Parse` throws `FormatException`/`ArgumentNullException` on malformed API data; not caught by the import exception filter, aborting the whole import on a single bad record. Low risk for the unofficial API. [`Services/SpotifyImportService.cs:ParseEndTime`]
+- **DST boundary edge in `ToUtcRange`** — Spring-forward midnight may produce a UTC range off by one hour; pre-existing pattern used across all data sources. [`Services/SpotifyStreamRepository.cs:ToUtcRange`]
+- **All timeline dots placed at same X position** — Multiple tracks within the same clock minute overlap completely with no visual indicator of stacking. [`Views/VerticalDotTimelineControl.xaml.cs:SetItems`]
+- **`EnsureDataSourceAsync` TOCTOU race on first concurrent import** — Unlikely in a single-user desktop app; both calls could insert a duplicate data-source row if they race. [`Services/SpotifyImportService.cs:EnsureDataSourceAsync`]
+- **Token encryption write path not verified in filtered diff** — Verify `SetConfigValueAsync(StatsFmTokenConfigKey, token, encrypt: true)` is used in `SettingsViewModel` save handler. [`ViewModels/SettingsViewModel.cs`]

@@ -3,7 +3,7 @@
     x:Class="GoogleCalendarManagement.Views.TogglPhoneRulesControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    MinWidth="420">
+    MinWidth="560">
 
     <StackPanel
         Padding="4"
@@ -50,10 +50,11 @@
                                         OffContent="No" />
                                 </Grid>
 
-                                <!-- Row 1: Max duration and date range label -->
+                                <!-- Row 1: Max duration and date range pickers -->
                                 <Grid Grid.Row="1" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBox
@@ -61,13 +62,19 @@
                                         Header="Max Duration (min)"
                                         Text="{Binding MaxDurationMinutesText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                         PlaceholderText="No limit"
-                                        Width="160" />
-                                    <TextBlock
+                                        Width="140" />
+                                    <CalendarDatePicker
                                         Grid.Column="1"
-                                        VerticalAlignment="Bottom"
-                                        Opacity="0.7"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Text="{Binding DateRangeLabel}" />
+                                        HorizontalAlignment="Stretch"
+                                        Header="From date"
+                                        PlaceholderText="No start limit"
+                                        Date="{Binding DateFromOffset, Mode=TwoWay}" />
+                                    <CalendarDatePicker
+                                        Grid.Column="2"
+                                        HorizontalAlignment="Stretch"
+                                        Header="To date"
+                                        PlaceholderText="No end limit"
+                                        Date="{Binding DateToOffset, Mode=TwoWay}" />
                                 </Grid>
 
                                 <!-- Row 2: Notes and action buttons -->

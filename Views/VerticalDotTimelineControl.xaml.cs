@@ -22,6 +22,7 @@ public sealed partial class VerticalDotTimelineControl : UserControl
     public void SetItems(IEnumerable<VerticalDotItem> items)
     {
         DotCanvas.Children.Clear();
+        DrawDotAreaGridLines();
 
         foreach (var item in items)
         {
@@ -41,7 +42,7 @@ public sealed partial class VerticalDotTimelineControl : UserControl
                     : new SolidColorBrush(Colors.LightGray)
             };
 
-            var tooltipLines = new List<string> { item.PrimaryLabel };
+            var tooltipLines = new List<string> { FormatTooltipLine(item.PrimaryLabel, localTime) };
             if (item.SecondaryLabel is not null) tooltipLines.Add(item.SecondaryLabel);
             if (item.TertiaryLabel is not null) tooltipLines.Add(item.TertiaryLabel);
             ToolTipService.SetToolTip(dot, string.Join("\n", tooltipLines));
@@ -71,7 +72,7 @@ public sealed partial class VerticalDotTimelineControl : UserControl
 
             var label = new TextBlock
             {
-                Text = $"{hour:D2}",
+                Text = FormatHour(hour),
                 FontSize = 9,
                 Opacity = 0.5,
                 TextAlignment = TextAlignment.Right
@@ -81,7 +82,11 @@ public sealed partial class VerticalDotTimelineControl : UserControl
             HourCanvas.Children.Add(label);
         }
 
-        // Faint horizontal lines across the dot area every 3 hours
+        DrawDotAreaGridLines();
+    }
+
+    private void DrawDotAreaGridLines()
+    {
         for (var hour = 0; hour < 24; hour += 3)
         {
             var top = hour * PixelsPerHour;
@@ -95,5 +100,24 @@ public sealed partial class VerticalDotTimelineControl : UserControl
             };
             DotCanvas.Children.Add(gridLine);
         }
+    }
+
+    private static string FormatHour(int hour)
+    {
+        var suffix = hour < 12 ? "AM" : "PM";
+        var displayHour = hour % 12;
+        if (displayHour == 0)
+        {
+            displayHour = 12;
+        }
+
+        return $"{displayHour} {suffix}";
+    }
+
+    private static string FormatTooltipLine(string label, DateTime localTime)
+    {
+        return TimeOnly.TryParse(label, out _)
+            ? localTime.ToString("h:mm tt")
+            : label;
     }
 }

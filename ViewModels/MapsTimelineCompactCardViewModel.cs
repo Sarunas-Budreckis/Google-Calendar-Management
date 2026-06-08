@@ -6,13 +6,13 @@ namespace GoogleCalendarManagement.ViewModels;
 
 public sealed class MapsTimelineCompactCardViewModel : ObservableObject
 {
-    private readonly IMapsTimelineRepository _repository;
+    private readonly MapsTimelineCardProvider _cardProvider;
     private string _statusLabel = "";
     private bool _hasData;
 
-    public MapsTimelineCompactCardViewModel(IMapsTimelineRepository repository)
+    public MapsTimelineCompactCardViewModel(MapsTimelineCardProvider cardProvider)
     {
-        _repository = repository;
+        _cardProvider = cardProvider;
     }
 
     public string StatusLabel
@@ -39,18 +39,10 @@ public sealed class MapsTimelineCompactCardViewModel : ObservableObject
 
     public async Task LoadAsync(DateOnly date, CancellationToken ct = default)
     {
-        var record = await _repository.GetLatestAsync(ct);
-        if (record is null)
-        {
-            HasData = false;
-            StatusLabel = "";
-            return;
-        }
-
-        var coversDay = record.CoveredDateMin <= date && date <= record.CoveredDateMax;
+        var (coversDay, importedAt) = await _cardProvider.GetDayMetadataAsync(date, ct);
         HasData = coversDay;
-        StatusLabel = coversDay
-            ? $"Imported {record.ImportedAt.ToLocalTime():d}"
+        StatusLabel = coversDay && importedAt.HasValue
+            ? $"Imported {importedAt.Value.ToLocalTime():d}"
             : "";
     }
 }

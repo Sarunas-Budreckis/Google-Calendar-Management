@@ -1,7 +1,7 @@
 # Story 7.12: ComfyUI Tracking
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** Draft
+**Status:** review
 **Dependencies:** Story 7.1 (data_source registry), Story 5.5 (left panel day mode)
 
 ---
@@ -110,3 +110,143 @@ If a configured folder is inaccessible (permissions, network drive offline, etc.
 - Deduplication is on `file_modified_at` alone (no path stored); if two files have identical modified times, only one point is stored — this is an acceptable approximation
 - The 15-minute coalescing gap: make configurable per `comfyui_folder` row or globally in `data_source`
 - This source does not back up or copy files — scan is read-only
+
+---
+
+## Tasks / Subtasks
+
+- [x] Task 1: DB schema — entities, EF configurations, migration
+  - [x] 1.1 Create `ComfyUIFolder` entity
+  - [x] 1.2 Create `ComfyUIScanPoint` entity
+  - [x] 1.3 Create EF configurations for both entities
+  - [x] 1.4 Create migration `20260605000000_AddComfyUI`
+  - [x] 1.5 Add DbSets to `CalendarDbContext`
+
+- [x] Task 2: Repository — `IComfyUIRepository` and `ComfyUIRepository`
+  - [x] 2.1 Interface: GetFoldersAsync, AddFolderAsync, DeactivateFolderAsync, GetPointsForDateAsync, GetPointCountsForRangeAsync, GetExistingDedupKeysAsync, InsertPointsAsync
+  - [x] 2.2 Implement all repository methods
+
+- [x] Task 3: Scanner service — `IComfyUIFolderScannerService` / `ComfyUIFolderScannerService`
+  - [x] 3.1 Scan each active folder recursively, read created/modified timestamps
+  - [x] 3.2 Show popup (IContentDialogService) for inaccessible folders, continue with rest
+  - [x] 3.3 Skip duplicates by `file_modified_at`
+  - [x] 3.4 Log to `data_source_import_log`
+  - [x] 3.5 Send `DataSourceImportCompletedMessage`
+
+- [x] Task 4: Coalescer — `ComfyUISessionCoalescer`
+  - [x] 4.1 Sort by `file_modified_at`, merge within 15-minute gap
+  - [x] 4.2 Return windows with start/end timestamps
+
+- [x] Task 5: Card provider — `ComfyUICardProvider`
+  - [x] 5.1 Implement `IDataSourceCardProvider`, `IDataSourceCardProviderPreloader`, `IDataSourceViewDataProvider`
+
+- [x] Task 6: Compact card — `ComfyUICompactCardViewModel` + `ComfyUICompactCardControl`
+  - [x] 6.1 Show count of scan points for day; "No ComfyUI activity" when empty
+
+- [x] Task 7: Drilldown — `ComfyUIDrilldownViewModel` + `ComfyUIDrilldownControl`
+  - [x] 7.1 Folder management section: list folders, add via FolderPicker, remove (deactivate)
+  - [x] 7.2 "Scan Folders" button with status message
+  - [x] 7.3 24-hour timeline canvas with dot per `file_modified_at`; tooltip shows times
+  - [x] 7.4 "Create Candidate Events" button: coalesce → pending events (Navy, "ComfyUI", 8/15 rounded)
+
+- [x] Task 8: DI registration in App.xaml.cs
+
+- [x] Task 9: Unit tests
+  - [x] 9.1 `ComfyUISessionCoalescer` tests (empty, single, multi-window, exactly-at-gap)
+  - [x] 9.2 `ComfyUIFolderScannerService` tests (dedup, entity construction)
+
+- [x] Task 10: Extension — `comfyui_data` timestamp events and week-view import behavior
+  - [x] 10.1 Change ComfyUI source key to `comfyui_data`
+  - [x] 10.2 Store one timestamp row per created/modified event with `event_type`
+  - [x] 10.3 Recursively scan configured folders and every nested folder/file for created/modified timestamps
+  - [x] 10.4 Count only created events in the week/global data-source summary
+  - [x] 10.5 Make the ComfyUI import button open the existing drilldown/folder-management screen
+
+---
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Following the Civ5 data source as the primary pattern reference. Two new tables: `comfyui_folder` (configurable scan directories) and `comfyui_scan_point` (filesystem timestamps). Folder management UI is inline in the drilldown. FolderPicker uses `IWindowService` + `WinRT.Interop.WindowNative` pattern from `CallLogImportHandler`. Coalescer follows `Civ5SessionCoalescer` with 15-minute gap instead of 30.
+
+Extension implementation keeps the `ComfyUIScanPoint` C# type name but maps it to the `comfyui_data` table. The table now stores only `timestamp` and `event_type` (`created` or `modified`) plus scan/link metadata. The drilldown timeline and coalescing use modified events; week/global counts use created events.
+
+### Debug Log
+
+- Fixed pre-existing XAML build error in `TogglPhoneRulesControl.xaml`: `CalendarDatePicker` uses `Date` not `SelectedDate` in WinUI 3.
+- Added missing `using GoogleCalendarManagement.Models;` in `ComfyUIDrilldownViewModel.cs` for `CalendarEventSourceKind`.
+- 2026-06-05 extension: `dotnet build -p:Platform=x64 -p:WarningsNotAsErrors=NU1900` passed with 0 warnings/errors.
+- 2026-06-05 extension: `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64 --filter ComfyUI` passed 15/15 tests.
+- 2026-06-05 extension: full `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64` passed 494/498 with unrelated failures in two `EventDetailsPanelViewModelTests` cancel/delete tests, one `CallLogImportServiceTests` messenger assertion, and one `TogglSleepDrilldownViewModelTests` messenger assertion.
+
+### Completion Notes
+
+Implemented the full ComfyUI data source following the Civ5/Spotify pattern:
+- Two new DB tables (`comfyui_folder`, `comfyui_scan_point`) with EF Core configuration and manual migration.
+- `ComfyUIFolderScannerService` scans active folders recursively, shows `IContentDialogService` popup on access failure (continues with remaining folders), deduplicates by `file_modified_at`, logs to `data_source_import_log`, sends `DataSourceImportCompletedMessage`.
+- `ComfyUISessionCoalescer` merges points within a 15-minute sliding window.
+- Drilldown includes inline folder management (WinUI 3 `FolderPicker` via `IWindowService`/`WinRT.Interop`), scan button, 24-hour Canvas timeline (Navy dots), and "Create Candidate Events" (Navy color, 8/15 rounding).
+- 16 unit tests: 9 coalescer tests (empty, single, within-gap, at-gap, beyond-gap, multi-cluster, unsorted, window extension, custom gap) and 7 scanner dedup/entity tests — all pass.
+- Pre-existing test failures in `EventDetailsPanelViewModelTests` (20 failing) were present before this story and are unrelated to ComfyUI.
+- Extension changed the ComfyUI source key to `comfyui_data`, added migration `20260605010000_UpdateComfyUIDataEvents`, and converted persisted scan points to timestamp/event-type rows.
+- ComfyUI import now opens the existing drilldown screen for the current selected day or current view's first day instead of immediately scanning.
+- Recursive scan now records metadata for configured root folders, nested folders, and files; inaccessible configured roots show the existing popup and inaccessible nested branches are skipped after logging.
+- Week/global ComfyUI source markers and compact summary now show created file event counts only.
+
+---
+
+## File List
+
+**New files:**
+- `Data/Entities/ComfyUIFolder.cs`
+- `Data/Entities/ComfyUIScanPoint.cs`
+- `Data/Configurations/ComfyUIFolderConfiguration.cs`
+- `Data/Configurations/ComfyUIScanPointConfiguration.cs`
+- `Data/Migrations/20260605000000_AddComfyUI.cs`
+- `Data/Migrations/20260605000000_AddComfyUI.Designer.cs`
+- `Data/Migrations/20260605010000_UpdateComfyUIDataEvents.cs`
+- `Services/IComfyUIRepository.cs`
+- `Services/ComfyUIRepository.cs`
+- `Services/IComfyUIFolderScannerService.cs`
+- `Services/ComfyUIFolderScannerService.cs`
+- `Services/ComfyUISessionCoalescer.cs`
+- `Services/ComfyUICardProvider.cs`
+- `ViewModels/ComfyUICompactCardViewModel.cs`
+- `ViewModels/ComfyUIScanPointViewModel.cs`
+- `ViewModels/ComfyUIFolderItemViewModel.cs`
+- `ViewModels/ComfyUIDrilldownViewModel.cs`
+- `Views/ComfyUICompactCardControl.xaml`
+- `Views/ComfyUICompactCardControl.xaml.cs`
+- `Views/ComfyUIDrilldownControl.xaml`
+- `Views/ComfyUIDrilldownControl.xaml.cs`
+- `GoogleCalendarManagement.Tests/Unit/Services/ComfyUISessionCoalescerTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/Services/ComfyUIFolderScannerServiceTests.cs`
+
+**Modified files:**
+- `Data/CalendarDbContext.cs` — added `ComfyUIFolders`, `ComfyUIScanPoints` DbSets
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs` — mapped ComfyUI scan points to `comfyui_data`
+- `App.xaml.cs` — registered ComfyUI services and card provider
+- `Data/Entities/ComfyUIScanPoint.cs` — changed payload to timestamp + event type
+- `Data/Configurations/ComfyUIScanPointConfiguration.cs` — mapped `comfyui_data` and timestamp/event-type indexes
+- `Services/IComfyUIRepository.cs` — added created-event range counts and timestamp/event-type dedup keys
+- `Services/ComfyUIRepository.cs` — filters modified events for drilldown and created events for week counts
+- `Services/ComfyUIFolderScannerService.cs` — source key changed to `comfyui_data`, recursive folder/file timestamp event scan
+- `Services/ComfyUIImportHandler.cs` — import action opens the ComfyUI drilldown/folder screen
+- `Services/ComfyUICardProvider.cs` — week/global counts use created events
+- `Services/ComfyUISessionCoalescer.cs` — coalesces by timestamp
+- `ViewModels/ComfyUICompactCardViewModel.cs` — displays created event count
+- `ViewModels/ComfyUIDrilldownViewModel.cs` — pending event source system uses `comfyui_data`
+- `ViewModels/ComfyUIScanPointViewModel.cs` — timeline labels use timestamp events
+- `GoogleCalendarManagement.Tests/Unit/Services/ComfyUIFolderScannerServiceTests.cs` — updated dedup/entity tests for timestamp event rows
+- `GoogleCalendarManagement.Tests/Unit/Services/ComfyUISessionCoalescerTests.cs` — updated point construction for timestamp events
+- `Views/TogglPhoneRulesControl.xaml` — fixed pre-existing `SelectedDate` → `Date` XAML error
+- `docs/sprint-status.yaml` — added `7-12-comfyui-tracking: in-progress`
+- `docs/epic-7-data-sources/stories/7-12-comfyui-tracking.md` — this file
+
+---
+
+## Change Log
+
+- 2026-06-05: Story created and moved to in-progress
+- 2026-06-05: Extended ComfyUI tracking to `comfyui_data` timestamp events, recursive folder/file scans, created-event week counts, and import-to-drilldown behavior

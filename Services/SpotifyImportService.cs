@@ -4,6 +4,7 @@ using GoogleCalendarManagement.Data;
 using GoogleCalendarManagement.Data.Entities;
 using GoogleCalendarManagement.Messages;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace GoogleCalendarManagement.Services;
 
@@ -16,23 +17,27 @@ public sealed class SpotifyImportService : ISpotifyImportService
     private readonly IConfigRepository _configRepository;
     private readonly IStatsFmApiClient _apiClient;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<SpotifyImportService> _logger;
 
     public SpotifyImportService(
         IDbContextFactory<CalendarDbContext> contextFactory,
         IConfigRepository configRepository,
         IStatsFmApiClient apiClient,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ILogger<SpotifyImportService>? logger = null)
     {
         _contextFactory = contextFactory;
         _configRepository = configRepository;
         _apiClient = apiClient;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<SpotifyImportService>.Instance;
     }
 
     public async Task<SpotifyImportResult> ImportAsync(DateOnly start, DateOnly end, CancellationToken ct = default)
     {
         var source = await EnsureDataSourceAsync(ct);
-        var recordsFetched = 0;
+        var newRecords = 0;
+        var updatedRecords = 0;
         var success = false;
         string? errorMessage = null;
 
@@ -44,51 +49,69 @@ public sealed class SpotifyImportService : ISpotifyImportService
                 throw new StatsFmApiException("Configure a stats.fm API token in Settings before importing.");
             }
 
+            _logger.LogInformation("Starting stats.fm import for {StartDate} through {EndDate}.", start, end);
             var items = await _apiClient.GetStreamsAsync(token, start, end, ct);
-            recordsFetched = await UpsertStreamsAsync(items, ct);
+            _logger.LogInformation("stats.fm API returned {Count} stream item(s) for import.", items.Count);
+            (newRecords, updatedRecords) = await UpsertStreamsAsync(items, ct);
+            _logger.LogInformation(
+                "stats.fm import stored {Inserted} new stream(s) and updated {Updated} existing stream(s).",
+                newRecords, updatedRecords);
             success = true;
-            return new SpotifyImportResult(true, recordsFetched, null);
+            return new SpotifyImportResult(true, newRecords, updatedRecords, null);
         }
         catch (Exception ex) when (ex is StatsFmApiException or HttpRequestException or TaskCanceledException)
         {
             errorMessage = ex is TaskCanceledException && !ct.IsCancellationRequested
                 ? "The stats.fm import timed out. Check your network connection and try again."
                 : ex.Message;
-            return new SpotifyImportResult(false, recordsFetched, errorMessage);
+            return new SpotifyImportResult(false, newRecords, updatedRecords, errorMessage);
         }
         finally
         {
-            await WriteImportLogAsync(source.DataSourceId, start, end, recordsFetched, success, errorMessage, ct);
+            await WriteImportLogAsync(source.DataSourceId, start, end, newRecords + updatedRecords, success, errorMessage, CancellationToken.None);
             WeakReferenceMessenger.Default.Send(new DataSourceImportCompletedMessage(source.DataSourceId, SourceKey, success));
         }
     }
 
-    private async Task<int> UpsertStreamsAsync(IReadOnlyList<StatsFmStreamItemDto> items, CancellationToken ct)
+    private async Task<(int inserted, int updated)> UpsertStreamsAsync(IReadOnlyList<StatsFmStreamItemDto> items, CancellationToken ct)
     {
         if (items.Count == 0)
         {
-            return 0;
+            return (0, 0);
         }
 
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var upserted = 0;
-        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var inserted = 0;
+        var updated = 0;
+        // Tracks entities added in this batch so duplicate keys within the same batch
+        // are treated as in-memory updates rather than triggering a UNIQUE constraint violation.
+        var pendingInserts = new Dictionary<(DateTime, string), SpotifyStream>();
 
         foreach (var item in items)
         {
             var playedAt = ParseEndTime(item.EndTime);
-            var trackName = item.Track?.Name ?? "";
+            var trackName = item.Track?.Name ?? item.TrackName ?? "";
             var artistName = item.Track?.Artists?.FirstOrDefault()?.Name ?? "";
             var albumName = item.Track?.Albums?.FirstOrDefault()?.Name;
             var durationMs = item.Track?.DurationMs ?? 0;
             var msPlayed = item.PlayedMs;
+            var key = (playedAt, trackName);
+
+            if (pendingInserts.TryGetValue(key, out var pending))
+            {
+                pending.ArtistName = artistName;
+                pending.AlbumName = albumName;
+                pending.DurationMs = durationMs;
+                pending.MsPlayed = msPlayed;
+                continue;
+            }
 
             var existing = await context.SpotifyStreams
                 .FirstOrDefaultAsync(s => s.PlayedAt == playedAt && s.TrackName == trackName, ct);
 
             if (existing is null)
             {
-                context.SpotifyStreams.Add(new SpotifyStream
+                var newStream = new SpotifyStream
                 {
                     PlayedAt = playedAt,
                     TrackName = trackName,
@@ -96,8 +119,10 @@ public sealed class SpotifyImportService : ISpotifyImportService
                     AlbumName = albumName,
                     DurationMs = durationMs,
                     MsPlayed = msPlayed
-                });
-                upserted++;
+                };
+                context.SpotifyStreams.Add(newStream);
+                pendingInserts[key] = newStream;
+                inserted++;
             }
             else
             {
@@ -105,11 +130,12 @@ public sealed class SpotifyImportService : ISpotifyImportService
                 existing.AlbumName = albumName;
                 existing.DurationMs = durationMs;
                 existing.MsPlayed = msPlayed;
+                updated++;
             }
         }
 
         await context.SaveChangesAsync(ct);
-        return upserted;
+        return (inserted, updated);
     }
 
     private async Task<DataSource> EnsureDataSourceAsync(CancellationToken ct)

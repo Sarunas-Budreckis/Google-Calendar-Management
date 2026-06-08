@@ -37,6 +37,12 @@ public sealed class StatsFmApiClientTests
         return OkJson(json);
     }
 
+    private static HttpResponseMessage TracksResponse(params object[] items)
+    {
+        var json = JsonSerializer.Serialize(new { items });
+        return OkJson(json);
+    }
+
     private static HttpResponseMessage OkJson(string json) =>
         new(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 
@@ -52,6 +58,25 @@ public sealed class StatsFmApiClientTests
                 artists = new[] { new { name = artist } },
                 albums = new[] { new { name = album } }
             }
+        };
+
+    private static object MakeFlatStreamItem(string endTime, int playedMs, string trackName, int trackId) =>
+        new
+        {
+            playedMs,
+            endTime,
+            trackName,
+            trackId
+        };
+
+    private static object MakeTrackItem(int id, string trackName, string artist, string album, int durationMs) =>
+        new
+        {
+            id,
+            name = trackName,
+            durationMs,
+            artists = new[] { new { name = artist } },
+            albums = new[] { new { name = album } }
         };
 
     // ---------------------------------------------------------------------------
@@ -103,10 +128,12 @@ public sealed class StatsFmApiClientTests
         result.Should().HaveCount(1);
         result[0].PlayedMs.Should().Be(250_000);
         result[0].EndTime.Should().Be("2025-01-15T08:30:00Z");
-        result[0].Track.Name.Should().Be("Song A");
-        result[0].Track.Artists![0].Name.Should().Be("Artist X");
-        result[0].Track.Albums![0].Name.Should().Be("Album 1");
-        result[0].Track.DurationMs.Should().Be(300_000);
+        var track = result[0].Track;
+        track.Should().NotBeNull();
+        track!.Name.Should().Be("Song A");
+        track.Artists![0].Name.Should().Be("Artist X");
+        track.Albums![0].Name.Should().Be("Album 1");
+        track.DurationMs.Should().Be(300_000);
     }
 
     [Fact]
@@ -126,6 +153,49 @@ public sealed class StatsFmApiClientTests
         handler.Requests[0].RequestUri!.PathAndQuery.Should().Contain("/users/me");
         handler.Requests[1].RequestUri!.PathAndQuery.Should().Contain("/streams");
         handler.Requests[2].RequestUri!.PathAndQuery.Should().Contain("/streams");
+    }
+
+    [Fact]
+    public async Task GetStreamsAsync_UsesUnixMillisecondsForDateFilters()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.Enqueue(MeResponse());
+        handler.Enqueue(StreamsResponse());
+        var client = CreateClient(handler);
+
+        await client.GetStreamsAsync(FakeToken, DateOnly.Parse("2025-01-15"), DateOnly.Parse("2025-01-22"));
+
+        var query = handler.Requests[1].RequestUri!.PathAndQuery;
+        query.Should().Contain("/streams");
+        query.Should().Contain("after=");
+        query.Should().Contain("before=");
+        query.Should().NotContain("T");
+        query.Should().NotContain("%3A");
+    }
+
+    [Fact]
+    public async Task GetStreamsAsync_HydratesFlatStreamTrackMetadata()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.Enqueue(MeResponse());
+        handler.Enqueue(StreamsResponse(
+            MakeFlatStreamItem("2026-06-05T04:30:00Z", 290_467, "Monody", 10_106_661)));
+        handler.Enqueue(TracksResponse(
+            MakeTrackItem(10_106_661, "Monody", "TheFatRat", "Monody", 290_467)));
+        var client = CreateClient(handler);
+
+        var result = await client.GetStreamsAsync(FakeToken, DateOnly.Parse("2026-06-01"), DateOnly.Parse("2026-06-05"));
+
+        result.Should().HaveCount(1);
+        result[0].TrackName.Should().Be("Monody");
+        result[0].TrackId.Should().Be(10_106_661);
+        var track = result[0].Track;
+        track.Should().NotBeNull();
+        track!.Name.Should().Be("Monody");
+        track.Artists![0].Name.Should().Be("TheFatRat");
+        track.Albums![0].Name.Should().Be("Monody");
+        track.DurationMs.Should().Be(290_467);
+        handler.Requests[2].RequestUri!.PathAndQuery.Should().Be("/api/v1/tracks?ids=10106661");
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 namespace GoogleCalendarManagement.Services;
 
-public sealed record Civ5ScanResult(bool Success, int NewPointsAdded, string? ErrorMessage);
+public sealed record Civ5ScanResult(bool Success, int SavesDetected, int NewPointsAdded, string? ErrorMessage);
 
 public interface ICiv5SaveScannerService
 {

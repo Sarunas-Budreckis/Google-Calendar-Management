@@ -908,13 +908,13 @@ namespace GoogleCalendarManagement.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex(new[] { "PlayedAt", "TrackName" }, "idx_spotify_stream_dedup")
+                    b.HasIndex(new[] { "PlayedAt", "TrackName" }, "idx_spotify_data_dedup")
                         .IsUnique();
 
                     b.HasIndex("PlayedAt")
-                        .HasDatabaseName("idx_spotify_stream_played_at");
+                        .HasDatabaseName("idx_spotify_data_played_at");
 
-                    b.ToTable("spotify_stream", (string)null);
+                    b.ToTable("spotify_data", (string)null);
                 });
 
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.SystemState", b =>
@@ -1159,12 +1159,83 @@ namespace GoogleCalendarManagement.Data.Migrations
 
                     b.HasIndex("FileModifiedAt", "GameMode")
                         .IsUnique()
-                        .HasDatabaseName("idx_civ5_dedup");
+                        .HasDatabaseName("idx_civ5_data_dedup");
 
                     b.HasIndex("FileModifiedAt")
-                        .HasDatabaseName("idx_civ5_file_modified_at");
+                        .HasDatabaseName("idx_civ5_data_file_modified_at");
 
-                    b.ToTable("civ5_session_point", (string)null);
+                    b.ToTable("civ5_data", (string)null);
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.ComfyUIFolder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("FolderPath")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("folder_path");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("added_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FolderPath")
+                        .IsUnique()
+                        .HasDatabaseName("idx_comfyui_folder_path");
+
+                    b.ToTable("comfyui_folder", (string)null);
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.ComfyUIScanPoint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ScannedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scanned_at");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("timestamp");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("LinkedEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("linked_event_id");
+
+                    b.Property<string>("LinkedEventType")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("linked_event_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Timestamp")
+                        .HasDatabaseName("idx_comfyui_data_timestamp");
+
+                    b.HasIndex("Timestamp", "EventType")
+                        .IsUnique()
+                        .HasDatabaseName("idx_comfyui_data_dedup");
+
+                    b.ToTable("comfyui_data", (string)null);
                 });
 
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.CallLogEntry", b =>

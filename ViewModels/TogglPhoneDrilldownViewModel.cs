@@ -22,7 +22,6 @@ public sealed class TogglPhoneDrilldownViewModel : ObservableObject
 
     private readonly List<TogglEntry> _entries = [];
     private bool _hasEntries;
-    private DateOnly _currentDate;
 
     public TogglPhoneDrilldownViewModel(
         ITogglPhoneRepository repository,
@@ -63,7 +62,6 @@ public sealed class TogglPhoneDrilldownViewModel : ObservableObject
 
     public async Task LoadAsync(DateOnly date, CancellationToken ct = default)
     {
-        _currentDate = date;
         var entries = await _repository.GetPhoneEntriesForDateAsync(date, ct);
         _entries.Clear();
         _entries.AddRange(entries);

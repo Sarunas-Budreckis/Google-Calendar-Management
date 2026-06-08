@@ -15,13 +15,19 @@ public sealed record StatsFmStreamsResponseDto(
 public sealed record StatsFmStreamItemDto(
     [property: JsonPropertyName("playedMs")] int PlayedMs,
     [property: JsonPropertyName("endTime")] string EndTime,
-    [property: JsonPropertyName("track")] StatsFmStreamTrackDto Track);
+    [property: JsonPropertyName("track")] StatsFmStreamTrackDto? Track,
+    [property: JsonPropertyName("trackName")] string? TrackName = null,
+    [property: JsonPropertyName("trackId")] int? TrackId = null);
+
+public sealed record StatsFmTracksResponseDto(
+    [property: JsonPropertyName("items")] List<StatsFmStreamTrackDto> Items);
 
 public sealed record StatsFmStreamTrackDto(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("durationMs")] int DurationMs,
     [property: JsonPropertyName("artists")] List<StatsFmArtistDto>? Artists,
-    [property: JsonPropertyName("albums")] List<StatsFmAlbumDto>? Albums);
+    [property: JsonPropertyName("albums")] List<StatsFmAlbumDto>? Albums,
+    [property: JsonPropertyName("id")] int? Id = null);
 
 public sealed record StatsFmArtistDto(
     [property: JsonPropertyName("name")] string Name);

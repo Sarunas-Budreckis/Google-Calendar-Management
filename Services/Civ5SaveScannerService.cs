@@ -41,24 +41,28 @@ public sealed class Civ5SaveScannerService : ICiv5SaveScannerService
 
     public async Task<Civ5ScanResult> ScanAsync(CancellationToken ct = default)
     {
-        var source = await EnsureDataSourceAsync(ct);
+        var savesDetected = 0;
         var newPointsAdded = 0;
         var success = false;
         string? errorMessage = null;
+        DataSource? source = null;
 
         try
         {
+            source = await EnsureDataSourceAsync(ct);
             var candidates = CollectCandidates();
-            if (candidates.Count == 0)
+            savesDetected = candidates.Count;
+            var uniqueCandidates = DeduplicateCandidatesForPersistence(candidates);
+            if (uniqueCandidates.Count == 0)
             {
                 success = true;
-                return new Civ5ScanResult(true, 0, null);
+                return new Civ5ScanResult(true, 0, 0, null);
             }
 
             var existingKeys = await _repository.GetExistingDedupKeysAsync(
-                candidates.Select(c => c.FileModifiedAt).ToList(), ct);
+                uniqueCandidates.Select(c => c.FileModifiedAt).ToList(), ct);
 
-            var newPoints = candidates
+            var newPoints = uniqueCandidates
                 .Where(c => !existingKeys.Contains((c.FileModifiedAt, c.GameMode)))
                 .Select(c => new Civ5SessionPoint
                 {
@@ -68,21 +72,23 @@ public sealed class Civ5SaveScannerService : ICiv5SaveScannerService
                 })
                 .ToList();
 
-            await _repository.InsertPointsAsync(newPoints, ct);
-            newPointsAdded = newPoints.Count;
+            newPointsAdded = await _repository.InsertPointsAsync(newPoints, ct);
             success = true;
-            return new Civ5ScanResult(true, newPointsAdded, null);
+            return new Civ5ScanResult(true, savesDetected, newPointsAdded, null);
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            errorMessage = ex.ToString();
             _logger.LogError(ex, "Civ5 save scan failed");
-            return new Civ5ScanResult(false, newPointsAdded, errorMessage);
+            return new Civ5ScanResult(false, savesDetected, newPointsAdded, errorMessage);
         }
         finally
         {
-            await WriteImportLogAsync(source.DataSourceId, newPointsAdded, success, errorMessage, ct);
-            WeakReferenceMessenger.Default.Send(new DataSourceImportCompletedMessage(source.DataSourceId, SourceKey, success));
+            if (source is not null)
+            {
+                await WriteImportLogAsync(source.DataSourceId, newPointsAdded, success, errorMessage, ct);
+                WeakReferenceMessenger.Default.Send(new DataSourceImportCompletedMessage(source.DataSourceId, SourceKey, success));
+            }
         }
     }
 
@@ -100,7 +106,12 @@ public sealed class Civ5SaveScannerService : ICiv5SaveScannerService
             IEnumerable<string> files;
             try
             {
-                files = Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
+                files = Directory.EnumerateFiles(root, "*.*",
+                    new EnumerationOptions
+                    {
+                        RecurseSubdirectories = true,
+                        IgnoreInaccessible = true
+                    })
                     .Where(f => SaveExtensions.Any(ext =>
                         f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)));
             }
@@ -127,6 +138,14 @@ public sealed class Civ5SaveScannerService : ICiv5SaveScannerService
         }
 
         return results;
+    }
+
+    public static IReadOnlyList<(DateTime FileModifiedAt, string GameMode)> DeduplicateCandidatesForPersistence(
+        IEnumerable<(DateTime FileModifiedAt, string GameMode)> candidates)
+    {
+        return candidates
+            .Distinct()
+            .ToList();
     }
 
     public static string DetermineGameMode(string rootPath, string filePath)

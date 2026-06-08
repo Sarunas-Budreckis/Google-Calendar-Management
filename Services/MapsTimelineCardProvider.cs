@@ -63,6 +63,17 @@ public sealed class MapsTimelineCardProvider : IDataSourceCardProvider, IDataSou
         return control;
     }
 
+    public async Task<(bool CoversDay, DateTime? ImportedAt)> GetDayMetadataAsync(DateOnly date, CancellationToken ct = default)
+    {
+        await EnsureCacheAsync(ct);
+        if (_rangeCache is null)
+        {
+            return (false, null);
+        }
+
+        return (_rangeCache.CoversDate(date), _rangeCache.ImportedAt);
+    }
+
     public void InvalidateCache()
     {
         _cacheDirty = true;

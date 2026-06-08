@@ -10,20 +10,26 @@ public sealed partial class Civ5DrilldownControl : UserControl
 {
     private const double TimelineHeight = 480.0;
     private const double HourHeight = TimelineHeight / 24.0;
+    private bool _suppressRebuild;
 
     public Civ5DrilldownControl(Civ5DrilldownViewModel viewModel)
     {
         ViewModel = viewModel;
         InitializeComponent();
         DataContext = viewModel;
-        viewModel.SessionPoints.CollectionChanged += (_, _) => BuildTimeline();
+        viewModel.SessionPoints.CollectionChanged += (_, _) =>
+        {
+            if (!_suppressRebuild) BuildTimeline();
+        };
     }
 
     public Civ5DrilldownViewModel ViewModel { get; }
 
     public async Task LoadAsync(DateOnly date, CancellationToken ct = default)
     {
+        _suppressRebuild = true;
         await ViewModel.LoadAsync(date, ct);
+        _suppressRebuild = false;
         BuildTimeline();
     }
 
@@ -54,7 +60,7 @@ public sealed partial class Civ5DrilldownControl : UserControl
                 Opacity = 0.5
             };
             Canvas.SetLeft(label, 0);
-            Canvas.SetTop(label, y - 6);
+            Canvas.SetTop(label, Math.Max(0, y - 6));
             TimelineCanvas.Children.Add(label);
 
             var tick = new Line

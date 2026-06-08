@@ -354,6 +354,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
             Func<Task>? addAction = provider is IDataSourceDayActionProvider actionProvider
                 ? () => actionProvider.AddForDayAsync(date)
                 : null;
+            var addButtonContent = provider is ComfyUICardProvider ? "Import" : "Add";
+            var allowAddWhenGreyedOut = provider is ComfyUICardProvider;
 
             DayCards.Add(new DataSourceDayCardViewModel(
                 source.DataSourceId,
@@ -366,12 +368,14 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                 card => DrilldownCard = card,
                 compactSummaryView,
                 drilldownViewFactory,
-                addAction));
+                addAction,
+                addButtonContent,
+                allowAddWhenGreyedOut));
         }
 
         if (previousDrilldownSourceKey is not null)
         {
-            DrilldownCard = DayCards.FirstOrDefault(c => c.SourceKey == previousDrilldownSourceKey);
+            DrilldownCard = DayCards.FirstOrDefault(c => SourceKeysMatch(c.SourceKey, previousDrilldownSourceKey));
         }
 
         OnPropertyChanged(nameof(DayModeSourceListVisibility));
@@ -509,11 +513,22 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     {
         if (_dispatcherQueue is null || _dispatcherQueue.HasThreadAccess)
         {
-            _ = LoadSourcesAsync();
+            _ = ReloadSourcesAsync();
             return;
         }
 
-        _dispatcherQueue.TryEnqueue(() => _ = LoadSourcesAsync());
+        _dispatcherQueue.TryEnqueue(() => _ = ReloadSourcesAsync());
+    }
+
+    private async Task ReloadSourcesAsync()
+    {
+        if (!IsGlobalMode && CurrentDay is { } date)
+        {
+            await LoadDayModeAsync(date);
+            return;
+        }
+
+        await LoadSourcesAsync();
     }
 
     private void ReloadSourcesForCurrentViewOnUiThread()
@@ -561,8 +576,20 @@ public sealed class DataSourcePanelViewModel : ObservableObject
 
         if (CurrentDay == message.Date && !IsGlobalMode)
         {
-            DrilldownCard = DayCards.FirstOrDefault(c => string.Equals(c.SourceKey, message.SourceKey, StringComparison.OrdinalIgnoreCase));
+            DrilldownCard = DayCards.FirstOrDefault(c => SourceKeysMatch(c.SourceKey, message.SourceKey));
         }
+    }
+
+    private static bool SourceKeysMatch(string left, string right)
+    {
+        return string.Equals(left, right, StringComparison.OrdinalIgnoreCase)
+            || IsComfyUIKey(left) && IsComfyUIKey(right);
+    }
+
+    private static bool IsComfyUIKey(string sourceKey)
+    {
+        return string.Equals(sourceKey, "comfyui", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(sourceKey, ComfyUIFolderScannerService.SourceKey, StringComparison.OrdinalIgnoreCase);
     }
 
     private void OnSourceCollectionChanged()

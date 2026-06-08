@@ -42,10 +42,14 @@ public sealed class TogglTransitImportHandler : IDataSourceImportHandler
 
         if (result.Success)
         {
-            await _dialogService.ShowMessageAsync(
-                "Toggl Driving Import",
-                $"Imported {result.RecordsFetched} driving entries.",
-                "OK");
+            var message = result.NewRecords == 0 && result.UpdatedRecords == 0
+                ? "No driving entries found in the selected date range."
+                : result.NewRecords == 0
+                    ? $"All {result.UpdatedRecords} driving entries already up to date."
+                    : result.UpdatedRecords > 0
+                        ? $"Imported {result.NewRecords} new driving entries ({result.UpdatedRecords} already up to date)."
+                        : $"Imported {result.NewRecords} driving entries.";
+            await _dialogService.ShowMessageAsync("Toggl Driving Import", message, "OK");
             return;
         }
 

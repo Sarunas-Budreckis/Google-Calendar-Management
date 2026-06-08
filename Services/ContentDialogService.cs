@@ -15,7 +15,7 @@ public sealed class ContentDialogService : IContentDialogService
 
     public async Task ShowErrorAsync(string title, string message)
     {
-        await ShowMessageAsync(title, message);
+        await ShowSelectableTextAsync(title, message, closeButtonText: "OK");
     }
 
     public async Task ShowMessageAsync(string title, string message, string closeButtonText = "OK")

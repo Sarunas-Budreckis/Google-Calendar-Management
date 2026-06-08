@@ -67,6 +67,23 @@ public sealed class SpotifyImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ImportAsync_StoresStreamsInSpotifyDataTable()
+    {
+        _apiClient
+            .Setup(m => m.GetStreamsAsync(It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([CreateStreamItem("2025-01-15T08:30:00Z", "Track A", "Artist X", "Album 1", 300_000, 250_000)]);
+        var service = CreateService();
+
+        await service.ImportAsync(DateOnly.Parse("2025-01-15"), DateOnly.Parse("2025-01-15"));
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var tableCount = await context.Database
+            .SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM spotify_data")
+            .SingleAsync();
+        tableCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task ImportAsync_PlayedAtIsUtcFromEndTime()
     {
         _apiClient
@@ -104,6 +121,27 @@ public sealed class SpotifyImportServiceTests : IDisposable
         var stored = await context.SpotifyStreams.SingleAsync();
         stored.ArtistName.Should().Be("Artist Y");
         stored.AlbumName.Should().Be("New Album");
+        stored.MsPlayed.Should().Be(300_000);
+    }
+
+    [Fact]
+    public async Task ImportAsync_HandlesDuplicatesWithinSameBatch()
+    {
+        var dup1 = CreateStreamItem("2025-01-15T08:30:00Z", "Track A", "Artist X", null, 300_000, 250_000);
+        var dup2 = CreateStreamItem("2025-01-15T08:30:00Z", "Track A", "Artist Y", "Album Z", 300_000, 300_000);
+        _apiClient
+            .Setup(m => m.GetStreamsAsync(It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([dup1, dup2]);
+        var service = CreateService();
+
+        var result = await service.ImportAsync(DateOnly.Parse("2025-01-15"), DateOnly.Parse("2025-01-15"));
+
+        result.Success.Should().BeTrue();
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        (await context.SpotifyStreams.CountAsync()).Should().Be(1);
+        var stored = await context.SpotifyStreams.SingleAsync();
+        stored.ArtistName.Should().Be("Artist Y");
+        stored.AlbumName.Should().Be("Album Z");
         stored.MsPlayed.Should().Be(300_000);
     }
 

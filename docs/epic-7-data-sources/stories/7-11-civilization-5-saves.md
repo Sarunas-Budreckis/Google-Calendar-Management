@@ -1,7 +1,7 @@
 # Story 7.11: Civilization 5 Saves
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** review
+**Status:** in-progress
 **Dependencies:** Story 7.1 (data_source registry), Story 5.5 (left panel day mode)
 
 ---
@@ -197,6 +197,9 @@ Followed the TogglSleep pattern throughout. Coalescing logic extracted to `Civ5S
 - `Civ5CardProvider`: implements `IDataSourceCardProvider`, `IDataSourceCardProviderPreloader`, `IDataSourceViewDataProvider`
 - All registered in `App.xaml.cs` and `Civ5CardProvider` added to `DataSourceCardProviderRegistry`
 - 22 unit tests: 14 coalescer tests + 6 game_mode detection tests + 2 boundary cases — all passing
+- 2026-06-05 extension: Civ5 global import remains scan-only with no date-range prompt; success popup now reports total save files detected and new save points added.
+- 2026-06-05 extension: Runtime EF mapping now uses `civ5_data` instead of `civ5_session_point`; added migration `20260605020000_AddCiv5DataTable` to create `civ5_data` and migrate/drop `civ5_session_point` when present.
+- Validation: `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64 --filter Civ5 --no-build` passed (26/26). Full suite currently has 2 unrelated `EventDetailsPanelViewModelTests` delete-cancel failures.
 
 ---
 
@@ -213,6 +216,7 @@ Followed the TogglSleep pattern throughout. Coalescing logic extracted to `Civ5S
 - `Services/Civ5SessionCoalescer.cs` (new)
 - `Services/ICiv5SaveScannerService.cs` (new)
 - `Services/Civ5SaveScannerService.cs` (new)
+- `Services/Civ5ImportHandler.cs` (modified — success popup includes detected and added counts)
 - `Services/Civ5CardProvider.cs` (new)
 - `ViewModels/Civ5CompactCardViewModel.cs` (new)
 - `ViewModels/Civ5SessionPointViewModel.cs` (new)
@@ -223,7 +227,9 @@ Followed the TogglSleep pattern throughout. Coalescing logic extracted to `Civ5S
 - `Views/Civ5DrilldownControl.xaml.cs` (new)
 - `App.xaml.cs` (modified — registered Civ5 services and card provider)
 - `GoogleCalendarManagement.Tests/Unit/Services/Civ5SessionCoalescerTests.cs` (new)
-- `GoogleCalendarManagement.Tests/Unit/Services/Civ5SaveScannerServiceTests.cs` (new)
+- `GoogleCalendarManagement.Tests/Unit/Services/Civ5SaveScannerServiceTests.cs` (modified — import popup count test)
+- `Data/Migrations/20260605020000_AddCiv5DataTable.cs` (new)
+- `Data/Migrations/20260605020000_AddCiv5DataTable.Designer.cs` (new)
 - `docs/epic-7-data-sources/stories/7-11-civilization-5-saves.md` (modified)
 - `docs/sprint-status.yaml` (modified)
 
@@ -234,3 +240,20 @@ Followed the TogglSleep pattern throughout. Coalescing logic extracted to `Civ5S
 | Date | Change |
 |------|--------|
 | 2026-06-04 | Story 7.11 implemented: Civ5 scan-based session points, compact card, 24h timeline drilldown, coalescing candidate event generation, 22 unit tests |
+| 2026-06-05 | Code review: 1 patch auto-applied (BuildTimeline redundant rebuilds), 4 patches + 2 decisions pending |
+| 2026-06-05 | Extension: renamed runtime Civ5 table to `civ5_data`, added migration, and updated import success popup to include total saves detected plus saves added |
+
+---
+
+### Review Findings
+
+- [ ] [Review][Decision] Compact card single-mode label format — current: `"5 saves (single-player)"`; spec example implies `"12 single-player"` (count + mode, no "saves" word). Decide which format is intended.
+- [ ] [Review][Decision] "Create Candidate Events" button always rendered — no `Visibility` binding; button is always visible but disabled when no points. Spec says the button is visible when there are save points. Decide: hide when no points, or keep always-visible-but-disabled.
+- [x] [Review][Patch] `EnsureDataSourceAsync` outside try/catch in `ScanAsync` — moved inside try; `source` made nullable; `finally` guards on `source is not null` [`Services/Civ5SaveScannerService.cs:ScanAsync`] — **auto-fixed 2026-06-05**
+- [x] [Review][Patch] Mid-enumeration filesystem exception kills entire scan — switched to `EnumerationOptions { IgnoreInaccessible = true }` so inaccessible subdirectories are skipped silently during enumeration [`Services/Civ5SaveScannerService.cs:CollectCandidates`] — **auto-fixed 2026-06-05**
+- [x] [Review][Patch] Canvas hour-0 label clipped — `Canvas.SetTop` now uses `Math.Max(0, y - 6)` [`Views/Civ5DrilldownControl.xaml.cs:BuildTimeline`] — **auto-fixed 2026-06-05**
+- [x] [Review][Patch] Missing deduplication unit test — added 3 tests covering: existing pair skipped, same timestamp different mode kept, all-exist returns empty [`GoogleCalendarManagement.Tests/Unit/Services/Civ5SaveScannerServiceTests.cs`] — **auto-fixed 2026-06-05**
+- [x] [Review][Patch] Compact card multi-mode label — changed from per-mode breakdown to total count + "(multiple types)" [`ViewModels/Civ5CompactCardViewModel.cs`] — **auto-fixed 2026-06-05**
+- [x] [Review][Patch] BuildTimeline called N+2 times on initial load — `CollectionChanged` fired once per point add plus explicit call in `LoadAsync`; fixed by adding `_suppressRebuild` flag [`Views/Civ5DrilldownControl.xaml.cs`] — **auto-fixed 2026-06-05**
+- [x] [Review][Defer] DST midnight boundary causes ±1h UTC range — `DateTime.SpecifyKind + ToUniversalTime` on local midnight is off by 1h during DST transitions; pre-existing pattern across all data sources [`Services/Civ5SessionRepository.cs:GetPointsForDateAsync`] — deferred, pre-existing
+- [x] [Review][Defer] `CollectCandidates` blocks UI thread — synchronous `Directory.EnumerateFiles` runs on UI thread after first `await`; acceptable for typical save volumes [`Services/Civ5SaveScannerService.cs:CollectCandidates`] — deferred, pre-existing

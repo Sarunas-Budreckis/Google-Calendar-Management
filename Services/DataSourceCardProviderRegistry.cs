@@ -21,6 +21,11 @@ public sealed class DataSourceCardProviderRegistry
 
     public IDataSourceCardProvider? GetProvider(string sourceKey)
     {
+        if (string.Equals(sourceKey, "comfyui", StringComparison.OrdinalIgnoreCase))
+        {
+            sourceKey = ComfyUIFolderScannerService.SourceKey;
+        }
+
         return _providers.TryGetValue(sourceKey, out var provider) ? provider : null;
     }
 }

@@ -61,6 +61,8 @@ namespace GoogleCalendarManagement
                 .Register(serviceProvider.GetRequiredService<MapsTimelineImportHandler>());
             serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
                 .Register(serviceProvider.GetRequiredService<SpotifyImportHandler>());
+            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
+                .Register(serviceProvider.GetRequiredService<TogglPhoneImportHandler>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
                 .Register(serviceProvider.GetRequiredService<TogglSleepCardProvider>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
@@ -74,9 +76,15 @@ namespace GoogleCalendarManagement
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
                 .Register(serviceProvider.GetRequiredService<Civ5CardProvider>());
             serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
+                .Register(serviceProvider.GetRequiredService<Civ5ImportHandler>());
+            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
                 .Register(serviceProvider.GetRequiredService<CallLogImportHandler>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
                 .Register(serviceProvider.GetRequiredService<CallLogCardProvider>());
+            serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
+                .Register(serviceProvider.GetRequiredService<ComfyUICardProvider>());
+            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
+                .Register(serviceProvider.GetRequiredService<ComfyUIImportHandler>());
 
             // Create and activate main window (must happen before RunStartupAsync for ContentDialog XamlRoot)
             window = new Window
@@ -108,6 +116,7 @@ namespace GoogleCalendarManagement
             window.Content = rootGrid;
 
             window.Activate();
+            var startupXamlRoot = await WaitForXamlRootAsync(rootGrid);
 
             var windowService = serviceProvider.GetRequiredService<IWindowService>();
             windowService.SetWindow(window);
@@ -140,10 +149,13 @@ namespace GoogleCalendarManagement
                     {
                         Title = "Startup Error",
                         Content = $"A database error occurred on startup. Please restore from a backup in:\n{backupDir}",
-                        CloseButtonText = "Exit"
+                        CloseButtonText = "Exit",
+                        XamlRoot = startupXamlRoot
                     };
-                    dialog.XamlRoot = window.Content.XamlRoot;
-                    await dialog.ShowAsync();
+                    if (startupXamlRoot is not null)
+                    {
+                        await dialog.ShowAsync();
+                    }
                     Log.CloseAndFlush();
                     Application.Current.Exit();
                     return;
@@ -167,6 +179,43 @@ namespace GoogleCalendarManagement
             await mainPage.ViewModel.InitializeAsync();
 
             logger?.LogInformation("Application started successfully.");
+        }
+
+        private static async Task<XamlRoot?> WaitForXamlRootAsync(UIElement element)
+        {
+            if (element.XamlRoot is not null)
+            {
+                return element.XamlRoot;
+            }
+
+            if (element is FrameworkElement { IsLoaded: false } frameworkElement)
+            {
+                var loadedTaskSource = new TaskCompletionSource<object?>();
+                RoutedEventHandler? loadedHandler = null;
+                loadedHandler = (_, _) =>
+                {
+                    frameworkElement.Loaded -= loadedHandler;
+                    loadedTaskSource.TrySetResult(null);
+                };
+
+                frameworkElement.Loaded += loadedHandler;
+
+                try
+                {
+                    await Task.WhenAny(loadedTaskSource.Task, Task.Delay(TimeSpan.FromSeconds(1)));
+                }
+                finally
+                {
+                    frameworkElement.Loaded -= loadedHandler;
+                }
+            }
+
+            for (var attempt = 0; attempt < 10 && element.XamlRoot is null; attempt++)
+            {
+                await Task.Delay(50);
+            }
+
+            return element.XamlRoot;
         }
 
         /// <summary>
@@ -244,6 +293,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ITogglPhoneRepository, TogglPhoneRepository>();
             services.AddSingleton<TogglSlidingWindowService>();
             services.AddSingleton<TogglPhoneCardProvider>();
+            services.AddSingleton<TogglPhoneImportHandler>();
             services.AddSingleton<ISyncStatusService, SyncStatusService>();
             services.AddSingleton<INavigationStateService, NavigationStateService>();
             services.AddSingleton<ICalendarSelectionService, CalendarSelectionService>();
@@ -278,6 +328,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ICiv5SessionRepository, Civ5SessionRepository>();
             services.AddSingleton<ICiv5SaveScannerService, Civ5SaveScannerService>();
             services.AddSingleton<Civ5CardProvider>();
+            services.AddSingleton<Civ5ImportHandler>();
             services.AddTransient<Civ5CompactCardViewModel>();
             services.AddTransient<Civ5DrilldownViewModel>();
             services.AddTransient<Civ5CompactCardControl>();
@@ -302,6 +353,14 @@ namespace GoogleCalendarManagement
             services.AddTransient<SpotifyDrilldownViewModel>();
             services.AddTransient<SpotifyCompactCardControl>();
             services.AddTransient<SpotifyDrilldownControl>();
+            services.AddSingleton<IComfyUIRepository, ComfyUIRepository>();
+            services.AddSingleton<IComfyUIFolderScannerService, ComfyUIFolderScannerService>();
+            services.AddSingleton<ComfyUICardProvider>();
+            services.AddSingleton<ComfyUIImportHandler>();
+            services.AddTransient<ComfyUICompactCardViewModel>();
+            services.AddTransient<ComfyUIDrilldownViewModel>();
+            services.AddTransient<ComfyUICompactCardControl>();
+            services.AddTransient<ComfyUIDrilldownControl>();
             services.AddTransient<YearViewControl>();
             services.AddTransient<MonthViewControl>();
             services.AddTransient<WeekViewControl>();

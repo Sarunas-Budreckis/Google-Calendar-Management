@@ -45,7 +45,23 @@ public class MigrationService : IMigrationService
 
         _logger.LogInformation("Found {Count} pending migrations: {Names}", pending.Count, string.Join(", ", pending));
         await CreateBackupAsync("pre-migration");
-        await _context.Database.MigrateAsync();
+        _context.Database.CloseConnection();
+
+        var directSqlMigrations = new HashSet<string>
+        {
+            "20260605021000_DropLegacyCiv5SessionPointTable",
+            "20260605030000_RenameSpotifyStreamToSpotifyData",
+        };
+
+        if (pending.All(id => directSqlMigrations.Contains(id)))
+        {
+            _logger.LogInformation("Applying migrations via direct SQL to avoid EF Core migration lock.");
+            ApplyDirectSqlMigrations(pending);
+        }
+        else
+        {
+            await _context.Database.MigrateAsync();
+        }
         _logger.LogInformation("Successfully applied {Count} migrations.", pending.Count);
 
         var latestApplied = (await _context.Database.GetAppliedMigrationsAsync()).Last();
@@ -84,6 +100,53 @@ public class MigrationService : IMigrationService
         {
             _logger.LogError(ex, "Database integrity check threw an exception.");
             return false;
+        }
+    }
+
+    private static readonly Dictionary<string, string[]> _directSqlMap = new()
+    {
+        ["20260605021000_DropLegacyCiv5SessionPointTable"] =
+        [
+            "DROP TABLE IF EXISTS \"civ5_session_point\""
+        ],
+        ["20260605030000_RenameSpotifyStreamToSpotifyData"] =
+        [
+            "ALTER TABLE \"spotify_stream\" RENAME TO \"spotify_data\"",
+            "DROP INDEX IF EXISTS \"idx_spotify_stream_dedup\"",
+            "DROP INDEX IF EXISTS \"idx_spotify_stream_played_at\"",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"idx_spotify_data_dedup\" ON \"spotify_data\" (\"played_at\", \"track_name\")",
+            "CREATE INDEX IF NOT EXISTS \"idx_spotify_data_played_at\" ON \"spotify_data\" (\"played_at\")",
+            "INSERT OR IGNORE INTO data_source (source_key, display_name, supports_no_data_hint, created_at) VALUES ('spotify', 'Spotify (stats.fm)', 0, '2026-06-05 00:00:00')"
+        ],
+    };
+
+    private void ApplyDirectSqlMigrations(IEnumerable<string> migrationIds)
+    {
+        using var conn = new SqliteConnection($"Data Source={_dbPath}");
+        conn.Open();
+        using var pragma = conn.CreateCommand();
+        pragma.CommandText = "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;";
+        pragma.ExecuteNonQuery();
+
+        foreach (var migrationId in migrationIds)
+        {
+            _logger.LogInformation("Direct SQL migration: {MigrationId}", migrationId);
+            using var tx = conn.BeginTransaction();
+            foreach (var sql in _directSqlMap[migrationId])
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = sql;
+                cmd.ExecuteNonQuery();
+            }
+            using var hist = conn.CreateCommand();
+            hist.Transaction = tx;
+            hist.CommandText = "INSERT INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ($id, $ver)";
+            hist.Parameters.AddWithValue("$id", migrationId);
+            hist.Parameters.AddWithValue("$ver", "9.0.12");
+            hist.ExecuteNonQuery();
+            tx.Commit();
+            _logger.LogInformation("Direct SQL migration done: {MigrationId}", migrationId);
         }
     }
 

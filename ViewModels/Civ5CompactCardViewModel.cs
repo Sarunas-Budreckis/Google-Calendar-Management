@@ -67,16 +67,15 @@ public sealed class Civ5CompactCardViewModel : ObservableObject
             .OrderByDescending(g => g.Count())
             .ToList();
 
+        var total = points.Count;
         if (modeGroups.Count == 1)
         {
             var mode = modeGroups[0].Key;
-            var count = modeGroups[0].Count();
-            SummaryLabel = $"{count} save{(count == 1 ? "" : "s")} ({FormatMode(mode)})";
+            SummaryLabel = $"{total} save{(total == 1 ? "" : "s")} ({FormatMode(mode)})";
         }
         else
         {
-            var parts = modeGroups.Select(g => $"{g.Count()} {FormatMode(g.Key)}");
-            SummaryLabel = string.Join(", ", parts);
+            SummaryLabel = $"{total} saves (multiple types)";
         }
     }
 

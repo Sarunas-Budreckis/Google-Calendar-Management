@@ -1,7 +1,7 @@
 # Story 7.4: Toggl Phone
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** review
+**Status:** done
 **Dependencies:** Story 7.1 (toggl_data_type), Story 5.6 (Toggl import), Story 5.5 (left panel day mode)
 
 ---
@@ -84,6 +84,20 @@ Note: the classification rules defined here (description matching + ≤10 min fi
 ---
 
 ## Tasks/Subtasks
+
+### Review Findings
+
+- [x] [Review][Decision] `null DurationSeconds` treated as always-matching `MaxDurationMinutes` — when an entry has no duration (running/incomplete Toggl entry), `MatchesAnyRule` maps it to `double.MaxValue`, so any rule with `MaxDurationMinutes` always matches. Intent unclear: should null-duration entries be **skipped** (excluded until duration is known) or **always match** (current behavior)? [`Services/TogglPhoneClassificationService.cs:66-68`]
+- [x] [Review][Decision] Window end after 8/15 rounding can cross midnight into next day — if a coalesced window ends at ~23:52–23:59 local, `RoundToNearestQuarterHour` snaps it to 00:00 the next calendar day. The `endLocal <= startLocal` guard doesn't catch this (next-day midnight > same-day start), so a draft event is created with its end date one day after start. Does the app support cross-midnight pending events? [`ViewModels/TogglPhoneDrilldownViewModel.cs:108-109`]
+
+- [x] [Review][Patch] Remove `_currentDate` dead field — set in `LoadAsync` but never read anywhere in the class [`ViewModels/TogglPhoneDrilldownViewModel.cs`]
+- [x] [Review][Patch] Remove unused `var a`, `var b` variables — leftover from an abandoned first approach in `ComputeWindows_LowQualityWindow_RetriesWithTighterGap` [`GoogleCalendarManagement.Tests/Unit/Services/TogglSlidingWindowServiceTests.cs`]
+- [x] [Review][Patch] Simplify `ClassifyAllAsync` — the two-query pattern (first fetch-and-reset TogglPhone entries, then re-fetch null|TogglPhone candidates) can collapse into a single query: fetch null|TogglPhone once, reset to null and re-evaluate in the same loop [`Services/TogglPhoneClassificationService.cs`]
+
+- [x] [Review][Defer] Duplicate migration timestamp `20260604130000` shared by `AddTogglPhoneRule` and `AddCiv5SessionPoint` — alphabetical ordering (Civ5 < TogglPhone) happens to work, but colliding timestamps are fragile; consider renaming `AddTogglPhoneRule` to a distinct timestamp — deferred, pre-existing [`Data/Migrations/`]
+- [x] [Review][Defer] `TogglPhoneDrilldownControl` doesn't use shared `VerticalDotTimelineControl` — story note says dot timeline should be reusable (shared with Spotify 7.10); phone drilldown implements its own inline 480px canvas instead — deferred, feature difference [`Views/TogglPhoneDrilldownControl.xaml.cs`]
+- [x] [Review][Defer] Tooltip duration fallback `EndTime.Value - StartTime` is `DateTimeKind`-unsafe — used when `DurationSeconds` is null; incorrect if `StartTime` and `EndTime` have different Kinds (e.g., one UTC one Unspecified) — deferred, depends on DB storage consistency [`ViewModels/TogglPhoneEntryViewModel.cs`]
+- [x] [Review][Defer] "Manage Rules" button (7.5) bundled in 7.4 drilldown — 7.4 and 7.5 were implemented together per completion notes; "Manage Rules" is outside 7.4 AC but intentional — deferred, by design [`Views/TogglPhoneDrilldownControl.xaml`]
 
 - [x] Task 1: Create TogglPhoneRule entity, EF config, migration, and update DbContext
   - [x] 1.1: Create `TogglPhoneRule` entity class

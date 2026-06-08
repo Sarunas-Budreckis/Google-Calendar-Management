@@ -13,6 +13,7 @@ public sealed class MapsTimelineDrilldownViewModel : ObservableObject
     private readonly MapsTimelineParser _parser;
     private readonly MapsTimelineImportHandler _importHandler;
     private MapsTimelineRaw? _currentRecord;
+    private DateOnly _currentDate;
     private bool _hasSegments;
     private bool _hasTimeline;
     private string _emptyMessage = "No data for this day.";
@@ -26,6 +27,7 @@ public sealed class MapsTimelineDrilldownViewModel : ObservableObject
         _parser = parser;
         _importHandler = importHandler;
         CopyToViewerCommand = new AsyncRelayCommand(CopyToViewerAsync, () => HasTimeline);
+        ImportCommand = new AsyncRelayCommand(ImportAsync);
     }
 
     public ObservableCollection<MapsTimelineSegmentViewModel> Segments { get; } = [];
@@ -67,9 +69,11 @@ public sealed class MapsTimelineDrilldownViewModel : ObservableObject
     public Visibility CopyButtonVisibility => HasTimeline ? Visibility.Visible : Visibility.Collapsed;
 
     public IAsyncRelayCommand CopyToViewerCommand { get; }
+    public IAsyncRelayCommand ImportCommand { get; }
 
     public async Task LoadAsync(DateOnly date, CancellationToken ct = default)
     {
+        _currentDate = date;
         _currentRecord = await _repository.GetLatestAsync(ct);
         HasTimeline = _currentRecord is not null;
 
@@ -107,5 +111,11 @@ public sealed class MapsTimelineDrilldownViewModel : ObservableObject
         }
 
         await _importHandler.CopyToViewerAndOpenAsync(_currentRecord);
+    }
+
+    private async Task ImportAsync()
+    {
+        await _importHandler.TriggerImportAsync();
+        await LoadAsync(_currentDate);
     }
 }

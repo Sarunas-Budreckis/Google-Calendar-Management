@@ -42,10 +42,14 @@ public sealed class TogglSleepImportHandler : IDataSourceImportHandler
 
         if (result.Success)
         {
-            await _dialogService.ShowMessageAsync(
-                "Toggl Sleep Import",
-                $"Imported {result.RecordsFetched} sleep entries.",
-                "OK");
+            var message = result.NewRecords == 0 && result.UpdatedRecords == 0
+                ? "No sleep entries found in the selected date range."
+                : result.NewRecords == 0
+                    ? $"All {result.UpdatedRecords} sleep entries already up to date."
+                    : result.UpdatedRecords > 0
+                        ? $"Imported {result.NewRecords} new sleep entries ({result.UpdatedRecords} already up to date)."
+                        : $"Imported {result.NewRecords} sleep entries.";
+            await _dialogService.ShowMessageAsync("Toggl Sleep Import", message, "OK");
             return;
         }
 

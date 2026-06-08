@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
@@ -22,6 +23,7 @@ public sealed partial class TogglPhoneDrilldownControl : UserControl
 
     public TogglPhoneDrilldownViewModel ViewModel { get; }
     private readonly TogglPhoneRulesViewModel _rulesViewModel;
+    private bool _rulesDialogOpen;
 
     public async Task LoadAsync(DateOnly date, CancellationToken ct = default)
     {
@@ -68,7 +70,7 @@ public sealed partial class TogglPhoneDrilldownControl : UserControl
                 Opacity = 0.6
             };
             var top = hour / HoursInDay * CanvasHeight;
-            Canvas.SetTop(label, top - 7);
+            Canvas.SetTop(label, Math.Max(0, top - 7));
             Canvas.SetLeft(label, 0);
             HourLabelCanvas.Children.Add(label);
         }
@@ -76,16 +78,28 @@ public sealed partial class TogglPhoneDrilldownControl : UserControl
 
     private async void ManageRulesButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        var dialog = new ContentDialog
+        if (_rulesDialogOpen) return;
+        _rulesDialogOpen = true;
+        try
         {
-            Title = "Manage Phone Classification Rules",
-            CloseButtonText = "Done",
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = XamlRoot,
-            Content = new TogglPhoneRulesControl(_rulesViewModel)
-        };
+            var dialog = new ContentDialog
+            {
+                Title = "Manage Phone Classification Rules",
+                CloseButtonText = "Done",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+                Content = new TogglPhoneRulesControl(_rulesViewModel)
+            };
 
-        await _rulesViewModel.LoadAsync();
-        await dialog.ShowAsync();
+            await _rulesViewModel.LoadAsync();
+            await dialog.ShowAsync();
+        }
+        catch (Exception ex) when (ex is COMException or TaskCanceledException)
+        {
+        }
+        finally
+        {
+            _rulesDialogOpen = false;
+        }
     }
 }

@@ -8,7 +8,7 @@ public class SpotifyStreamConfiguration : IEntityTypeConfiguration<SpotifyStream
 {
     public void Configure(EntityTypeBuilder<SpotifyStream> builder)
     {
-        builder.ToTable("spotify_stream");
+        builder.ToTable("spotify_data");
 
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
@@ -21,8 +21,8 @@ public class SpotifyStreamConfiguration : IEntityTypeConfiguration<SpotifyStream
 
         builder.HasIndex(e => new { e.PlayedAt, e.TrackName })
             .IsUnique()
-            .HasDatabaseName("idx_spotify_stream_dedup");
+            .HasDatabaseName("idx_spotify_data_dedup");
         builder.HasIndex(e => e.PlayedAt)
-            .HasDatabaseName("idx_spotify_stream_played_at");
+            .HasDatabaseName("idx_spotify_data_played_at");
     }
 }

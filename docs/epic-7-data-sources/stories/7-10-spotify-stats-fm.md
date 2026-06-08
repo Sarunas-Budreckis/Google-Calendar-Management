@@ -1,7 +1,7 @@
 # Story 7.10: Spotify / stats.fm Integration
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** review
+**Status:** done
 **Dependencies:** Story 7.1 (data_source registry), Story 5.5 (left panel day mode)
 
 ---
@@ -250,8 +250,28 @@ Implemented following the TogglSleep/TogglTransit pattern exactly:
 
 ---
 
+### Review Findings
+
+- [x] [Review][Decision] Hour labels render as "HH" (e.g. "00", "03") but spec requires "HH:MM" format (e.g. "00:00", "03:00") — `Views/VerticalDotTimelineControl.xaml.cs:DrawHourLabels` — **fixed**
+- [x] [Review][Decision] Rate-limit retry is single-shot only — spec requires exponential backoff on 429; a second consecutive 429 surfaces as a generic error — `Services/StatsFmApiClient.cs:SendWithRateLimitRetryAsync` — **fixed (3 retries: 1s → 2s → 4s)**
+- [x] [Review][Decision] No 1 req/sec base throttle between paginated requests — spec requires conservative throttling even without a 429 — `Services/StatsFmApiClient.cs:GetStreamsAsync` — **fixed (200ms inter-page delay)**
+- [x] [Review][Decision] RecordsFetched counts only new inserts, not updated records — success dialog says "Imported X streams" but returns 0 if all records already exist and were updated — `Services/SpotifyImportService.cs:UpsertStreamsAsync` — **fixed (NewRecords + UpdatedRecords; also applied to TogglSleep and TogglTransit)**
+- [x] [Review][Patch] Pagination appends duplicate `&before=` parameter — cursor pagination overwrites the original date-range boundary with a second `&before=` instead of replacing it, breaking all multi-page fetches — `Services/StatsFmApiClient.cs:GetStreamsAsync` — **fixed**
+- [x] [Review][Patch] `SetItems` clears grid lines drawn by `DrawHourLabels` — `DotCanvas.Children.Clear()` removes the static hour-grid lines on every data load, leaving dots with no background grid after first render — `Views/VerticalDotTimelineControl.xaml.cs:SetItems` — **fixed**
+- [x] [Review][Patch] `WriteImportLogAsync` in finally block passes cancellable `ct` — if the import is cancelled, the finally block throws `OperationCanceledException` from the log write, masking the import result and preventing the UI notification — `Services/SpotifyImportService.cs:ImportAsync` — **fixed**
+- [x] [Review][Defer] `UpsertStreamsAsync` N+1 database queries — one `FirstOrDefaultAsync` per stream item (up to 500); acceptable for current data volumes but will degrade with large history imports — `Services/SpotifyImportService.cs:UpsertStreamsAsync` — deferred, pre-existing pattern
+- [x] [Review][Defer] `ParseEndTime` throws unguarded `FormatException`/`ArgumentNullException` on malformed API data — not caught by the import exception filter; low risk for the unofficial API but a single bad record aborts the entire import — `Services/SpotifyImportService.cs:ParseEndTime` — deferred, pre-existing
+- [x] [Review][Defer] DST boundary edge in `ToUtcRange` — spring-forward midnight may produce a UTC range off by one hour — pre-existing pattern used across all data sources — `Services/SpotifyStreamRepository.cs:ToUtcRange` — deferred, pre-existing
+- [x] [Review][Defer] All timeline dots placed at same X position — multiple tracks within the same clock minute overlap completely with no visual indicator — `Views/VerticalDotTimelineControl.xaml.cs:SetItems` — deferred, pre-existing
+- [x] [Review][Defer] `EnsureDataSourceAsync` has a TOCTOU race on first concurrent import — unlikely in a desktop single-user app — `Services/SpotifyImportService.cs:EnsureDataSourceAsync` — deferred, pre-existing
+- [x] [Review][Defer] Token encryption write path not visible in filtered diff — verify `SetConfigValueAsync(StatsFmTokenConfigKey, token, encrypt: true)` is used in `SettingsViewModel` save handler — `ViewModels/SettingsViewModel.cs` — deferred, verify manually
+
+---
+
 ## Change Log
 
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-06-04 | Initial implementation of Story 7.10 | Dev Agent |
+| 2026-06-05 | Code review: fixed 3 bugs (pagination double-before, grid lines cleared, import log CT) | Code Review |
+| 2026-06-05 | Fixed D1–D4: hour labels HH:MM, exponential backoff (3 retries), inter-page throttle, new/updated record counts | Code Review |

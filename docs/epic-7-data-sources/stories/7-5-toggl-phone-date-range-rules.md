@@ -1,7 +1,7 @@
 # Story 7.5: Toggl Phone Date-Range Rules
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** review
+**Status:** done
 **Dependencies:** Story 7.4 (Toggl Phone baseline classification)
 
 ---
@@ -119,6 +119,27 @@ See story 7-4 for the shared file list. Story 7.5-specific additions:
 
 ---
 
+## Review Findings
+
+- [x] [Review][Decision] Date range fields (date_from/date_to) are display-only — spec requires DatePicker controls for editing, but implementation shows a read-only TextBlock (`DateRangeLabel`); users cannot set or change date ranges for any rule. Dev Notes say "DatePicker for date_from/date_to; null = leave DatePicker empty". New rules always start with null date ranges (open) with no way to set them. **Fixed: added CalendarDatePicker controls for DateFrom/DateTo.**
+- [x] [Review][Patch] `ClassifyAllAsync` early-returns when no active rules exist, skipping the reset of existing phone tags — if all rules are deactivated, previously-tagged entries retain their `toggl_phone` tag; idempotency is broken [Services/TogglPhoneClassificationService.cs]
+- [x] [Review][Patch] `DateRangeLabel` computed property in `TogglPhoneRuleItemViewModel` is never notified when `DateFrom` or `DateTo` setters fire — the label does not update in the UI when dates change [ViewModels/TogglPhoneRulesViewModel.cs]
+- [x] [Review][Patch] `ManageRulesButton_Click` has no guard against rapid re-entry — clicking the button multiple times before the dialog appears can queue multiple `ShowAsync` calls; WinUI throws if a second ContentDialog is shown while one is already open [Views/TogglPhoneDrilldownControl.xaml.cs]
+- [x] [Review][Patch] `ManageRulesButton_Click` is `async void` with no exception handling — any exception thrown by `LoadAsync()` or `ShowAsync()` is unhandled and can crash the app silently [Views/TogglPhoneDrilldownControl.xaml.cs]
+- [x] [Review][Patch] `AddRuleAsync` has no error handling — if `AddRuleAsync` or the subsequent `LoadAsync` throws, the UI shows nothing; inconsistent with `ReclassifyAllAsync` which sets `StatusMessage` on failure [ViewModels/TogglPhoneRulesViewModel.cs]
+- [x] [Review][Patch] `ReclassifyAllAsync` swallows `OperationCanceledException` inside its `catch (Exception)` block — cancellation is treated as a generic failure [ViewModels/TogglPhoneRulesViewModel.cs]
+- [x] [Review][Patch] `BuildHourLabels` places the "12a" label at `Canvas.SetTop(-7)` (hour 0 → top=0, offset=-7) — the label is rendered 7px above the canvas top edge and will be clipped [Views/TogglPhoneDrilldownControl.xaml.cs]
+- [x] [Review][Defer] `MaxDurationMinutesText` setter silently ignores invalid input (non-numeric, 0, negative) with no user feedback; displayed text diverges from bound value — deferred, pre-existing UX gap [ViewModels/TogglPhoneRulesViewModel.cs]
+- [x] [Review][Defer] No validation prevents saving a rule with `DateFrom > DateTo`; rule would silently never match any entry — deferred, harmless edge case [ViewModels/TogglPhoneRulesViewModel.cs]
+- [x] [Review][Defer] `DateTimeKind.Unspecified` entries treated as local in `MatchesAnyRule` — consistent with rest of codebase — deferred, pre-existing [Services/TogglPhoneClassificationService.cs]
+- [x] [Review][Defer] `GetPhoneEntryCountsForRangeAsync` post-filter may undercount entries near DST boundary where UTC-to-local conversion shifts a date — deferred, pre-existing pattern [Services/TogglPhoneRepository.cs]
+- [x] [Review][Defer] `DeactivateAsync` sets `IsActive = false` locally before calling `RefreshAsync`; if `RefreshAsync` throws, UI shows item as deactivated while DB still has it active — deferred, minor split-brain on exception [ViewModels/TogglPhoneRulesViewModel.cs]
+- [x] [Review][Defer] `UpdateRuleAsync` on a rule whose DB row was deleted externally will throw `DbUpdateConcurrencyException` with no user-facing message — deferred, unlikely scenario [Services/TogglPhoneRuleRepository.cs]
+- [x] [Review][Defer] Entries with null `DurationSeconds` (running timers) match open-ended rules (no max duration) purely on description — may be unintended; spec doesn't address running entries — deferred, defensible conservative design [Services/TogglPhoneClassificationService.cs]
+
+---
+
 ## Change Log
 
 - 2026-06-04: Story created and implemented together with 7.4
+- 2026-06-05: Code review completed

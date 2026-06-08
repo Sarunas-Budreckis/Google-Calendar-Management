@@ -66,16 +66,34 @@ public sealed class Civ5SessionRepository : ICiv5SessionRepository
         return existing.Select(p => (p.FileModifiedAt, p.GameMode)).ToHashSet();
     }
 
-    public async Task InsertPointsAsync(IReadOnlyList<Civ5SessionPoint> points, CancellationToken ct = default)
+    public async Task<int> InsertPointsAsync(IReadOnlyList<Civ5SessionPoint> points, CancellationToken ct = default)
     {
         if (points.Count == 0)
         {
-            return;
+            return 0;
         }
 
         await using var ctx = await _contextFactory.CreateDbContextAsync(ct);
-        ctx.Civ5SessionPoints.AddRange(points);
-        await ctx.SaveChangesAsync(ct);
+        var inserted = 0;
+        foreach (var point in points)
+        {
+            inserted += await ctx.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT OR IGNORE INTO civ5_data (
+                    scanned_at,
+                    file_modified_at,
+                    game_mode,
+                    linked_event_id,
+                    linked_event_type)
+                VALUES (
+                    {point.ScannedAt},
+                    {point.FileModifiedAt},
+                    {point.GameMode},
+                    {point.LinkedEventId},
+                    {point.LinkedEventType})
+                """, ct);
+        }
+
+        return inserted;
     }
 
     private static DateTime NormalizeUtc(DateTime value) =>

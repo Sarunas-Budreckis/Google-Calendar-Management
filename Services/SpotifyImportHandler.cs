@@ -42,10 +42,14 @@ public sealed class SpotifyImportHandler : IDataSourceImportHandler
 
         if (result.Success)
         {
-            await _dialogService.ShowMessageAsync(
-                "Spotify Import",
-                $"Imported {result.RecordsFetched} streams.",
-                "OK");
+            var message = result.NewRecords == 0 && result.UpdatedRecords == 0
+                ? "No streams found in the selected date range."
+                : result.NewRecords == 0
+                    ? $"All {result.UpdatedRecords} streams already up to date."
+                    : result.UpdatedRecords > 0
+                        ? $"Imported {result.NewRecords} new streams ({result.UpdatedRecords} already up to date)."
+                        : $"Imported {result.NewRecords} streams.";
+            await _dialogService.ShowMessageAsync("Spotify Import", message, "OK");
             return;
         }
 

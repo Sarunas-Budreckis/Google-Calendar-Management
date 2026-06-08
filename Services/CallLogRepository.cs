@@ -44,14 +44,4 @@ public sealed class CallLogRepository : ICallLogRepository
             .ToDictionary(g => g.Key, g => g.Count());
     }
 
-    public async Task<HashSet<(DateTime Date, string? Number, int DurationSeconds)>> GetExistingDedupKeysAsync(CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var keys = await context.CallLogEntries
-            .AsNoTracking()
-            .Select(e => new { e.Date, e.Number, e.DurationSeconds })
-            .ToListAsync(ct);
-
-        return keys.Select(k => (k.Date, k.Number, k.DurationSeconds)).ToHashSet();
-    }
 }
