@@ -46,49 +46,13 @@ public sealed class IcsImportService : IIcsImportService
             return CreateFailureResult(parseResult.ErrorMessage ?? "The selected file is not a valid ICS calendar.");
         }
 
-        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        await using var transaction = await context.Database.BeginTransactionAsync(ct);
-
-        var matchingUids = parseResult.Events
-            .Select(parsedEvent => parsedEvent.Uid)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        var existingEvents = matchingUids.Count == 0
-            ? new Dictionary<string, GcalEvent>(StringComparer.Ordinal)
-            : await context.GcalEvents
-                .Where(gcalEvent => matchingUids.Contains(gcalEvent.GcalEventId))
-                .ToDictionaryAsync(gcalEvent => gcalEvent.GcalEventId, StringComparer.Ordinal, ct);
-
-        var newEventCount = 0;
-        var updatedEventCount = 0;
-
-        foreach (var parsedEvent in parseResult.Events.DistinctBy(e => e.Uid, StringComparer.Ordinal))
-        {
-            if (existingEvents.TryGetValue(parsedEvent.Uid, out var existingEvent))
-            {
-                context.GcalEventVersions.Add(CreateVersionSnapshot(existingEvent, nowUtc));
-                ApplyImportedValues(existingEvent, parsedEvent, nowUtc);
-                updatedEventCount++;
-                continue;
-            }
-
-            context.GcalEvents.Add(CreateImportedEvent(parsedEvent, nowUtc));
-            newEventCount++;
-        }
-
-        await context.SaveChangesAsync(ct);
-        await transaction.CommitAsync(ct);
-
-        return new ImportResult(
-            Success: true,
-            ImportedEventCount: newEventCount + updatedEventCount,
-            NewEventCount: newEventCount,
-            UpdatedEventCount: updatedEventCount,
-            SkippedInvalidEventCount: parseResult.InvalidEventCount,
-            SkippedRecurringEventCount: parseResult.SkippedRecurringEventCount,
-            ErrorMessage: null);
+        // TODO 8.3/8.5: persist imported events into the unified `event` table (mint stable
+        // event_id, snapshot version history). The gcal_event table was removed in Story 8.2, so
+        // import is parse-only and does not write until the event-model rewrite lands.
+        _ = _timeProvider;
+        _ = _contextFactory;
+        return CreateFailureResult(
+            "ICS import is temporarily disabled while the event model is migrated (restored in Story 8.3/8.5).");
     }
 
     private static ImportResult CreateFailureResult(string message)
@@ -103,53 +67,6 @@ public sealed class IcsImportService : IIcsImportService
             ErrorMessage: message);
     }
 
-    private static GcalEventVersion CreateVersionSnapshot(GcalEvent existingEvent, DateTime createdAt)
-    {
-        return new GcalEventVersion
-        {
-            GcalEventId = existingEvent.GcalEventId,
-            GcalEtag = existingEvent.GcalEtag,
-            Summary = existingEvent.Summary,
-            Description = existingEvent.Description,
-            StartDatetime = existingEvent.StartDatetime,
-            EndDatetime = existingEvent.EndDatetime,
-            IsAllDay = existingEvent.IsAllDay,
-            ColorId = existingEvent.ColorId,
-            GcalUpdatedAt = existingEvent.GcalUpdatedAt,
-            RecurringEventId = existingEvent.RecurringEventId,
-            IsRecurringInstance = existingEvent.IsRecurringInstance,
-            ChangedBy = "ics_import",
-            ChangeReason = "imported",
-            CreatedAt = createdAt
-        };
-    }
-
-    private static void ApplyImportedValues(GcalEvent existingEvent, IcsParser.ParsedEvent parsedEvent, DateTime updatedAt)
-    {
-        existingEvent.Summary = parsedEvent.Summary;
-        existingEvent.Description = parsedEvent.Description;
-        existingEvent.StartDatetime = parsedEvent.StartUtc;
-        existingEvent.EndDatetime = parsedEvent.EndUtc;
-        existingEvent.IsAllDay = parsedEvent.IsAllDay;
-        existingEvent.UpdatedAt = updatedAt;
-    }
-
-    private static GcalEvent CreateImportedEvent(IcsParser.ParsedEvent parsedEvent, DateTime createdAt)
-    {
-        return new GcalEvent
-        {
-            GcalEventId = parsedEvent.Uid,
-            CalendarId = "primary",
-            Summary = parsedEvent.Summary,
-            Description = parsedEvent.Description,
-            StartDatetime = parsedEvent.StartUtc,
-            EndDatetime = parsedEvent.EndUtc,
-            IsAllDay = parsedEvent.IsAllDay,
-            ColorId = "azure",
-            IsDeleted = false,
-            AppPublished = false,
-            CreatedAt = createdAt,
-            UpdatedAt = createdAt
-        };
-    }
+    // NOTE: the GcalEvent / GcalEventVersion mapping helpers were removed in Story 8.2 (gcal_event
+    // table dropped). They are reintroduced against the unified `event` table in Story 8.3/8.5.
 }

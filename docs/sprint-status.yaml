@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-06-11T23:00:00-05:00
+last_updated: 2026-06-12T00:00:00-05:00
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
@@ -126,7 +126,7 @@ development_status:
   epic-8: in-progress  # Event Model & Raw Data Linking Engine — scope at docs/epic-8-data-linking/epic-overview.md; concepts at docs/epic-8-data-linking/concepts.md
   # Each story tagged agent (Opus/Sonnet/Codex) + effort (high/medium/low) in the epic overview.
   8-1-terminology-doc-sweep: review                               # Codex, low
-  8-2-unified-event-table-and-migration: drafted                  # Opus, high
+  8-2-unified-event-table-and-migration: review                   # Opus, high
   8-3-event-repository-and-identity-service: drafted              # Opus, medium
   8-4-migrate-sync-reconciler-to-unified-event-table: drafted     # Opus, high
   8-5-rendering-and-drilldowns-mint-candidates: ready-for-dev     # Sonnet, medium

@@ -12,7 +12,7 @@ public class GcalEventVersionConfiguration : IEntityTypeConfiguration<GcalEventV
 
         builder.HasKey(e => e.VersionId);
         builder.Property(e => e.VersionId).HasColumnName("version_id").ValueGeneratedOnAdd();
-        builder.Property(e => e.GcalEventId).HasColumnName("gcal_event_id").IsRequired();
+        builder.Property(e => e.EventId).HasColumnName("event_id").IsRequired();
         builder.Property(e => e.GcalEtag).HasColumnName("gcal_etag");
         builder.Property(e => e.Summary).HasColumnName("summary");
         builder.Property(e => e.Description).HasColumnName("description");
@@ -27,6 +27,8 @@ public class GcalEventVersionConfiguration : IEntityTypeConfiguration<GcalEventV
         builder.Property(e => e.ChangeReason).HasColumnName("change_reason");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");
 
-        builder.HasIndex(e => new { e.GcalEventId, e.CreatedAt }).HasDatabaseName("idx_version_event");
+        builder.HasIndex(e => new { e.EventId, e.CreatedAt }).HasDatabaseName("idx_version_event");
+
+        // FK to the unified event table (relationship + cascade is declared on EventConfiguration).
     }
 }

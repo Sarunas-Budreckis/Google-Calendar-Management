@@ -30,9 +30,12 @@ public sealed class SyncStatusService : ISyncStatusService
             var fromDt = from.ToDateTime(TimeOnly.MinValue);
             var toDt = to.ToDateTime(TimeOnly.MinValue).AddDays(1);
 
-            var events = await ctx.GcalEvents
+            // 8.2: gcal_event merged into the unified `event` table. Published events carry the
+            // synced-from-GCal status the old query keyed on. TODO 8.4: revisit once the sync
+            // reconciler writes lifecycle/last_synced semantics onto `event`.
+            var events = await ctx.Events
                 .AsNoTracking()
-                .Where(e => !e.IsDeleted &&
+                .Where(e => e.Publish == "published" &&
                             e.StartDatetime < toDt &&
                             e.EndDatetime > fromDt)
                 .Select(e => new { e.StartDatetime, e.EndDatetime, e.IsAllDay })

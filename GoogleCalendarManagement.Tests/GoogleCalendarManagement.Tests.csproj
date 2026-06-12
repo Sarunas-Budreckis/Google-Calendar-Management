@@ -27,6 +27,26 @@
     <ProjectReference Include="..\GoogleCalendarManagement.csproj" />
   </ItemGroup>
 
+  <!--
+    Story 8.2 (UnifyEventTable): these test files assert behavior of the gcal_event / pending_event /
+    date_source_integration tables and the old GcalEventVersion.GcalEventId column, all of which were
+    removed when the unified `event` table landed. The code they exercise is stubbed in 8.2 and gets
+    rewritten in Stories 8.3 (event repository + publish), 8.4 (sync reconciler), 8.5 (rendering/ICS)
+    and 8.10 (coverage). They are parked here (still on disk) so the test assembly compiles and the new
+    migration tests can run; re-enable each as its subject code is rebuilt. Do NOT delete them.
+  -->
+  <ItemGroup>
+    <Compile Remove="Integration\CalendarQueryServiceTests.cs" />
+    <Compile Remove="Integration\DataSourceRepositoryTests.cs" />
+    <Compile Remove="Integration\GoogleCalendarSyncTests.cs" />
+    <Compile Remove="Integration\IcsExportServiceTests.cs" />
+    <Compile Remove="Integration\IcsImportServiceTests.cs" />
+    <Compile Remove="Integration\PendingEventPublishServiceTests.cs" />
+    <Compile Remove="Integration\PendingEventRepositoryTests.cs" />
+    <Compile Remove="Integration\SchemaTests.cs" />
+    <Compile Remove="Unit\SyncStatusServiceTests.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>

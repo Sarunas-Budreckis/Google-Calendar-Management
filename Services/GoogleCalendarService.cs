@@ -14,6 +14,9 @@ using GoogleCalendarManagement.Data;
 using GoogleCalendarManagement.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+// Story 8.2 added the local Data.Entities.Event; in this file `Event` always means the
+// Google Calendar API type, so pin the bare name to avoid a CS0104 ambiguity.
+using Event = Google.Apis.Calendar.v3.Data.Event;
 
 namespace GoogleCalendarManagement.Services;
 

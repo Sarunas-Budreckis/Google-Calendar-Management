@@ -19,5 +19,9 @@ public class TogglEntry
     public string? LinkedEventId { get; set; }
     public string? LinkedEventType { get; set; }
 
-    public GcalEvent? PublishedGcalEvent { get; set; }
+    // published_gcal_event_id stays as a plain scalar column (the GCal id once a Toggl entry is
+    // published). The EF navigation to the curated event was dropped in Story 8.2: modeling it as
+    // a relationship would force event.gcal_event_id to be a NOT NULL alternate key, conflicting
+    // with the nullable, filtered-UNIQUE gcal_event_id required by the unified model. The link is
+    // re-established through the data_point/link tables in Epic 8 (Stories 8.7+).
 }

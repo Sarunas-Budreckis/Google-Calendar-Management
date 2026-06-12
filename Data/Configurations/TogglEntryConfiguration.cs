@@ -55,9 +55,9 @@ public class TogglEntryConfiguration : IEntityTypeConfiguration<TogglEntry>
         builder.HasIndex(e => e.Description).HasDatabaseName("idx_toggl_description");
         builder.HasIndex(e => e.TogglDataType).HasDatabaseName("idx_toggl_type");
 
-        builder.HasOne(e => e.PublishedGcalEvent)
-            .WithMany()
-            .HasForeignKey(e => e.PublishedGcalEventId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // Story 8.2: the FK navigation from toggl_data to the curated event was removed. Mapping it
+        // would force event.gcal_event_id to become a NOT NULL alternate key, which conflicts with
+        // the nullable, filtered-UNIQUE gcal_event_id the unified event model requires. The column
+        // published_gcal_event_id remains as a plain scalar; linking moves to the link table (8.7+).
     }
 }

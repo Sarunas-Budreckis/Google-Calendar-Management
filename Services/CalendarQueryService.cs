@@ -34,37 +34,11 @@ public sealed class CalendarQueryService : ICalendarQueryService
         var rangeEndExclusiveUtc = ToLocalDayBoundaryUtc(to.AddDays(1));
 
         await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
-        var googleRows = await (
-            from gcalEvent in context.GcalEvents.AsNoTracking()
-            join pendingEvent in context.PendingEvents.AsNoTracking()
-                on gcalEvent.GcalEventId equals pendingEvent.GcalEventId into pendingEvents
-            from pendingEvent in pendingEvents.DefaultIfEmpty()
-            where !gcalEvent.IsDeleted &&
-                  (
-                      (gcalEvent.StartDatetime.HasValue &&
-                       gcalEvent.StartDatetime.Value < rangeEndExclusiveUtc &&
-                       (gcalEvent.EndDatetime ?? gcalEvent.StartDatetime.Value) >= rangeStartUtc) ||
-                      (pendingEvent != null &&
-                       pendingEvent.StartDatetime.HasValue &&
-                       pendingEvent.StartDatetime.Value < rangeEndExclusiveUtc &&
-                       (pendingEvent.EndDatetime ?? pendingEvent.StartDatetime.Value) >= rangeStartUtc)
-                  )
-            orderby pendingEvent != null ? pendingEvent.StartDatetime : gcalEvent.StartDatetime,
-                    pendingEvent != null ? pendingEvent.Summary : gcalEvent.Summary
-            select new GoogleCalendarQueryRow(gcalEvent, pendingEvent)
-        ).ToListAsync(ct);
 
-        var draftRows = await context.PendingEvents
-            .AsNoTracking()
-            .Where(pendingEvent =>
-                pendingEvent.GcalEventId == null &&
-                pendingEvent.StartDatetime.HasValue &&
-                pendingEvent.StartDatetime.Value < rangeEndExclusiveUtc &&
-                (pendingEvent.EndDatetime ?? pendingEvent.StartDatetime.Value) >= rangeStartUtc)
-            .OrderBy(pendingEvent => pendingEvent.StartDatetime)
-            .ThenBy(pendingEvent => pendingEvent.Summary)
-            .ToListAsync(ct);
-
+        // TODO 8.3+: rewrite the curated-event query against the unified `event` table.
+        // The gcal_event / pending_event tables were merged into `event` in Story 8.2; the full
+        // read path (lifecycle, has_unpublished_changes, candidate translucency) is rebuilt in
+        // Stories 8.3 (repository) and 8.5 (rendering). Outlook rows are unaffected and kept.
         var outlookRows = await context.OutlookEvents
             .AsNoTracking()
             .Where(e => !e.IsSuppressed &&
@@ -74,25 +48,7 @@ public sealed class CalendarQueryService : ICalendarQueryService
             .ThenBy(e => e.Subject)
             .ToListAsync(ct);
 
-        var result = new List<CalendarEventDisplayModel>(googleRows.Count + draftRows.Count + outlookRows.Count);
-        foreach (var row in googleRows)
-        {
-            var model = TryMapGoogleEventToDisplayModel(row.GcalEvent, row.PendingEvent);
-            if (model is not null && OverlapsRange(model, from, to))
-            {
-                result.Add(model);
-            }
-        }
-
-        foreach (var pendingEvent in draftRows)
-        {
-            var model = TryMapPendingDraftToDisplayModel(pendingEvent);
-            if (model is not null && OverlapsRange(model, from, to))
-            {
-                result.Add(model);
-            }
-        }
-
+        var result = new List<CalendarEventDisplayModel>(outlookRows.Count);
         foreach (var outlookEvent in outlookRows)
         {
             var model = MapOutlookEventToDisplayModel(outlookEvent);
@@ -128,16 +84,10 @@ public sealed class CalendarQueryService : ICalendarQueryService
 
         await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
 
+        // TODO 8.3+: resolve curated events from the unified `event` table (Stories 8.3/8.5).
         if (eventId.StartsWith("pending_", StringComparison.Ordinal))
         {
-            var pendingDraft = await context.PendingEvents
-                .AsNoTracking()
-                .SingleOrDefaultAsync(pendingEvent => pendingEvent.PendingEventId == eventId, ct);
-            return pendingDraft is null
-                ? null
-                : pendingDraft.GcalEventId is null
-                    ? TryMapPendingDraftToDisplayModel(pendingDraft)
-                    : await GetGoogleEventByIdAsync(context, pendingDraft.GcalEventId, ct);
+            return null;
         }
 
         if (eventId.StartsWith("outlook_", StringComparison.Ordinal))
@@ -149,21 +99,8 @@ public sealed class CalendarQueryService : ICalendarQueryService
             return outlookEvent is null ? null : MapOutlookEventToDisplayModel(outlookEvent);
         }
 
-        return await GetGoogleEventByIdAsync(context, eventId, ct);
-    }
-
-    private async Task<CalendarEventDisplayModel?> GetGoogleEventByIdAsync(CalendarDbContext context, string gcalEventId, CancellationToken ct)
-    {
-        var row = await (
-            from gcalEvent in context.GcalEvents.AsNoTracking()
-            join pendingEvent in context.PendingEvents.AsNoTracking()
-                on gcalEvent.GcalEventId equals pendingEvent.GcalEventId into pendingEvents
-            from pendingEvent in pendingEvents.DefaultIfEmpty()
-            where !gcalEvent.IsDeleted && gcalEvent.GcalEventId == gcalEventId
-            select new GoogleCalendarQueryRow(gcalEvent, pendingEvent)
-        ).SingleOrDefaultAsync(ct);
-
-        return row is null ? null : TryMapGoogleEventToDisplayModel(row.GcalEvent, row.PendingEvent);
+        // TODO 8.3+: resolve curated events from the unified `event` table (Stories 8.3/8.5).
+        return null;
     }
 
     private CalendarEventDisplayModel? TryMapGoogleEventToDisplayModel(GcalEvent gcalEvent, PendingEvent? pendingEvent)

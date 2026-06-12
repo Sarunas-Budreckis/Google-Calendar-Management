@@ -3,7 +3,7 @@ namespace GoogleCalendarManagement.Data.Entities;
 public class GcalEventVersion
 {
     public int VersionId { get; set; }
-    public string GcalEventId { get; set; } = "";
+    public string EventId { get; set; } = "";
     public string? GcalEtag { get; set; }
     public string? Summary { get; set; }
     public string? Description { get; set; }
@@ -18,5 +18,5 @@ public class GcalEventVersion
     public string? ChangeReason { get; set; }
     public DateTime CreatedAt { get; set; }
 
-    public GcalEvent GcalEvent { get; set; } = null!;
+    public Event Event { get; set; } = null!;
 }

@@ -8,8 +8,7 @@ public class CalendarDbContext : DbContext
     public CalendarDbContext(DbContextOptions<CalendarDbContext> options)
         : base(options) { }
 
-    public DbSet<GcalEvent> GcalEvents { get; set; }
-    public DbSet<PendingEvent> PendingEvents { get; set; }
+    public DbSet<Event> Events { get; set; }
     public DbSet<DeletedEvent> DeletedEvents { get; set; }
     public DbSet<RecurringEventSeries> RecurringEventSeries { get; set; }
     public DbSet<GcalEventVersion> GcalEventVersions { get; set; }
@@ -19,7 +18,6 @@ public class CalendarDbContext : DbContext
     public DbSet<DataSourceRefresh> DataSourceRefreshes { get; set; }
     public DbSet<SystemState> SystemStates { get; set; }
     public DbSet<DataSource> DataSources { get; set; }
-    public DbSet<DateSourceIntegration> DateSourceIntegrations { get; set; }
     public DbSet<DataSourceImportLog> DataSourceImportLogs { get; set; }
     public DbSet<TogglEntry> TogglEntries { get; set; }
     public DbSet<TogglSleepQuality> TogglSleepQualities { get; set; }
