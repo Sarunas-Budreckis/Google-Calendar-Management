@@ -8,6 +8,7 @@ using GoogleCalendarManagement.ViewModels;
 
 namespace GoogleCalendarManagement.Tests.Unit.ViewModels;
 
+[Collection("Messenger")]
 public sealed class TogglSleepDrilldownViewModelTests
 {
     public TogglSleepDrilldownViewModelTests()

@@ -648,7 +648,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteEventAsync_LocalDraft_CancelledMakesNoChanges()
+    public async Task DeleteEventAsync_LocalDraft_DeletesWithoutConfirmation()
     {
         var draft = new CalendarEventDisplayModel(
             EventId: "pending_draft_2",
@@ -672,11 +672,6 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
             .ReturnsAsync(draft);
 
         var dialogMock = new Mock<IContentDialogService>();
-        dialogMock
-            .Setup(d => d.ShowConfirmationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(false);
-
         var sut = CreateSut(dialogMock);
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("pending_draft_2"));
         await WaitUntilAsync(() => sut.IsPanelVisible);
@@ -684,9 +679,13 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         await sut.DeleteEventAsync();
 
         _pendingEventRepositoryMock.Verify(
-            repo => repo.DeleteByPendingEventIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            repo => repo.DeleteByPendingEventIdAsync("pending_draft_2", It.IsAny<CancellationToken>()),
+            Times.Once);
+        dialogMock.Verify(
+            d => d.ShowConfirmationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
             Times.Never);
-        sut.IsPanelVisible.Should().BeTrue();
+        sut.IsPanelVisible.Should().BeFalse();
     }
 
     [Fact]
@@ -1002,7 +1001,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteEventAsync_CancelFromAnyDialog_NoRepositoryWrite()
+    public async Task DeleteEventAsync_PublishedEventNoPending_StagesDeleteWithoutConfirmation()
     {
         var evt = MakeEvent("evt-cancel-del-1");
         _queryServiceMock
@@ -1013,11 +1012,6 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
             .ReturnsAsync((PendingEvent?)null);
 
         var dialogMock = new Mock<IContentDialogService>();
-        dialogMock
-            .Setup(d => d.ShowConfirmationAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(false);
-
         var sut = CreateSut(dialogMock);
         WeakReferenceMessenger.Default.Send(new EventSelectedMessage("evt-cancel-del-1"));
         await WaitUntilAsync(() => sut.IsPanelVisible);
@@ -1025,9 +1019,14 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         await sut.DeleteEventAsync();
 
         _pendingEventRepositoryMock.Verify(
-            repo => repo.UpsertAsync(It.IsAny<PendingEvent>(), It.IsAny<CancellationToken>()),
+            repo => repo.UpsertAsync(
+                It.Is<PendingEvent>(p => p.GcalEventId == "evt-cancel-del-1" && p.OperationType == "delete"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        dialogMock.Verify(
+            d => d.ShowConfirmationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
             Times.Never);
-        sut.IsPanelVisible.Should().BeTrue();
     }
 
     [Fact]

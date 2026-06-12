@@ -5,7 +5,7 @@ Status: review
 ## Story
 
 As a **developer**,
-I want **the core database tables and repository layer for data source registration, per-day integration tracking, and import history**,
+I want **the core database tables and repository layer for data source registration, per-day coverage tracking, and import history**,
 so that **all Epic 5 UI stories and the Toggl Sleep import have a typed, testable data contract to build on**.
 
 ## Acceptance Criteria

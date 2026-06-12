@@ -168,7 +168,7 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 **Core Requirements Extracted:**
 - **Tier 1 (Basic UI & Pull):** Read-only calendar viewer, GCal sync, year/month/week/day views, save/export, sync status
 - **Tier 2 (Editing & Push):** Event creation/editing, visual state language (translucent pending, red outline selection), push to GCal with confirmation
-- **Tier 3 (Data Sources):** Toggl/Calls/YouTube/Outlook integration, coalescing algorithms (8/15 rounding, phone, YouTube), hover system, approval workflow, day naming, weekly status
+- **Tier 3 (Data Sources):** Toggl/Calls/YouTube/Outlook sources, coalescing algorithms (8/15 rounding, phone, YouTube), hover system, approval workflow, day naming, weekly status
 
 **Success Metrics Defined:**
 - Qualitative: Backfilling becomes fun ritual, "spaced repetition for life"
@@ -309,7 +309,7 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 | **Tier 2: Event editing** | EventViewModel, inline editing with auto-save, EF Core | ✅ Covered |
 | **Tier 2: Visual state language** | UI state models (translucent 60%, red outline, full opacity) | ✅ Covered |
 | **Tier 2: Push to GCal** | PublishManager, batch publishing, confirmation dialogs | ✅ Covered |
-| **Tier 3: Toggl integration** | TogglService, 8/15 rounding algorithm, phone coalescing | ✅ Covered |
+| **Tier 3: Toggl source** | TogglService, 8/15 rounding algorithm, phone coalescing | ✅ Covered |
 | **Tier 3: Call logs** | CallLogCsvParser, iMazing format support | ✅ Covered |
 | **Tier 3: YouTube history** | YouTubeTakeoutParser, YouTube Data API, session coalescing | ✅ Covered |
 | **Tier 3: Outlook calendar** | MicrosoftGraphService, OAuth 2.0, .ics fallback | ✅ Covered |
@@ -434,8 +434,8 @@ This workflow will transform the PRD into ~40+ bite-sized user stories organized
 **Tier 3 Requirements Needing Story Coverage:**
 - Toggl Track integration ❓
 - Call logs parsing ❓
-- YouTube integration ❓
-- Outlook integration ❓
+- YouTube source ❓
+- Outlook source ❓
 - 8/15 rounding algorithm ❓
 - Phone coalescing ❓
 - YouTube session coalescing ❓
@@ -1189,7 +1189,7 @@ After stories are created, manually review:
 
 **Tier 1 Validation (Epics 1-3):**
 - [ ] All Epic 1-3 stories are read-only (no editing, no push to GCal)
-- [ ] No data source integration stories in Epics 1-3
+- [ ] No data source stories in Epics 1-3
 - [ ] Epic 1, Story 1 is project initialization with starter command
 - [ ] Foundation stories come before UI stories
 
@@ -1414,7 +1414,7 @@ sprint-planning: required (after stories)
 | **Tier 2: Event creation** | EventViewModel, drag-to-create | ❓ Epic 6 (expected) |
 | **Tier 2: Visual states** | UI state management | ❓ Epic 6 (expected) |
 | **Tier 2: Push to GCal** | PublishManager, batch ops | ❓ Epic 6 (expected) |
-| **Tier 3: Toggl integration** | TogglService, 8/15 rounding | ❓ Epic 4, 5 (expected) |
+| **Tier 3: Toggl source** | TogglService, 8/15 rounding | ❓ Epic 4, 5 (expected) |
 | **Tier 3: Call logs** | CallLogCsvParser | ❓ Epic 4 (expected) |
 | **Tier 3: YouTube** | YouTubeTakeoutParser, API | ❓ Epic 4 (expected) |
 | **Tier 3: Outlook** | MicrosoftGraphService | ❓ Epic 4 (expected) |

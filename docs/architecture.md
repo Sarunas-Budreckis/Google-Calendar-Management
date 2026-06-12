@@ -2094,7 +2094,7 @@ async Task SyncFromGoogleCalendar(DateTime startDate, DateTime endDate) {
 
 ### Tier 3: Data Sources & Automation (Intelligence)
 
-**Goal:** Transform backfilling into satisfying ritual with automated data integration
+**Goal:** Transform backfilling into satisfying ritual with automated data linking
 
 **Database Changes (+7 Tables = 15 Total):**
 - **NEW:** `toggl_data` - Toggl Track time entries

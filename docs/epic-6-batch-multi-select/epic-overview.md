@@ -4,6 +4,7 @@
 **Date:** 2026-05-13
 **Status:** Ready for Tech Spec
 **Tier:** 3 (workflow layer)
+**Concepts reference:** [Epic 8/9 vocabulary & data model](../epic-8-data-linking/concepts.md)
 
 ---
 
@@ -15,7 +16,7 @@ Enable the user to collect a named set of non-contiguous days into a persistent 
 
 ## Background
 
-Epic 5 establishes single-day select and the left panel. That model works well for detailed per-day work, but backfilling weeks or months of calendar data requires handling many days efficiently. The batch provides the answer: select 30 days, navigate through them one at a time with the Next button, and perform bulk approvals or bulk integration checks without touching each day individually. Only one batch can be active at a time, and it survives app restarts.
+Epic 5 establishes single-day select and the left panel. That model works well for detailed per-day work, but backfilling weeks or months of calendar data requires handling many days efficiently. The batch provides the answer: select 30 days, navigate through them one at a time with the Next button, and perform bulk approvals or bulk coverage checks without touching each day individually. Only one batch can be active at a time, and it survives app restarts.
 
 ---
 
@@ -28,7 +29,7 @@ The batch is a user's *working set* — days being actively processed right now.
 Single-day select (Epic 5) remains unchanged. The batch is a *collection* of days. Navigating the batch (Next button) drives the single-day select, updating the left panel for each day in sequence. The two systems compose naturally.
 
 ### Day States (reminder)
-Day states are independent binary flags — Approved, Named, Integrated (per source) — not a pipeline. Batch actions can set any of these flags in bulk without implying that the others must be set first.
+Day states are independent binary flags — Approved, Named, Covered (per source) — not a pipeline. Batch actions can set any of these flags in bulk without implying that the others must be set first.
 
 ---
 
@@ -54,7 +55,7 @@ Day states are independent binary flags — Approved, Named, Integrated (per sou
 - Clicking the visual marker again removes the day from the batch
 - Adding a day to the batch does not change the single-day select
 
-### Left Panel Integration
+### Left Panel Coverage
 - Left panel (Epic 5) is unchanged; it still shows single-day context
 - When the user navigates the batch with Next/Previous, it drives the single-day select, updating the left panel to show that day's data source state
 - The left panel header indicates when the current day is part of the active batch (e.g., a small badge or note: "Day 3 of 12 in batch")
@@ -74,10 +75,10 @@ All batch actions apply to every day in the active batch.
 - Confirmation prompt showing count: "Approve 14 days?"
 - Undoable (sets all back to false) — or at minimum clearly reversible by re-running manually
 
-**Batch Mark Integration**
+**Batch Mark Coverage**
 - User selects a data source from a dropdown
-- Sets `integrated = true` in `date_source_integration` for all batch days × chosen source
-- Confirmation prompt: "Mark Toggl Sleep as integrated for 14 days?"
+- Writes legacy coverage rows (`integrated = true` in `date_source_integration`) for all batch days × chosen source
+- Confirmation prompt: "Mark Toggl Sleep as covered for 14 days?"
 
 **Batch Select Events**
 - Selects all calendar events (both `gcal_event` and `pending_event`) whose date falls within any day in the batch
@@ -109,7 +110,7 @@ All batch actions apply to every day in the active batch.
 | `active_batch` | NEW | Stores the single active batch header (label, created_at) |
 | `active_batch_date` | NEW | Junction: batch_id + date + position (insertion order) |
 | `date_state` | WRITE | Batch approve writes `approved = true` |
-| `date_source_integration` | WRITE | Batch mark integration writes rows (Epic 5 introduces this table) |
+| `date_source_integration` | WRITE | Batch mark coverage writes legacy rows (Epic 5 introduces this table) |
 
 *Note: `system_state` may be used to store the active batch ID pointer.*
 
@@ -124,14 +125,14 @@ All batch actions apply to every day in the active batch.
 | 6.3 | Add/Remove Days to Batch | Context menu or toggle on day number; visual marker in all views |
 | 6.4 | Batch Navigation | Next/Previous buttons; position indicator; drives single-day select |
 | 6.5 | Batch Approve Action | Bulk set approval on all batch days; confirmation; batch position indicator in left panel |
-| 6.6 | Batch Mark Integration Action | Source picker; bulk write to `date_source_integration`; confirmation |
+| 6.6 | Batch Mark Coverage Action | Source picker; bulk write to `date_source_integration`; confirmation |
 | 6.7 | Batch Select Events | Select all events across batch days; feeds into multi-select event system |
 
 ---
 
 ## Dependencies
 
-- **Epic 5 complete** (left panel, single-day select, `date_source_integration` table, `date_state` write path)
+- **Epic 5 complete** (left panel, single-day select, legacy `date_source_integration` table, `date_state` write path)
 - **Story 4.6 complete** (multi-select events) — needed for Batch Select Events (6.7); other stories do not depend on it
 
 ---
@@ -144,5 +145,5 @@ All batch actions apply to every day in the active batch.
 - Next/Previous buttons cycle through batch days and update the left panel
 - Left panel header shows batch position when navigating
 - Batch Approve: all batch days gain `approved = true` after confirmation
-- Batch Mark Integration: all batch days gain an integration row for the chosen source after confirmation
+- Batch Mark Coverage: all batch days gain a coverage row for the chosen source after confirmation
 - Batch Select Events: all events on batch dates become selected in the calendar

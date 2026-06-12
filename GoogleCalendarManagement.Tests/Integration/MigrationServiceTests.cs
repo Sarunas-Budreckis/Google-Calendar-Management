@@ -35,6 +35,8 @@ public class MigrationServiceTests
             Directory.Delete(tempDir, recursive: true);
     }
 
+    private static string BackupDir(string tempDir) => Path.Combine(tempDir, "backups");
+
     // AC-1, AC-5
     [Fact]
     public async Task ApplyMigrationsAsync_OnFreshDatabase_AppliesMigrationsSuccessfully()
@@ -73,7 +75,7 @@ public class MigrationServiceTests
             await svc.ApplyMigrationsAsync();
 
             // Assert — a backup file with the correct naming pattern was created
-            var backupFiles = Directory.GetFiles(tempDir, "calendar_backup_*_pre-migration.db");
+            var backupFiles = Directory.GetFiles(BackupDir(tempDir), "calendar_backup_*_pre-migration.db");
             backupFiles.Should().HaveCount(1, "one pre-migration backup should be created");
         }
         finally
@@ -137,10 +139,12 @@ public class MigrationServiceTests
         {
             // Arrange — create a real calendar.db and 5 pre-existing backup files with distinct timestamps
             await File.WriteAllBytesAsync(dbPath, Array.Empty<byte>());
+            var backupDir = BackupDir(tempDir);
+            Directory.CreateDirectory(backupDir);
             var preExistingFiles = new List<string>();
             for (int i = 1; i <= 5; i++)
             {
-                var fakeName = Path.Combine(tempDir, $"calendar_backup_2026010{i}_120000_old.db");
+                var fakeName = Path.Combine(backupDir, $"calendar_backup_2026010{i}_120000_old.db");
                 await File.WriteAllBytesAsync(fakeName, Array.Empty<byte>());
                 // Set creation time to distinguish order (oldest first)
                 File.SetCreationTimeUtc(fakeName, new DateTime(2026, 1, i, 12, 0, 0, DateTimeKind.Utc));
@@ -152,7 +156,7 @@ public class MigrationServiceTests
             await svc.CreateBackupAsync("test");
 
             // Assert — exactly 5 backup files remain (1 oldest deleted, 1 new created)
-            var remaining = Directory.GetFiles(tempDir, "calendar_backup_*.db");
+            var remaining = Directory.GetFiles(backupDir, "calendar_backup_*.db");
             remaining.Should().HaveCount(5, "only 5 most recent backups should be kept");
             remaining.Should().NotContain(oldestFile, "the oldest backup should have been deleted");
         }
@@ -177,7 +181,9 @@ public class MigrationServiceTests
             await svc.ApplyMigrationsAsync();
 
             // Assert — no backup files were created (no pending migrations means no backup)
-            var backupFiles = Directory.GetFiles(tempDir, "calendar_backup_*.db");
+            var backupFiles = Directory.Exists(BackupDir(tempDir))
+                ? Directory.GetFiles(BackupDir(tempDir), "calendar_backup_*.db")
+                : [];
             backupFiles.Should().BeEmpty("no backup should be created when there are no pending migrations");
         }
         finally

@@ -5,7 +5,7 @@ Status: review
 ## Story
 
 As a **user**,
-I want **the left panel to show the selected day's name and per-source integration status when a day is selected**,
+I want **the left panel to show the selected day's name and per-source coverage status when a day is selected**,
 so that **I can see what data sources I've handled for that day and quickly access detailed source data**.
 
 ## Acceptance Criteria
@@ -20,15 +20,15 @@ so that **I can see what data sources I've handled for that day and quickly acce
 
 4. **AC-5.5.4 — Clicking the date/name header opens the day name event in the right panel:** If a name event exists, clicking the header calls `ICalendarSelectionService.Select(eventId, sourceKind)` to open it in the right panel. If no name event exists, clicking the header creates a new `pending_event` with `is_all_day = true`, `source_system = "day_name"`, `summary = ""`, `start_datetime` and `end_datetime` set to the start of the selected day (all-day semantics), and selects it in the right panel in edit mode so the user can type the name immediately.
 
-5. **AC-5.5.5 — Per-source integration rows appear in day mode:** Below the header, one row is shown per registered data source (same list as global mode). Each row shows:
+5. **AC-5.5.5 — Per-source coverage rows appear in day mode:** Below the header, one row is shown per registered data source (same list as global mode). Each row shows:
    - Source display name
-   - An integration checkbox (checked if `date_source_integration` has `integrated = true` for this date and source; unchecked otherwise)
+   - A coverage checkbox (checked if the legacy `date_source_integration` table has `integrated = true` for this date and source; unchecked otherwise)
    - An expand/chevron button on the right
    - The source's own compact day-summary content (see AC-5.5.7)
 
 6. **AC-5.5.6 — Integration checkbox is manually toggled:** Clicking the checkbox calls `IDataSourceRepository.SetIntegrationAsync(date, sourceId, !current)`. The checkbox updates optimistically (immediately in the UI), then persists. No confirmation required.
 
-7. **AC-5.5.7 — Source cards are independently extensible:** Each data source provides its own compact day-summary content control via an `IDataSourceCardProvider` interface. The left panel renders the provided control inside the card row. If a source has no registered provider, the card row shows only the source name and integration checkbox (no compact summary). Story 5.7 will register the Toggl Sleep provider; this story defines the interface and the fallback.
+7. **AC-5.5.7 — Source cards are independently extensible:** Each data source provides its own compact day-summary content control via an `IDataSourceCardProvider` interface. The left panel renders the provided control inside the card row. If a source has no registered provider, the card row shows only the source name and coverage checkbox (no compact summary). Story 5.7 will register the Toggl Sleep provider; this story defines the interface and the fallback.
 
 8. **AC-5.5.8 — Expand button enters the source drilldown view:** Clicking the expand/chevron on any card row navigates the left panel body to the drilldown view for that source. The drilldown replaces the source list entirely within the panel. Story 5.7 provides the Toggl Sleep drilldown content; for all other sources in this story, the drilldown shows a placeholder "Detailed view for [Source Name] — coming soon".
 
@@ -61,7 +61,7 @@ so that **I can see what data sources I've handled for that day and quickly acce
   - [x] Add `bool HasDayName` property
   - [x] Add `ObservableCollection<DataSourceDayCardViewModel> DayCards`
   - [x] Add `DataSourceDayCardViewModel? DrilldownCard` property (null = source list mode)
-  - [x] `LoadDayModeAsync(DateOnly date)`: queries sources + integration states + day name
+  - [x] `LoadDayModeAsync(DateOnly date)`: queries sources + coverage states + day name
   - [x] On day-name header click: call `OpenOrCreateDayNameEventAsync(date)`
   - [x] `OpenOrCreateDayNameEventAsync`: query gcal_event + pending_event for `is_all_day=true, source_system="day_name"` on date; open existing via `ICalendarSelectionService.Select` or create new `pending_event` via `IPendingEventDraftService` then select
 
@@ -78,7 +78,7 @@ so that **I can see what data sources I've handled for that day and quickly acce
 - [x] **Task 4: Handle greyed-out checkboxes**
   - [x] `IDataSourceCardProvider` gains `bool? HasDataForDay(DateOnly date)` — returns `true` (has data), `false` (definitely no data), or `null` (unknown/not supported)
   - [x] `DataSourceDayCardViewModel.IsGreyedOut = provider.HasDataForDay(date) == false`
-  - [x] When greyed out: checkbox is disabled and visually muted; integration cannot be toggled
+  - [x] When greyed out: checkbox is disabled and visually muted; coverage cannot be toggled
 
 - [x] **Task 5: Build day-mode XAML in `DataSourcePanelControl.xaml`**
   - [x] Add a `DataTemplate` or `ContentPresenter` that switches between global mode, day mode source list, and drilldown based on `CurrentDay` and `DrilldownCard` state

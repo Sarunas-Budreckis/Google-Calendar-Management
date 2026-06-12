@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GoogleCalendarManagement.Tests.Unit.Services;
 
+[Collection("Messenger")]
 public sealed class CallLogImportServiceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -16,6 +17,8 @@ public sealed class CallLogImportServiceTests : IDisposable
 
     public CallLogImportServiceTests()
     {
+        WeakReferenceMessenger.Default.Reset();
+
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
 
@@ -153,7 +156,7 @@ public sealed class CallLogImportServiceTests : IDisposable
 
     public void Dispose()
     {
-        WeakReferenceMessenger.Default.UnregisterAll(_recipient);
+        WeakReferenceMessenger.Default.Reset();
         _connection.Dispose();
     }
 

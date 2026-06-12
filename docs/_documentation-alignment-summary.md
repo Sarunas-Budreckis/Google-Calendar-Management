@@ -178,7 +178,7 @@ Yellow is a **final color** for passive consumption events (like YouTube), NOT a
 - NO editing
 - NO event creation
 - NO push to GCal
-- NO data source integration
+- NO data sources
 
 ### Tier 2 Enables Full Manual Control
 - Foundation for Tier 3 automation

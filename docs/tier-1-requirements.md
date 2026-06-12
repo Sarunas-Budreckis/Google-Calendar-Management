@@ -50,7 +50,7 @@
 ❌ No event editing
 ❌ No event creation
 ❌ No push to GCal
-❌ No data source integration (Toggl, Calls, YouTube, Outlook)
+❌ No data sources (Toggl, Calls, YouTube, Outlook)
 ❌ No coalescing algorithms
 ❌ No day naming or contextualization
 ❌ No hover system

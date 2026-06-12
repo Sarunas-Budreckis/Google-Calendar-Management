@@ -10,6 +10,7 @@ using Moq;
 
 namespace GoogleCalendarManagement.Tests.Unit.Services;
 
+[Collection("Messenger")]
 public sealed class TogglSleepImportServiceTests : IDisposable
 {
     private readonly SqliteConnection _connection;
@@ -20,6 +21,8 @@ public sealed class TogglSleepImportServiceTests : IDisposable
 
     public TogglSleepImportServiceTests()
     {
+        WeakReferenceMessenger.Default.Reset();
+
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
 
@@ -199,7 +202,7 @@ public sealed class TogglSleepImportServiceTests : IDisposable
 
     public void Dispose()
     {
-        WeakReferenceMessenger.Default.UnregisterAll(_recipient);
+        WeakReferenceMessenger.Default.Reset();
         _connection.Dispose();
     }
 

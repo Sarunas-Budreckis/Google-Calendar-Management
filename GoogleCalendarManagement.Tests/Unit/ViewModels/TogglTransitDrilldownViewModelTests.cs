@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 
 namespace GoogleCalendarManagement.Tests.Unit.ViewModels;
 
+[Collection("Messenger")]
 public sealed class TogglTransitDrilldownViewModelTests
 {
     public TogglTransitDrilldownViewModelTests()
