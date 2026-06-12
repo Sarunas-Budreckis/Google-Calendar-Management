@@ -273,18 +273,11 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
     public async Task LoadDayMode_WhenNameEventExists_PopulatesDayName()
     {
         var repository = new StubDataSourceRepository();
-        var pendingRepository = new StubPendingEventRepository
+        var eventRepository = new StubEventRepository
         {
-            DayNameEvent = new PendingEvent
-            {
-                PendingEventId = "pending_day_name",
-                Summary = "Deep Work",
-                IsAllDay = true,
-                SourceSystem = "day_name",
-                StartDatetime = new DateTime(2026, 05, 13, 0, 0, 0, DateTimeKind.Utc)
-            }
+            DayNameEvent = new Event { EventId = "event_day_name", Summary = "Deep Work", SourceSystem = "day_name" }
         };
-        var viewModel = CreateViewModel(repository, pendingEventRepository: pendingRepository);
+        var viewModel = CreateViewModel(repository, eventRepository: eventRepository);
 
         await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
 
@@ -665,7 +658,6 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         ICalendarSelectionService? calendarSelectionService = null,
         IPendingEventDraftService? pendingEventDraftService = null,
         IEventRepository? eventRepository = null,
-        IPendingEventRepository? pendingEventRepository = null,
         ICalendarViewRangeProvider? viewRangeProvider = null,
         StubSystemStateRepository? systemStateRepository = null)
     {
@@ -678,7 +670,6 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
             cardProviderRegistry ?? new DataSourceCardProviderRegistry(),
             calendarSelectionService ?? new StubCalendarSelectionService(),
             pendingEventDraftService ?? new StubPendingEventDraftService(),
-            pendingEventRepository ?? new StubPendingEventRepository(),
             viewRangeProvider ?? new StubCalendarViewRangeProvider(),
             eventRepository ?? new StubEventRepository());
     }
@@ -890,11 +881,31 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
                 StartDatetime = startLocal,
                 EndDatetime = endLocal
             });
+
+        public Task<Event> CreateCandidateAsync(
+            DateTime startLocal,
+            DateTime endLocal,
+            string? summary = null,
+            string? sourceSystem = null,
+            string? colorId = null,
+            CancellationToken ct = default)
+            => Task.FromResult(new Event
+            {
+                EventId = "candidate_new",
+                Summary = summary,
+                StartDatetime = startLocal,
+                EndDatetime = endLocal,
+                Lifecycle = "candidate",
+                Publish = "local_only",
+                SourceSystem = sourceSystem,
+                ColorId = colorId
+            });
     }
 
     private sealed class StubEventRepository : IEventRepository
     {
         public IList<Event> Events { get; set; } = [];
+        public Event? DayNameEvent { get; set; }
 
         public Task<Event?> GetByEventIdAsync(string eventId, CancellationToken ct = default)
             => Task.FromResult(Events.SingleOrDefault(e => e.EventId == eventId));
@@ -917,40 +928,17 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         public Task DeleteByEventIdAsync(string eventId, CancellationToken ct = default)
             => Task.CompletedTask;
 
+        public Task UpdateLifecycleAsync(string eventId, string lifecycle, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task<bool> RevertToLastSyncedAsync(string eventId, CancellationToken ct = default)
+            => Task.FromResult(false);
+
         public Task<Event?> GetDayNameEventAsync(DateOnly date, CancellationToken ct = default)
-            => Task.FromResult<Event?>(null);
+            => Task.FromResult(DayNameEvent);
 
         public Task<Event?> GetSleepEventForDateAsync(DateOnly date, CancellationToken ct = default)
             => Task.FromResult<Event?>(null);
-    }
-
-    private sealed class StubPendingEventRepository : IPendingEventRepository
-    {
-        public PendingEvent? DayNameEvent { get; set; }
-
-        public Task<PendingEvent?> GetByPendingEventIdAsync(string pendingEventId, CancellationToken ct = default)
-            => Task.FromResult(DayNameEvent?.PendingEventId == pendingEventId ? DayNameEvent : null);
-
-        public Task<PendingEvent?> GetByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
-            => Task.FromResult(DayNameEvent?.GcalEventId == gcalEventId ? DayNameEvent : null);
-
-        public Task<PendingEvent?> GetDayNameEventAsync(DateOnly date, CancellationToken ct = default)
-            => Task.FromResult(DayNameEvent);
-
-        public Task UpsertAsync(PendingEvent pendingEvent, CancellationToken ct = default)
-        {
-            DayNameEvent = pendingEvent;
-            return Task.CompletedTask;
-        }
-
-        public Task DeleteByPendingEventIdAsync(string pendingEventId, CancellationToken ct = default)
-            => Task.CompletedTask;
-
-        public Task DeleteByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
-            => Task.CompletedTask;
-
-        public Task<PendingEvent?> GetSleepEventForDateAsync(DateOnly date, CancellationToken ct = default)
-            => Task.FromResult<PendingEvent?>(null);
     }
 
     private sealed class RecordingImportHandler : IDataSourceImportHandler

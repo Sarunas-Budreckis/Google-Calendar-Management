@@ -1,6 +1,7 @@
 using FluentAssertions;
 using GoogleCalendarManagement.Data;
 using GoogleCalendarManagement.Data.Entities;
+using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -38,7 +39,7 @@ public sealed class CalendarQueryServiceUnifiedEventTests : IDisposable
             await context.SaveChangesAsync();
         }
 
-        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
+        var service = CreateService();
 
         var events = await service.GetEventsForRangeAsync(
             new DateOnly(2026, 04, 05),
@@ -56,11 +57,48 @@ public sealed class CalendarQueryServiceUnifiedEventTests : IDisposable
             await context.SaveChangesAsync();
         }
 
-        var service = new CalendarQueryService(_contextFactory, new ColorMappingService());
+        var service = CreateService();
 
         var ev = await service.GetEventByIdAsync("evt-deleted");
 
         ev.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetEventsForRangeAsync_DerivesSourceKindOpacityAndStatusFromLifecycleAndPublish()
+    {
+        await using (var context = await _contextFactory.CreateDbContextAsync())
+        {
+            context.Events.AddRange(
+                CreateEvent("evt-candidate", "Candidate", lifecycle: "candidate", publish: "local_only"),
+                CreateEvent("evt-pending", "Pending", lifecycle: "approved", publish: "local_only"),
+                CreateEvent("evt-google", "Google", lifecycle: "approved", publish: "published"),
+                CreateEvent("evt-dirty-google", "Dirty Google", lifecycle: "approved", publish: "published", hasUnpublishedChanges: true));
+            await context.SaveChangesAsync();
+        }
+
+        var service = CreateService();
+
+        var events = await service.GetEventsForRangeAsync(
+            new DateOnly(2026, 04, 05),
+            new DateOnly(2026, 04, 05));
+
+        events.Should().Contain(e => e.EventId == "evt-candidate" &&
+            e.SourceKind == CalendarEventSourceKind.Candidate &&
+            e.Opacity == 0.6 &&
+            e.StatusLabel == "Candidate event");
+        events.Should().Contain(e => e.EventId == "evt-pending" &&
+            e.SourceKind == CalendarEventSourceKind.Pending &&
+            e.Opacity == 0.6 &&
+            e.StatusLabel == "Not yet published to Google Calendar");
+        events.Should().Contain(e => e.EventId == "evt-google" &&
+            e.SourceKind == CalendarEventSourceKind.Google &&
+            e.Opacity == 1.0 &&
+            e.StatusLabel == "");
+        events.Should().Contain(e => e.EventId == "evt-dirty-google" &&
+            e.SourceKind == CalendarEventSourceKind.Google &&
+            e.Opacity == 0.6 &&
+            e.StatusLabel == "Local changes, pending push to GCal");
     }
 
     public void Dispose()
@@ -68,7 +106,16 @@ public sealed class CalendarQueryServiceUnifiedEventTests : IDisposable
         _connection.Dispose();
     }
 
-    private static Event CreateEvent(string eventId, string summary, bool isDeleted = false)
+    private CalendarQueryService CreateService() =>
+        new(new EventRepository(_contextFactory), new ColorMappingService());
+
+    private static Event CreateEvent(
+        string eventId,
+        string summary,
+        bool isDeleted = false,
+        string lifecycle = "approved",
+        string publish = "published",
+        bool hasUnpublishedChanges = false)
     {
         var now = new DateTime(2026, 04, 05, 8, 0, 0, DateTimeKind.Utc);
         return new Event
@@ -81,9 +128,9 @@ public sealed class CalendarQueryServiceUnifiedEventTests : IDisposable
             EndDatetime = new DateTime(2026, 04, 05, 10, 0, 0, DateTimeKind.Utc),
             IsAllDay = false,
             ColorId = "azure",
-            Lifecycle = "approved",
-            Publish = "published",
-            HasUnpublishedChanges = false,
+            Lifecycle = lifecycle,
+            Publish = publish,
+            HasUnpublishedChanges = hasUnpublishedChanges,
             IsDeleted = isDeleted,
             CreatedAt = now,
             UpdatedAt = now

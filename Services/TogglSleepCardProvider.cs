@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
-using CommunityToolkit.Mvvm.Messaging;
 using GoogleCalendarManagement.Views;
-using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
@@ -13,8 +11,6 @@ public sealed class TogglSleepCardProvider : IDataSourceCardProvider, IDataSourc
     private readonly IServiceProvider _serviceProvider;
     private readonly ITogglSleepRepository _repository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
-    private readonly IPendingEventRepository _pendingEventRepository;
-    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly ConcurrentDictionary<DateOnly, bool> _hasDataByDate = [];
 
@@ -22,15 +18,11 @@ public sealed class TogglSleepCardProvider : IDataSourceCardProvider, IDataSourc
         IServiceProvider serviceProvider,
         ITogglSleepRepository repository,
         IPendingEventDraftService pendingEventDraftService,
-        IPendingEventRepository pendingEventRepository,
-        ICalendarSelectionService calendarSelectionService,
-        IEventRepository? eventRepository = null)
+        ICalendarSelectionService calendarSelectionService)
     {
         _serviceProvider = serviceProvider;
         _repository = repository;
         _pendingEventDraftService = pendingEventDraftService;
-        _pendingEventRepository = pendingEventRepository;
-        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
     }
 
@@ -91,17 +83,14 @@ public sealed class TogglSleepCardProvider : IDataSourceCardProvider, IDataSourc
             endLocal = startLocal.AddMinutes(15);
         }
 
-        var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal, "Sleep", ct);
-        draft.Summary = "Sleep";
-        draft.IsAllDay = false;
-        draft.SourceSystem = "toggl";
-        draft.ColorId = "grey";
-        if (_eventRepository is not null)
-        {
-            await _eventRepository.UpsertAsync(draft, ct);
-        }
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
-        _calendarSelectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        var candidate = await _pendingEventDraftService.CreateCandidateAsync(
+            startLocal,
+            endLocal,
+            "Sleep",
+            sourceSystem: "toggl",
+            colorId: "grey",
+            ct: ct);
+        _calendarSelectionService.Select(candidate.EventId, CalendarEventSourceKind.Candidate, openInEditMode: true);
     }
 
     private static DateTime NormalizeUtc(DateTime value)

@@ -30,6 +30,7 @@ public class CalendarDbContext : DbContext
     public DbSet<ComfyUIFolder> ComfyUIFolders { get; set; }
     public DbSet<ComfyUIScanPoint> ComfyUIScanPoints { get; set; }
     public DbSet<OutlookEvent> OutlookEvents { get; set; }
+    public DbSet<DataPoint> DataPoints { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

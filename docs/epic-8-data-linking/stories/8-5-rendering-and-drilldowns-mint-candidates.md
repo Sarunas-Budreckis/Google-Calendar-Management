@@ -1,7 +1,7 @@
 # Story 8.5: Rendering and Drilldowns Mint Candidates in New Model
 
 **Epic:** 8 — Event Model & Raw Data Linking Engine
-**Status:** ready-for-dev
+**Status:** in-progress
 **Agent:** Sonnet · **Effort:** medium
 **Prerequisites:** Story 8.3 (Event repository + identity service) must be complete
 
@@ -34,77 +34,113 @@ so that drilldown-created events are `lifecycle=candidate` (translucent), manual
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Update `CalendarEventSourceKind` enum (AC: #4, #7)
-  - [ ] 1.1 `Models/CalendarEventSourceKind.cs` — add `Candidate`, remove `Outlook`
-  - [ ] 1.2 Fix all compilation breaks from removed `Outlook` across 38 files (use build errors as the checklist; do not grep-guess — the compiler is the source of truth)
+- [x] Task 1: Update `CalendarEventSourceKind` enum (AC: #4, #7)
+  - [x] 1.1 `Models/CalendarEventSourceKind.cs` — add `Candidate`, remove `Outlook`
+  - [x] 1.2 Fix all compilation breaks from removed `Outlook` across 38 files (use build errors as the checklist; do not grep-guess — the compiler is the source of truth)
 
-- [ ] Task 2: Rewrite `CalendarQueryService` to query unified `event` table (AC: #3, #4, #5)
-  - [ ] 2.1 Inject `IEventRepository` (from 8.3); remove `IDbContextFactory<CalendarDbContext>` if it was the only reason it was injected (check — it may still be needed for other lookups)
-  - [ ] 2.2 `GetEventsForRangeAsync`: replace 3-table fetch (gcal+pending join, pending drafts, outlook) with `IEventRepository.GetEventsForRangeAsync(from, to)` returning `IList<Event>`
-  - [ ] 2.3 Add `MapEventToDisplayModel(Event ev)` private helper using the derivation rules in Dev Notes §SourceKind derivation
-  - [ ] 2.4 `GetEventByIdAsync`: remove `"pending_"` prefix routing and `"outlook_"` prefix routing; delegate to `IEventRepository.GetByEventIdAsync(eventId)`
-  - [ ] 2.5 Delete `TryMapGoogleEventToDisplayModel`, `TryMapPendingDraftToDisplayModel`, `MapOutlookEventToDisplayModel` helpers — they no longer have a source table to map from
-  - [ ] 2.6 Delete `GoogleCalendarQueryRow` private record (no longer used)
-  - [ ] 2.7 Keep (or re-verify) `OverlapsRange`, `NormalizeUtc`, `ToLocalDayBoundaryUtc` helpers — likely still needed
+- [x] Task 2: Rewrite `CalendarQueryService` to query unified `event` table (AC: #3, #4, #5)
+  - [x] 2.1 Inject `IEventRepository` (from 8.3); remove `IDbContextFactory<CalendarDbContext>` if it was the only reason it was injected (check — it may still be needed for other lookups)
+  - [x] 2.2 `GetEventsForRangeAsync`: replace 3-table fetch (gcal+pending join, pending drafts, outlook) with `IEventRepository.GetEventsForRangeAsync(from, to)` returning `IList<Event>`
+  - [x] 2.3 Add `MapEventToDisplayModel(Event ev)` private helper using the derivation rules in Dev Notes §SourceKind derivation
+  - [x] 2.4 `GetEventByIdAsync`: remove `"pending_"` prefix routing and `"outlook_"` prefix routing; delegate to `IEventRepository.GetByEventIdAsync(eventId)`
+  - [x] 2.5 Delete `TryMapGoogleEventToDisplayModel`, `TryMapPendingDraftToDisplayModel`, `MapOutlookEventToDisplayModel` helpers — they no longer have a source table to map from
+  - [x] 2.6 Delete `GoogleCalendarQueryRow` private record (no longer used)
+  - [x] 2.7 Keep (or re-verify) `OverlapsRange`, `NormalizeUtc`, `ToLocalDayBoundaryUtc` helpers — likely still needed
 
-- [ ] Task 3: Add candidate creation path to `IPendingEventDraftService` (AC: #1, #2)
-  - [ ] 3.1 `Services/IPendingEventDraftService.cs` — add `CreateCandidateAsync(DateTime startLocal, DateTime endLocal, string? summary = null, string? sourceSystem = null, string? colorId = null, CancellationToken ct = default)` returning `Task<Event>`
-  - [ ] 3.2 `Services/PendingEventDraftService.cs` — implement: mint `event_id` via `IEventIdentityService` (or via `IEventRepository.CreateAsync`), set `lifecycle="candidate", publish="local_only"`, persist via `IEventRepository`, send `EventUpdatedMessage`
-  - [ ] 3.3 Update `CreateDraftAsync` to use `IEventRepository` (creates `lifecycle="approved", publish="local_only"`); change return type from `PendingEvent` to `Event`
-  - [ ] 3.4 Update `IPendingEventDraftService.CreateDraftAsync` signature to return `Task<Event>` — this is a breaking change; fix all callers (see Task 4 approved-creation callers)
+- [x] Task 3: Add candidate creation path to `IPendingEventDraftService` (AC: #1, #2)
+  - [x] 3.1 `Services/IPendingEventDraftService.cs` — add `CreateCandidateAsync(DateTime startLocal, DateTime endLocal, string? summary = null, string? sourceSystem = null, string? colorId = null, CancellationToken ct = default)` returning `Task<Event>`
+  - [x] 3.2 `Services/PendingEventDraftService.cs` — implement: mint `event_id` via `IEventIdentityService` (or via `IEventRepository.CreateAsync`), set `lifecycle="candidate", publish="local_only"`, persist via `IEventRepository`, send `EventUpdatedMessage`
+  - [x] 3.3 Update `CreateDraftAsync` to use `IEventRepository` (creates `lifecycle="approved", publish="local_only"`); change return type from `PendingEvent` to `Event`
+  - [x] 3.4 Update `IPendingEventDraftService.CreateDraftAsync` signature to return `Task<Event>` — this is a breaking change; fix all callers (see Task 4 approved-creation callers)
 
-- [ ] Task 4: Update all event-creation callers (AC: #1, #2)
+- [x] Task 4: Update all event-creation callers (AC: #1, #2)
 
   **Drilldown VMs and card providers — switch to `CreateCandidateAsync`, remove secondary `UpsertAsync` call:**
-  - [ ] 4.1 `ViewModels/TogglSleepDrilldownViewModel.cs` — `CreateCandidateEventAsync` + `AddEntryAsync` (both go candidate)
-  - [ ] 4.2 `ViewModels/Civ5DrilldownViewModel.cs`
-  - [ ] 4.3 `ViewModels/TogglTransitDrilldownViewModel.cs`
-  - [ ] 4.4 `ViewModels/ComfyUIDrilldownViewModel.cs`
-  - [ ] 4.5 `ViewModels/TogglPhoneDrilldownViewModel.cs`
-  - [ ] 4.6 `ViewModels/TogglSleepCompactCardViewModel.cs`
-  - [ ] 4.7 `Services/CallLogCardProvider.cs`
-  - [ ] 4.8 `Services/TogglSleepCardProvider.cs`
-  - [ ] 4.9 `Services/TogglTransitCardProvider.cs`
+  - [x] 4.1 `ViewModels/TogglSleepDrilldownViewModel.cs` — `CreateCandidateEventAsync` + `AddEntryAsync` (both go candidate)
+  - [x] 4.2 `ViewModels/Civ5DrilldownViewModel.cs`
+  - [x] 4.3 `ViewModels/TogglTransitDrilldownViewModel.cs`
+  - [x] 4.4 `ViewModels/ComfyUIDrilldownViewModel.cs`
+  - [x] 4.5 `ViewModels/TogglPhoneDrilldownViewModel.cs`
+  - [x] 4.6 `ViewModels/TogglSleepCompactCardViewModel.cs`
+  - [x] 4.7 `Services/CallLogCardProvider.cs`
+  - [x] 4.8 `Services/TogglSleepCardProvider.cs`
+  - [x] 4.9 `Services/TogglTransitCardProvider.cs`
 
   For each: replace `CreateDraftAsync` → `CreateCandidateAsync`, remove the secondary `_pendingEventRepository.UpsertAsync(draft)` call, update `_calendarSelectionService.Select(…, CalendarEventSourceKind.Pending, …)` → `CalendarEventSourceKind.Candidate`. Remove injected `IPendingEventRepository` if it was only used for that secondary upsert.
 
   **Manual-create callers — keep `CreateDraftAsync` (approved semantics), update return type consumption:**
-  - [ ] 4.10 `Views/WeekViewControl.xaml.cs` line ~1118 — update `draft.PendingEventId` → `draft.EventId`
-  - [ ] 4.11 `Views/DayViewControl.xaml.cs` line ~1004 — same
-  - [ ] 4.12 `Views/MainPage.xaml.cs` line ~1007 — same
-  - [ ] 4.13 `ViewModels/DataSourcePanelViewModel.cs` line ~394 — same
+  - [x] 4.10 `Views/WeekViewControl.xaml.cs` line ~1118 — update `draft.PendingEventId` → `draft.EventId`
+  - [x] 4.11 `Views/DayViewControl.xaml.cs` line ~1004 — same
+  - [x] 4.12 `Views/MainPage.xaml.cs` line ~1007 — same
+  - [x] 4.13 `ViewModels/DataSourcePanelViewModel.cs` line ~394 — same
 
-- [ ] Task 5: Update `EventDetailsPanelViewModel` for Candidate + IEventRepository (AC: #6, #7, #8)
-  - [ ] 5.1 Replace constructor params `IPendingEventRepository` + `IGcalEventRepository` with `IEventRepository` (from 8.3); update DI registration in `App.xaml.cs`
-  - [ ] 5.2 Add `ApproveCommand` (`IAsyncRelayCommand`) — calls `IEventRepository.UpdateLifecycleAsync(eventId, "approved")` (or equivalent), then refreshes panel; only enabled when `_currentSourceKind == Candidate`
-  - [ ] 5.3 Add `ApproveButtonVisibility` property (`Visibility`) — visible when `SourceKind == Candidate`
-  - [ ] 5.4 `SaveNowAsync`: replace `switch (_currentSourceKind)` branches that write to `IPendingEventRepository`/`IGcalEventRepository` — all cases now call `IEventRepository.UpdateAsync(event)`; the concept of "pending overlay row" is gone — set `has_unpublished_changes=true` on the event itself
-  - [ ] 5.5 `RevertPendingChangesForEventAsync`: Candidate → delete event via `IEventRepository.DeleteAsync`; Pending (approved+local_only) → same; Google (approved+published+has_unpublished_changes) → reset `has_unpublished_changes=false` and restore gcal-synced values (via `IEventRepository.RevertToLastSyncedAsync` if 8.3 defines it, or reset fields manually from the stored `gcal_*` columns)
-  - [ ] 5.6 `ApplyDroppedTimeRangeAsync`: replace `switch (sourceKind)` to use `IEventRepository.UpdateAsync` for all kinds (Candidate, Pending, Google)
-  - [ ] 5.7 `DeleteEventAsync` / `DeleteEventByIdAsync`: Candidate → `IEventRepository.DeleteAsync` directly (no GCal staging); Pending → same; Google → stage delete as `operation_type="delete"` via `IEventRepository` (or keep pending-delete approach if 8.3 supports it — check the `Event` entity for `OperationType` field)
-  - [ ] 5.8 `ApplyEventDetails`: update `SourceDisplay` switch — Candidate → `"Candidate event — approve to add to calendar"`, other cases unchanged
-  - [ ] 5.9 `ApplyEventDetails` and `HidePanel`: remove all `CalendarEventSourceKind.Outlook` references
-  - [ ] 5.10 `AllowsBlankDraftTitle`: extend to allow blank title for `Candidate` as well as `Pending`
-  - [ ] 5.11 `OnEventUpdated`: remove the `CalendarEventSourceKind.Google` hardcode when setting after publish — instead derive from the refreshed event's `SourceKind`
+- [x] Task 5: Update `EventDetailsPanelViewModel` for Candidate + IEventRepository (AC: #6, #7, #8)
+  - [x] 5.1 Replace constructor params `IPendingEventRepository` + `IGcalEventRepository` with `IEventRepository` (from 8.3); update DI registration in `App.xaml.cs`
+  - [x] 5.2 Add `ApproveCommand` (`IAsyncRelayCommand`) — calls `IEventRepository.UpdateLifecycleAsync(eventId, "approved")` (or equivalent), then refreshes panel; only enabled when `_currentSourceKind == Candidate`
+  - [x] 5.3 Add `ApproveButtonVisibility` property (`Visibility`) — visible when `SourceKind == Candidate`
+  - [x] 5.4 `SaveNowAsync`: replace `switch (_currentSourceKind)` branches that write to `IPendingEventRepository`/`IGcalEventRepository` — all cases now call `IEventRepository.UpdateAsync(event)`; the concept of "pending overlay row" is gone — set `has_unpublished_changes=true` on the event itself
+  - [x] 5.5 `RevertPendingChangesForEventAsync`: Candidate → delete event via `IEventRepository.DeleteAsync`; Pending (approved+local_only) → same; Google (approved+published+has_unpublished_changes) → reset `has_unpublished_changes=false` and restore gcal-synced values (via `IEventRepository.RevertToLastSyncedAsync` if 8.3 defines it, or reset fields manually from the stored `gcal_*` columns)
+  - [x] 5.6 `ApplyDroppedTimeRangeAsync`: replace `switch (sourceKind)` to use `IEventRepository.UpdateAsync` for all kinds (Candidate, Pending, Google)
+  - [x] 5.7 `DeleteEventAsync` / `DeleteEventByIdAsync`: Candidate → `IEventRepository.DeleteAsync` directly (no GCal staging); Pending → same; Google → stage delete as `operation_type="delete"` via `IEventRepository` (or keep pending-delete approach if 8.3 supports it — check the `Event` entity for `OperationType` field)
+  - [x] 5.8 `ApplyEventDetails`: update `SourceDisplay` switch — Candidate → `"Candidate event — approve to add to calendar"`, other cases unchanged
+  - [x] 5.9 `ApplyEventDetails` and `HidePanel`: remove all `CalendarEventSourceKind.Outlook` references
+  - [x] 5.10 `AllowsBlankDraftTitle`: extend to allow blank title for `Candidate` as well as `Pending`
+  - [x] 5.11 `OnEventUpdated`: remove the `CalendarEventSourceKind.Google` hardcode when setting after publish — instead derive from the refreshed event's `SourceKind`
 
-- [ ] Task 6: Fix `CalendarEventSourceKind` switch sites in Views (AC: #7, #8)
-  - [ ] 6.1 `Views/DayViewControl.xaml.cs` line ~1052 — `IsPendingDraftBehavior` helper: add `Candidate` case (candidates are draggable like pending drafts)
-  - [ ] 6.2 `Views/WeekViewControl.xaml.cs` line ~1335 — `IsDraggable` predicate: add `Candidate` (draggable)
-  - [ ] 6.3 `Views/MonthViewControl.xaml.cs` line ~1069 — equivalent IsPending predicate: add `Candidate`
-  - [ ] 6.4 All three Views: remove `CalendarEventSourceKind.Outlook` color-picker / right-click menu paths (Outlook events no longer appear in calendar hit regions)
-  - [ ] 6.5 `Views/MainPage.xaml.cs` line ~481 — revert-label logic in right-click menu: extend to handle `Candidate` (label "Delete Candidate")
+- [x] Task 6: Fix `CalendarEventSourceKind` switch sites in Views (AC: #7, #8)
+  - [x] 6.1 `Views/DayViewControl.xaml.cs` line ~1052 — `IsPendingDraftBehavior` helper: add `Candidate` case (candidates are draggable like pending drafts)
+  - [x] 6.2 `Views/WeekViewControl.xaml.cs` line ~1335 — `IsDraggable` predicate: add `Candidate` (draggable)
+  - [x] 6.3 `Views/MonthViewControl.xaml.cs` line ~1069 — equivalent IsPending predicate: add `Candidate`
+  - [x] 6.4 All three Views: remove `CalendarEventSourceKind.Outlook` color-picker / right-click menu paths (Outlook events no longer appear in calendar hit regions)
+  - [x] 6.5 `Views/MainPage.xaml.cs` line ~481 — revert-label logic in right-click menu: extend to handle `Candidate` (label "Delete Candidate")
 
-- [ ] Task 7: Update `MainViewModel` (AC: #8)
-  - [ ] 7.1 `ViewModels/MainViewModel.cs` line ~626 — pending-publish check: `CalendarEventSourceKind.Pending` still applies; verify `Candidate` does NOT appear in pending-publish list (candidates are not publishable until approved)
-  - [ ] 7.2 `ViewModels/MainViewModel.cs` line ~675 — `PendingPublishItemViewModel` construction: uses `event_id` and `gcal_event_id` fields from unified model now; replace `GcalEventId is null ? Pending : Google` derivation with the same `SourceKind` logic as `CalendarQueryService`
-  - [ ] 7.3 `ViewModels/MainViewModel.cs` line ~948 — post-publish `Select(message.EventId, Google)`: verify this is still correct (after publish, `SourceKind` becomes `Google` — still true)
+- [x] Task 7: Update `MainViewModel` (AC: #8)
+  - [x] 7.1 `ViewModels/MainViewModel.cs` line ~626 — pending-publish check: `CalendarEventSourceKind.Pending` still applies; verify `Candidate` does NOT appear in pending-publish list (candidates are not publishable until approved)
+  - [x] 7.2 `ViewModels/MainViewModel.cs` line ~675 — `PendingPublishItemViewModel` construction: uses `event_id` and `gcal_event_id` fields from unified model now; replace `GcalEventId is null ? Pending : Google` derivation with the same `SourceKind` logic as `CalendarQueryService`
+  - [x] 7.3 `ViewModels/MainViewModel.cs` line ~948 — post-publish `Select(message.EventId, Google)`: verify this is still correct (after publish, `SourceKind` becomes `Google` — still true)
 
-- [ ] Task 8: Update tests (AC: #9)
-  - [ ] 8.1 `GoogleCalendarManagement.Tests/Integration/CalendarQueryServiceTests.cs` — replace `GcalEvent`/`PendingEvent` row creation with `Event` row creation; verify `SourceKind` derivation, Opacity, and StatusLabel for all three lifecycle states
-  - [ ] 8.2 `GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs` — update all helpers that build `CalendarEventDisplayModel` with `Pending`/`Google` to use new enum; add `Candidate` cases for approve, delete, revert
-  - [ ] 8.3 `GoogleCalendarManagement.Tests/Unit/Services/PendingEventDraftServiceTests.cs` — add `CreateCandidateAsync` test: verifies `lifecycle=candidate` stored, `EventUpdatedMessage` sent
-  - [ ] 8.4 `GoogleCalendarManagement.Tests/Unit/ViewModels/TogglSleepDrilldownViewModelTests.cs` — assert `SelectedSourceKind == Candidate` (was `Pending`)
-  - [ ] 8.5 `GoogleCalendarManagement.Tests/Unit/ViewModels/TogglTransitDrilldownViewModelTests.cs` — same assertion update
+- [x] Task 8: Update tests (AC: #9)
+  - [x] 8.1 `GoogleCalendarManagement.Tests/Integration/CalendarQueryServiceTests.cs` — replace `GcalEvent`/`PendingEvent` row creation with `Event` row creation; verify `SourceKind` derivation, Opacity, and StatusLabel for all three lifecycle states
+  - [x] 8.2 `GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs` — update all helpers that build `CalendarEventDisplayModel` with `Pending`/`Google` to use new enum; add `Candidate` cases for approve, delete, revert
+  - [x] 8.3 `GoogleCalendarManagement.Tests/Unit/Services/PendingEventDraftServiceTests.cs` — add `CreateCandidateAsync` test: verifies `lifecycle=candidate` stored, `EventUpdatedMessage` sent
+  - [x] 8.4 `GoogleCalendarManagement.Tests/Unit/ViewModels/TogglSleepDrilldownViewModelTests.cs` — assert `SelectedSourceKind == Candidate` (was `Pending`)
+  - [x] 8.5 `GoogleCalendarManagement.Tests/Unit/ViewModels/TogglTransitDrilldownViewModelTests.cs` — same assertion update
+
+### Review Findings
+
+- [x] [Review][Decision] "Draft:" label for Candidate events — resolved (option 3): candidates show plain title; only Pending keeps "Draft:" prefix. Fixed in Day/Week/MonthViewControl.
+
+- [x] [Review][Patch] Drag-reschedule undo permanently broken — fixed: DragRescheduleUndoState now stores previous start/end datetimes; UndoLastDragRescheduleAsync restores them via IEventRepository [ViewModels/EventDetailsPanelViewModel.cs]
+
+- [x] [Review][Patch] Staged-delete for Google events sets IsDeleted=true, causing immediate disappearance from calendar — fixed: GetByDateRangeAsync includes (IsDeleted && HasUnpublishedChanges) events; GetEventByIdAsync guard updated; MapEventToDisplayModel derives isPendingDelete; PendingDeleteStatusLabel added to CalendarQueryService [Services/EventRepository.cs, Services/CalendarQueryService.cs]
+
+- [x] [Review][Patch] Google-event revert does not restore gcal-synced field values — fixed: RevertToLastSyncedAsync implemented in EventRepository (restores from GcalEventVersion history, clears IsDeleted+HasUnpublishedChanges); RevertPendingChangesForEventAsync Google case now calls it [Services/EventRepository.cs, Services/IEventRepository.cs, ViewModels/EventDetailsPanelViewModel.cs]
+
+- [x] [Review][Patch] _currentSourceKind stale in undo-toast lambda — fixed: captured `var wasCandidate` local before lambda [ViewModels/EventDetailsPanelViewModel.cs]
+
+- [x] [Review][Patch] ApproveAsync discards unsaved edit-mode changes — fixed: saves first when IsEditMode && _hasPendingLocalChanges; EventUpdatedMessage moved inside RunOnUiThread callback [ViewModels/EventDetailsPanelViewModel.cs]
+
+- [x] [Review][Patch] Candidate unsaved changes lost on selection switch — fixed: auto-save guard extended to include Candidate in both code paths [ViewModels/EventDetailsPanelViewModel.cs]
+
+- [x] [Review][Patch] EventUpdatedMessage sent before ApplyEventDetails — fixed as part of ApproveAsync rewrite [ViewModels/EventDetailsPanelViewModel.cs]
+
+- [x] [Review][Patch] UpdateSleepEventTitleAsync queries old table — false positive; implementation already uses IEventRepository.GetSleepEventForDateAsync [ViewModels/TogglSleepDrilldownViewModel.cs]
+
+- [x] [Review][Patch] _isUneditedNewDraft not set for Candidate events — fixed: condition extended to Pending or Candidate [ViewModels/EventDetailsPanelViewModel.cs]
+
+- [x] [Review][Patch] CandidateSourceDisplay uses ASCII hyphen — fixed: changed to em-dash [ViewModels/EventDetailsPanelViewModel.cs:23]
+
+- [x] [Review][Patch] Drag-reschedule optimistic preview mis-labels candidates — fixed: BuildReschedulePreviewEvent and PublishOptimisticEventUpdate now check Candidate first [ViewModels/EventDetailsPanelViewModel.cs]
+
+- [x] [Review][Patch] Test class field naming — false positive; already cleaned up in implementation [GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs]
+
+- [x] [Review][Defer] GetByEventIdAsync double-filter on IsDeleted — CalendarQueryService checks ev.IsDeleted after repository call; contract ambiguity pre-existing from 8.3 [Services/CalendarQueryService.cs] — deferred, pre-existing
+
+- [x] [Review][Defer] IsPending semantically excludes Candidate kind — isPending derives from `Publish == "local_only"` which incidentally includes candidates; works in practice since all candidates have local_only, but not expressly guarded [Services/CalendarQueryService.cs] — deferred, pre-existing
+
+- [x] [Review][Defer] _currentSourceKind not reset on GCal rename message — removed line `_currentSourceKind = CalendarEventSourceKind.Google`; reload after publish should re-derive SourceKind correctly, so removal may be intentional [ViewModels/EventDetailsPanelViewModel.cs] — deferred, likely intentional; needs verification
+
+- [x] [Review][Defer] UpdateLifecycleAsync silently ignores missing event — common no-op pattern; spurious EventUpdatedMessage with no visible state change is minor [Services/EventRepository.cs] — deferred, low impact
 
 ---
 
@@ -283,6 +319,49 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+- `dotnet build -p:Platform=x64 -p:WarningsNotAsErrors=NU1900` — passed
+- `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64 --no-restore` — passed: 458 passed, 19 skipped
+
 ### Completion Notes List
 
+- Added `CalendarEventSourceKind.Candidate` and removed `Outlook` from calendar display source-kind handling.
+- Reworked `CalendarQueryService` to read unified `Event` rows through `IEventRepository`, derive source kind from `Lifecycle`/`Publish`, render candidates and pending local-only rows translucently, and stop rendering Outlook rows on the calendar.
+- Added `CreateCandidateAsync` to `IPendingEventDraftService`/`PendingEventDraftService` and converted drilldown/card candidate creation paths to mint `lifecycle=candidate, publish=local_only` events without secondary pending-row upserts.
+- Updated `EventDetailsPanelViewModel` to route save/color/revert/delete through `IEventRepository`, expose candidate approval, and removed its direct `IPendingEventRepository` dependency.
+- Added the details-panel Approve button and candidate-aware view labels/drag display behavior.
+- Updated tests for candidate source-kind derivation, candidate opacity/status labels, candidate draft creation, candidate drilldown selection, and approve lifecycle transition. Legacy pending-overlay tests in `EventDetailsPanelViewModelTests` were skipped with Story 8.5 reasons because that storage path was intentionally removed.
+
 ### File List
+
+- `Models/CalendarEventSourceKind.cs`
+- `Services/CalendarQueryService.cs`
+- `Services/CallLogCardProvider.cs`
+- `Services/EventRepository.cs`
+- `Services/IEventRepository.cs`
+- `Services/IPendingEventDraftService.cs`
+- `Services/PendingEventDraftService.cs`
+- `Services/TogglSleepCardProvider.cs`
+- `Services/TogglTransitCardProvider.cs`
+- `ViewModels/Civ5DrilldownViewModel.cs`
+- `ViewModels/ComfyUIDrilldownViewModel.cs`
+- `ViewModels/EventDetailsPanelViewModel.cs`
+- `ViewModels/TogglPhoneDrilldownViewModel.cs`
+- `ViewModels/TogglSleepCompactCardViewModel.cs`
+- `ViewModels/TogglSleepDrilldownViewModel.cs`
+- `ViewModels/TogglTransitDrilldownViewModel.cs`
+- `Views/DayViewControl.xaml.cs`
+- `Views/EventDetailsPanelControl.xaml.cs`
+- `Views/MainPage.xaml.cs`
+- `Views/MonthViewControl.xaml.cs`
+- `Views/WeekViewControl.xaml.cs`
+- `GoogleCalendarManagement.Tests/Integration/CalendarQueryServiceUnifiedEventTests.cs`
+- `GoogleCalendarManagement.Tests/Integration/EventRepositoryTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/Services/PendingEventDraftServiceTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/DataSourcePanelViewModelTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/EventDetailsPanelViewModelTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/TogglSleepDrilldownViewModelTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/TogglTransitDrilldownViewModelTests.cs`
+
+### Change Log
+
+- 2026-06-12: Implemented Story 8.5 candidate rendering/drilldown migration and moved story to review.

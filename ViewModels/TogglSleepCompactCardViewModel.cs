@@ -14,8 +14,6 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
     private readonly ITogglSleepRepository _repository;
     private readonly ITogglSleepQualityRepository _qualityRepository;
     private readonly IPendingEventDraftService? _pendingEventDraftService;
-    private readonly IPendingEventRepository? _pendingEventRepository;
-    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService? _calendarSelectionService;
     private string _startLabel = "";
     private string _endLabel = "";
@@ -30,15 +28,11 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
         ITogglSleepRepository repository,
         ITogglSleepQualityRepository qualityRepository,
         IPendingEventDraftService? pendingEventDraftService = null,
-        IPendingEventRepository? pendingEventRepository = null,
-        ICalendarSelectionService? calendarSelectionService = null,
-        IEventRepository? eventRepository = null)
+        ICalendarSelectionService? calendarSelectionService = null)
     {
         _repository = repository;
         _qualityRepository = qualityRepository;
         _pendingEventDraftService = pendingEventDraftService;
-        _pendingEventRepository = pendingEventRepository;
-        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
     }
 
@@ -168,13 +162,11 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
 
     private bool HasAddSupport =>
         _pendingEventDraftService is not null &&
-        _pendingEventRepository is not null &&
         _calendarSelectionService is not null;
 
     private async Task AddEntryAsync(TogglEntry entry)
     {
         if (_pendingEventDraftService is null ||
-            _pendingEventRepository is null ||
             _calendarSelectionService is null)
         {
             return;
@@ -189,17 +181,13 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
             endLocal = startLocal.AddMinutes(15);
         }
 
-        var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal, "Sleep");
-        draft.Summary = "Sleep";
-        draft.IsAllDay = false;
-        draft.SourceSystem = "toggl";
-        draft.ColorId = "grey";
-        if (_eventRepository is not null)
-        {
-            await _eventRepository.UpsertAsync(draft);
-        }
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
-        _calendarSelectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        var candidate = await _pendingEventDraftService.CreateCandidateAsync(
+            startLocal,
+            endLocal,
+            "Sleep",
+            sourceSystem: "toggl",
+            colorId: "grey");
+        _calendarSelectionService.Select(candidate.EventId, CalendarEventSourceKind.Candidate, openInEditMode: true);
     }
 
     private static DateTime NormalizeUtc(DateTime value)

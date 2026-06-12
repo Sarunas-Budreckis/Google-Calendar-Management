@@ -4,5 +4,5 @@ public enum CalendarEventSourceKind
 {
     Google,
     Pending,
-    Outlook
+    Candidate
 }

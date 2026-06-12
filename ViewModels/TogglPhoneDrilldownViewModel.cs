@@ -1,9 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using GoogleCalendarManagement.Data.Entities;
-using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using Microsoft.UI.Xaml;
@@ -16,8 +14,6 @@ public sealed class TogglPhoneDrilldownViewModel : ObservableObject
 
     private readonly ITogglPhoneRepository _repository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
-    private readonly IPendingEventRepository _pendingEventRepository;
-    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly TogglSlidingWindowService _slidingWindowService;
 
@@ -27,15 +23,11 @@ public sealed class TogglPhoneDrilldownViewModel : ObservableObject
     public TogglPhoneDrilldownViewModel(
         ITogglPhoneRepository repository,
         IPendingEventDraftService pendingEventDraftService,
-        IPendingEventRepository pendingEventRepository,
         ICalendarSelectionService calendarSelectionService,
-        TogglSlidingWindowService slidingWindowService,
-        IEventRepository? eventRepository = null)
+        TogglSlidingWindowService slidingWindowService)
     {
         _repository = repository;
         _pendingEventDraftService = pendingEventDraftService;
-        _pendingEventRepository = pendingEventRepository;
-        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
         _slidingWindowService = slidingWindowService;
 
@@ -113,23 +105,19 @@ public sealed class TogglPhoneDrilldownViewModel : ObservableObject
                 endLocal = startLocal.AddMinutes(15);
             }
 
-            var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal, "Phone");
-            draft.Summary = "Phone";
-            draft.IsAllDay = false;
-            draft.SourceSystem = "toggl";
-            draft.ColorId = "banana";
-            if (_eventRepository is not null)
-            {
-                await _eventRepository.UpsertAsync(draft);
-            }
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
+            var candidate = await _pendingEventDraftService.CreateCandidateAsync(
+                startLocal,
+                endLocal,
+                "Phone",
+                sourceSystem: "toggl",
+                colorId: "banana");
 
-            firstEventId ??= draft.EventId;
+            firstEventId ??= candidate.EventId;
         }
 
         if (firstEventId is not null)
         {
-            _calendarSelectionService.Select(firstEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+            _calendarSelectionService.Select(firstEventId, CalendarEventSourceKind.Candidate, openInEditMode: true);
         }
     }
 

@@ -231,6 +231,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         await using var context = await _contextFactory.CreateDbContextAsync();
         var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-1");
         var version = await context.GcalEventVersions.SingleAsync(evt => evt.EventId == "evt-delete-1");
+        var tombstone = await context.DeletedEvents.SingleAsync(evt => evt.EventId == "evt-delete-1");
 
         version.Summary.Should().Be("Existing summary");
         version.Description.Should().Be("Existing description");
@@ -239,6 +240,9 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         version.ChangedBy.Should().Be("gcal_sync");
         version.ChangeReason.Should().Be("deleted");
         version.CreatedAt.Should().BeOnOrBefore(liveEvent.UpdatedAt);
+        tombstone.GcalEventId.Should().Be("event-1");
+        tombstone.Summary.Should().Be("Existing summary");
+        tombstone.DeletionSource.Should().Be("gcal_sync");
 
         liveEvent.IsDeleted.Should().BeTrue();
         liveEvent.GcalUpdatedAt.Should().Be(seedTimestamp.AddDays(1));
@@ -813,9 +817,11 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         await using var context = await _contextFactory.CreateDbContextAsync();
         var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-dirty-delete");
         var version = await context.GcalEventVersions.SingleAsync(v => v.EventId == "evt-dirty-delete");
+        var tombstone = await context.DeletedEvents.SingleAsync(v => v.EventId == "evt-dirty-delete");
 
         liveEvent.IsDeleted.Should().BeTrue();
         version.ChangeReason.Should().Be("deleted");
+        tombstone.Summary.Should().Be("Local edit pending");
     }
 
     public void Dispose()

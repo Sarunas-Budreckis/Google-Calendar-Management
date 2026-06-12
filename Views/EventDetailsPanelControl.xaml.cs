@@ -38,6 +38,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
     private TextBlock? _editLastSavedTextBlock;
     private Button? _editSaveButton;
     private Button? _editRevertButton;
+    private Button? _editApproveButton;
     private Button? _editDeleteButton;
     private TextBlock? _pendingDeleteStatusTextBlock;
     private readonly Dictionary<string, Button> _colorOptionButtons = new(StringComparer.OrdinalIgnoreCase);
@@ -101,6 +102,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
             or nameof(EventDetailsPanelViewModel.DateTimeError)
             or nameof(EventDetailsPanelViewModel.SaveStatusText)
             or nameof(EventDetailsPanelViewModel.RevertButtonVisibility)
+            or nameof(EventDetailsPanelViewModel.ApproveButtonVisibility)
             or nameof(EventDetailsPanelViewModel.IsPendingDeleteEvent)
             or nameof(EventDetailsPanelViewModel.EditColorHex)
             or nameof(EventDetailsPanelViewModel.EditColorName)
@@ -217,6 +219,11 @@ public sealed partial class EventDetailsPanelControl : UserControl
             new PointerEventHandler((s, _) => ((UIElement)s).Focus(FocusState.Pointer)),
             handledEventsToo: true);
         _editRevertButton.Click += EditRevertButton_Click;
+        _editApproveButton = new Button
+        {
+            Content = "Approve",
+            Command = ViewModel.ApproveCommand
+        };
         _editDeleteButton = new Button
         {
             Content = "Delete"
@@ -262,6 +269,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
             Children =
             {
                 _editRevertButton,
+                _editApproveButton,
                 _editSaveButton
             }
         };
@@ -505,6 +513,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
             _editSourceTextBlock is null ||
             _editLastSavedTextBlock is null ||
             _editRevertButton is null ||
+            _editApproveButton is null ||
             _editDeleteButton is null ||
             _pendingDeleteStatusTextBlock is null)
         {
@@ -529,6 +538,7 @@ public sealed partial class EventDetailsPanelControl : UserControl
         _editSingleDatePanel.Visibility = ViewModel.UsesSingleDateEditor ? Visibility.Visible : Visibility.Collapsed;
         _editDateGrid.Visibility = ViewModel.UsesSingleDateEditor ? Visibility.Collapsed : Visibility.Visible;
         _editRevertButton.Visibility = ViewModel.RevertButtonVisibility;
+        _editApproveButton.Visibility = ViewModel.ApproveButtonVisibility;
         if (ViewModel.IsPendingDeleteEvent)
         {
             _pendingDeleteStatusTextBlock.Text = ViewModel.SourceDisplay;

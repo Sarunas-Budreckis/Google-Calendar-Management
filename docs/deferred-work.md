@@ -78,3 +78,20 @@
 - **Phone rule logic duplicated inline in `TogglCsvImportService`** — `ClassifyEntry` replicates `TogglPhoneClassificationService.MatchesAnyRule` verbatim; the two paths will silently diverge if phone-rule matching logic evolves. Consider extracting a shared static helper. [`Services/TogglCsvImportService.cs`, `Services/TogglPhoneClassificationService.cs`]
 - **Sleep repository filter is non-exhaustive** — `TogglSleepRepository` queries `WHERE TogglDataType IS NULL`; any future new `TogglDataType` value that is not sleep will silently disappear from sleep views. A positive `== TogglSleep` filter (with a new enum value) would be safer long-term. [`Services/TogglSleepRepository.cs`]
 - **Zero-duration CSV entries classified as phone** — A CSV row with duration `0:00:00` whose description matches a phone rule will be marked `TogglPhone`; cancelled/deleted Toggl entries may produce this. [`Services/TogglCsvImportService.cs:ClassifyEntry`]
+
+## Deferred from: code review of 8-6-repoint-history-deleted-recurring-remove-dead-pending (2026-06-12)
+
+- **`RevertToLastSyncedAsync` picks deleted version snapshot** [`Services/EventRepository.cs`] — `OrderByDescending(v => v.VersionId).FirstOrDefault()` does not filter out `ChangeReason = "deleted"` snapshots; semantically should select the last `updated` version. Pre-existing since 8.3/8.4.
+- **Backfill migration leaves `event_id` NULL for pre-existing tombstones** [`Data/Migrations/20260612172148_AddDeletedEventEventId.cs`] — tombstone rows for events hard-deleted before this migration keep `event_id = NULL`; column is nullable by design; only affects historical data on databases with pre-migration deletes.
+
+## Deferred from: code review of 8-7-data-point-registry-table-and-source-pointer (2026-06-12)
+
+- **`DataPoint.SourceRef` length unenforced** [`Data/Configurations/DataPointConfiguration.cs`] — `HasMaxLength(500)` is not enforced by SQLite TEXT; projectors in 8.9 could silently insert longer values. Pre-existing pattern across all string-typed EF configurations in this project.
+- **`TestDbContextFactory` duplicated in DataPointRepositoryTests** [`GoogleCalendarManagement.Tests/Integration/DataPointRepositoryTests.cs`] — inner private copy is the 20th instance across the test project; no functionality impact but a maintenance hazard on `CalendarDbContext` constructor changes.
+
+## Deferred from: code review of 8-5-rendering-and-drilldowns-mint-candidates (2026-06-12)
+
+- **GetByEventIdAsync double-filter on IsDeleted** — CalendarQueryService.GetEventByIdAsync checks ev.IsDeleted after calling the repository, but the repository may already filter deleted rows; contract ambiguity pre-existing from 8.3. [`Services/CalendarQueryService.cs`]
+- **IsPending semantically excludes Candidate kind** — isPending is derived from `Publish == "local_only"` which incidentally includes all current candidates; works in practice but is not expressly guarded against a future `candidate+published` edge case. [`Services/CalendarQueryService.cs`]
+- **_currentSourceKind not reset on GCal rename message** — The line `_currentSourceKind = CalendarEventSourceKind.Google` was removed from OnEventPublished; the subsequent reload should re-derive SourceKind correctly from the refreshed event, but needs verification. [`ViewModels/EventDetailsPanelViewModel.cs`]
+- **UpdateLifecycleAsync silently ignores missing event** — Returns without error if eventId is not found; results in a spurious EventUpdatedMessage with no visible state change. Low impact, common pattern. [`Services/EventRepository.cs`]

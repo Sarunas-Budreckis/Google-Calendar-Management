@@ -131,6 +131,7 @@ public sealed class SyncManager : ISyncManager
                         }
 
                         context.GcalEventVersions.Add(CreateVersionSnapshot(existingEvent, "deleted", syncedAt));
+                        context.DeletedEvents.Add(CreateDeletedEventSnapshot(existingEvent, syncedAt, "gcal_sync"));
                         eventsDeleted++;
                     }
 
@@ -361,6 +362,31 @@ public sealed class SyncManager : ISyncManager
             ChangedBy = "gcal_sync",
             ChangeReason = changeReason,
             CreatedAt = createdAt
+        };
+    }
+
+    private static DeletedEvent CreateDeletedEventSnapshot(Event existingEvent, DateTime deletedAt, string deletionSource)
+    {
+        return new DeletedEvent
+        {
+            EventId = existingEvent.EventId,
+            GcalEventId = existingEvent.GcalEventId ?? existingEvent.EventId,
+            CalendarId = existingEvent.CalendarId,
+            Summary = existingEvent.Summary,
+            Description = existingEvent.Description,
+            StartDatetime = existingEvent.StartDatetime,
+            EndDatetime = existingEvent.EndDatetime,
+            IsAllDay = existingEvent.IsAllDay,
+            ColorId = existingEvent.ColorId,
+            GcalEtag = existingEvent.GcalEtag,
+            RecurringEventId = existingEvent.RecurringEventId,
+            IsRecurringInstance = existingEvent.IsRecurringInstance,
+            AppCreated = existingEvent.SourceSystem == "manual" || existingEvent.Publish == "local_only",
+            SourceSystem = existingEvent.SourceSystem,
+            DeletedAt = deletedAt,
+            DeletionSource = deletionSource,
+            OriginalCreatedAt = existingEvent.CreatedAt,
+            OriginalUpdatedAt = existingEvent.UpdatedAt
         };
     }
 

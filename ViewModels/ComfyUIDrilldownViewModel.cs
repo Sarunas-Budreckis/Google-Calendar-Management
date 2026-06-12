@@ -2,9 +2,7 @@ using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using GoogleCalendarManagement.Data.Entities;
-using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using Microsoft.UI.Xaml;
@@ -18,8 +16,6 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
     private readonly IComfyUIRepository _repository;
     private readonly ComfyUIImportHandler _importHandler;
     private readonly IPendingEventDraftService _pendingEventDraftService;
-    private readonly IPendingEventRepository _pendingEventRepository;
-    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly IWindowService _windowService;
     private readonly TimeProvider _timeProvider;
@@ -34,17 +30,13 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
         IComfyUIRepository repository,
         ComfyUIImportHandler importHandler,
         IPendingEventDraftService pendingEventDraftService,
-        IPendingEventRepository pendingEventRepository,
         ICalendarSelectionService calendarSelectionService,
         IWindowService windowService,
-        IEventRepository? eventRepository = null,
         TimeProvider? timeProvider = null)
     {
         _repository = repository;
         _importHandler = importHandler;
         _pendingEventDraftService = pendingEventDraftService;
-        _pendingEventRepository = pendingEventRepository;
-        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
         _windowService = windowService;
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -217,22 +209,18 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
                 endLocal = startLocal.AddMinutes(15);
             }
 
-            var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal, "ComfyUI");
-            draft.Summary = "ComfyUI";
-            draft.IsAllDay = false;
-            draft.SourceSystem = ComfyUIFolderScannerService.SourceKey;
-            draft.ColorId = "navy";
-            if (_eventRepository is not null)
-            {
-                await _eventRepository.UpsertAsync(draft);
-            }
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
-            firstDraftId ??= draft.EventId;
+            var candidate = await _pendingEventDraftService.CreateCandidateAsync(
+                startLocal,
+                endLocal,
+                "ComfyUI",
+                sourceSystem: ComfyUIFolderScannerService.SourceKey,
+                colorId: "navy");
+            firstDraftId ??= candidate.EventId;
         }
 
         if (firstDraftId is not null)
         {
-            _calendarSelectionService.Select(firstDraftId, CalendarEventSourceKind.Pending, openInEditMode: true);
+            _calendarSelectionService.Select(firstDraftId, CalendarEventSourceKind.Candidate, openInEditMode: true);
         }
     }
 

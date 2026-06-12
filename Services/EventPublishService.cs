@@ -5,24 +5,27 @@ using Microsoft.Extensions.Logging;
 
 namespace GoogleCalendarManagement.Services;
 
-public sealed class PendingEventPublishService : IPendingEventPublishService
+public sealed class EventPublishService : IEventPublishService
 {
     private readonly IDbContextFactory<CalendarDbContext> _dbContextFactory;
     private readonly IGoogleCalendarService _googleCalendarService;
     private readonly IColorMappingService _colorMappingService;
+    private readonly IEventRepository _eventRepository;
     private readonly TimeProvider _timeProvider;
-    private readonly ILogger<PendingEventPublishService> _logger;
+    private readonly ILogger<EventPublishService> _logger;
 
-    public PendingEventPublishService(
+    public EventPublishService(
         IDbContextFactory<CalendarDbContext> dbContextFactory,
         IGoogleCalendarService googleCalendarService,
         IColorMappingService colorMappingService,
+        IEventRepository eventRepository,
         TimeProvider timeProvider,
-        ILogger<PendingEventPublishService> logger)
+        ILogger<EventPublishService> logger)
     {
         _dbContextFactory = dbContextFactory;
         _googleCalendarService = googleCalendarService;
         _colorMappingService = colorMappingService;
+        _eventRepository = eventRepository;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -30,6 +33,8 @@ public sealed class PendingEventPublishService : IPendingEventPublishService
     public async Task<IReadOnlyList<PendingPublishListItem>> GetPendingItemsAsync(CancellationToken ct = default)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
+        // Includes candidate events (Lifecycle="candidate", Publish="local_only") intentionally —
+        // candidates may eventually surface an "approve and publish" action directly from this panel.
         var events = await context.Events
             .AsNoTracking()
             .Where(e => e.HasUnpublishedChanges || e.Publish == "local_only")
@@ -45,14 +50,15 @@ public sealed class PendingEventPublishService : IPendingEventPublishService
         IProgress<PendingPublishProgress>? progress = null,
         CancellationToken ct = default)
     {
-        if (pendingEventIds.Count == 0)
+        var ids = pendingEventIds.Distinct().ToList();
+        if (ids.Count == 0)
         {
             return new PendingPublishBatchResult(0, 0, 0, []);
         }
 
-        var results = new List<PendingPublishItemResult>(pendingEventIds.Count);
+        var results = new List<PendingPublishItemResult>(ids.Count);
         var completed = 0;
-        foreach (var eventId in pendingEventIds)
+        foreach (var eventId in ids)
         {
             ct.ThrowIfCancellationRequested();
             try
@@ -104,15 +110,15 @@ public sealed class PendingEventPublishService : IPendingEventPublishService
             finally
             {
                 completed++;
-                progress?.Report(new PendingPublishProgress(completed, pendingEventIds.Count));
+                progress?.Report(new PendingPublishProgress(completed, ids.Count));
             }
         }
 
         var successCount = results.Count(r => r.Success);
         return new PendingPublishBatchResult(
-            pendingEventIds.Count,
+            ids.Count,
             successCount,
-            pendingEventIds.Count - successCount,
+            ids.Count - successCount,
             results);
     }
 
@@ -121,26 +127,24 @@ public sealed class PendingEventPublishService : IPendingEventPublishService
         await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
         var ev = await context.Events.SingleOrDefaultAsync(e => e.EventId == pendingEventId, ct);
         if (ev is null)
-        {
             return;
-        }
 
         if (ev.Publish == "local_only")
         {
             context.Events.Remove(ev);
+            await context.SaveChangesAsync(ct);
         }
-        else
+        else if (ev.HasUnpublishedChanges)
         {
-            // TODO 8.4: improve RevertAsync for published events by re-fetching the GCal row.
-            ev.HasUnpublishedChanges = false;
-            ev.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
+            await _eventRepository.RevertToLastSyncedAsync(pendingEventId, ct);
         }
-
-        await context.SaveChangesAsync(ct);
     }
 
     public async Task UpdateColorAsync(string pendingEventId, string colorKey, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(colorKey))
+            return;
+
         await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
         var ev = await context.Events.SingleOrDefaultAsync(e => e.EventId == pendingEventId, ct);
         if (ev is null)
@@ -187,7 +191,7 @@ public sealed class PendingEventPublishService : IPendingEventPublishService
             : ev.SourceSystem ?? ev.Lifecycle;
     }
 
-    private static void ApplyPublishedState(Event ev, GcalEventDto published)
+    private void ApplyPublishedState(Event ev, GcalEventDto published)
     {
         ev.GcalEventId = published.GcalEventId;
         ev.CalendarId = published.CalendarId;
@@ -203,6 +207,6 @@ public sealed class PendingEventPublishService : IPendingEventPublishService
         ev.GcalUpdatedAt = published.GcalUpdatedAtUtc;
         ev.RecurringEventId = published.RecurringEventId;
         ev.IsRecurringInstance = published.IsRecurringInstance;
-        ev.LastSyncedAt = DateTime.UtcNow;
+        ev.LastSyncedAt = _timeProvider.GetUtcNow().UtcDateTime;
     }
 }

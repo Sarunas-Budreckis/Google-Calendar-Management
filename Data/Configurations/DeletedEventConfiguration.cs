@@ -11,6 +11,7 @@ public class DeletedEventConfiguration : IEntityTypeConfiguration<DeletedEvent>
         builder.ToTable("deleted_event");
 
         builder.HasKey(e => e.GcalEventId);
+        builder.Property(e => e.EventId).HasColumnName("event_id");
         builder.Property(e => e.GcalEventId).HasColumnName("gcal_event_id").ValueGeneratedNever();
         builder.Property(e => e.CalendarId).HasColumnName("calendar_id").IsRequired();
         builder.Property(e => e.Summary).HasColumnName("summary");

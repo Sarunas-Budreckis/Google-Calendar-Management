@@ -37,8 +37,7 @@ public sealed class EventRepository : IEventRepository
         await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
         return await context.Events
             .AsNoTracking()
-            .Where(e => e.Lifecycle != "candidate" &&
-                        !e.IsDeleted &&
+            .Where(e => (!e.IsDeleted || e.HasUnpublishedChanges) &&
                         e.StartDatetime.HasValue &&
                         e.StartDatetime < rangeEndExclusiveUtc &&
                         (e.EndDatetime ?? e.StartDatetime.Value) >= rangeStartUtc)
@@ -104,9 +103,52 @@ public sealed class EventRepository : IEventRepository
         var existing = await context.Events.SingleOrDefaultAsync(e => e.EventId == eventId, ct);
         if (existing is not null)
         {
+            context.DeletedEvents.Add(CreateDeletedEventSnapshot(existing, DateTime.UtcNow, "user"));
             context.Events.Remove(existing);
             await context.SaveChangesAsync(ct);
         }
+    }
+
+    public async Task UpdateLifecycleAsync(string eventId, string lifecycle, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(lifecycle);
+
+        await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
+        var existing = await context.Events.SingleOrDefaultAsync(e => e.EventId == eventId, ct);
+        if (existing is not null)
+        {
+            existing.Lifecycle = lifecycle;
+            existing.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task<bool> RevertToLastSyncedAsync(string eventId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventId);
+
+        await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
+        var ev = await context.Events
+            .Include(e => e.Versions)
+            .SingleOrDefaultAsync(e => e.EventId == eventId, ct);
+        if (ev is null) return false;
+
+        var lastVersion = ev.Versions.OrderByDescending(v => v.VersionId).FirstOrDefault();
+        if (lastVersion is not null)
+        {
+            ev.Summary = lastVersion.Summary;
+            ev.Description = lastVersion.Description;
+            ev.StartDatetime = lastVersion.StartDatetime;
+            ev.EndDatetime = lastVersion.EndDatetime;
+            ev.IsAllDay = lastVersion.IsAllDay;
+            ev.ColorId = lastVersion.ColorId;
+        }
+        ev.HasUnpublishedChanges = false;
+        ev.IsDeleted = false;
+        ev.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(ct);
+        return true;
     }
 
     public async Task<Event?> GetDayNameEventAsync(DateOnly date, CancellationToken ct = default)
@@ -174,6 +216,31 @@ public sealed class EventRepository : IEventRepository
         return date
             .ToDateTime(TimeOnly.MinValue, DateTimeKind.Local)
             .ToUniversalTime();
+    }
+
+    private static DeletedEvent CreateDeletedEventSnapshot(Event existingEvent, DateTime deletedAt, string deletionSource)
+    {
+        return new DeletedEvent
+        {
+            EventId = existingEvent.EventId,
+            GcalEventId = existingEvent.GcalEventId ?? existingEvent.EventId,
+            CalendarId = existingEvent.CalendarId,
+            Summary = existingEvent.Summary,
+            Description = existingEvent.Description,
+            StartDatetime = existingEvent.StartDatetime,
+            EndDatetime = existingEvent.EndDatetime,
+            IsAllDay = existingEvent.IsAllDay,
+            ColorId = existingEvent.ColorId,
+            GcalEtag = existingEvent.GcalEtag,
+            RecurringEventId = existingEvent.RecurringEventId,
+            IsRecurringInstance = existingEvent.IsRecurringInstance,
+            AppCreated = existingEvent.SourceSystem == "manual" || existingEvent.Publish == "local_only",
+            SourceSystem = existingEvent.SourceSystem,
+            DeletedAt = deletedAt,
+            DeletionSource = deletionSource,
+            OriginalCreatedAt = existingEvent.CreatedAt,
+            OriginalUpdatedAt = existingEvent.UpdatedAt
+        };
     }
 
     private static DateOnly GetInclusiveEndDate(DateTime startUtc, DateTime? endUtc, bool? isAllDay)

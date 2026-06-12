@@ -2,6 +2,7 @@ namespace GoogleCalendarManagement.Data.Entities;
 
 public class DeletedEvent
 {
+    public string? EventId { get; set; }
     public string GcalEventId { get; set; } = "";
     public string CalendarId { get; set; } = "primary";
     public string? Summary { get; set; }

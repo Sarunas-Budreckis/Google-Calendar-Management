@@ -24,7 +24,7 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
     private readonly ISyncStatusService _syncStatusService;
     private readonly ISyncManager _syncManager;
     private readonly IContentDialogService _dialogService;
-    private readonly IPendingEventPublishService _pendingEventPublishService;
+    private readonly IEventPublishService _eventPublishService;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly ICalendarDaySelectionService? _calendarDaySelectionService;
     private readonly IIcsExportService _icsExportService;
@@ -71,7 +71,7 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
         ISyncStatusService syncStatusService,
         ISyncManager syncManager,
         IContentDialogService dialogService,
-        IPendingEventPublishService pendingEventPublishService,
+        IEventPublishService eventPublishService,
         ICalendarSelectionService calendarSelectionService,
         IIcsExportService icsExportService,
         IIcsImportService icsImportService,
@@ -85,7 +85,7 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
         _syncStatusService = syncStatusService;
         _syncManager = syncManager;
         _dialogService = dialogService;
-        _pendingEventPublishService = pendingEventPublishService;
+        _eventPublishService = eventPublishService;
         _calendarSelectionService = calendarSelectionService;
         _calendarDaySelectionService = calendarDaySelectionService;
         _icsExportService = icsExportService;
@@ -549,7 +549,7 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
                 OnPropertyChanged(nameof(PublishProgressText));
             });
 
-            var result = await _pendingEventPublishService.PublishAsync(
+            var result = await _eventPublishService.PublishAsync(
                 [matchingItem.PendingEventId],
                 progress,
                 CancellationToken.None);
@@ -628,7 +628,7 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
                 _calendarSelectionService.ClearSelection();
             }
 
-            await _pendingEventPublishService.RevertAsync(item.PendingEventId);
+            await _eventPublishService.RevertAsync(item.PendingEventId);
         }
         catch (Exception ex)
         {
@@ -642,7 +642,7 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
 
         try
         {
-            await _pendingEventPublishService.UpdateColorAsync(item.PendingEventId, colorKey);
+            await _eventPublishService.UpdateColorAsync(item.PendingEventId, colorKey);
         }
         catch (Exception ex)
         {
@@ -664,7 +664,7 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
                 existingItem.PropertyChanged -= PendingPublishItem_PropertyChanged;
             }
 
-            var pendingItems = await _pendingEventPublishService.GetPendingItemsAsync(ct);
+            var pendingItems = await _eventPublishService.GetPendingItemsAsync(ct);
             _pendingPublishItems.Clear();
 
             foreach (var item in pendingItems)
@@ -789,7 +789,7 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
                 OnPropertyChanged(nameof(PublishProgressText));
             });
 
-            var result = await _pendingEventPublishService.PublishAsync(
+            var result = await _eventPublishService.PublishAsync(
                 selectedItems.Select(item => item.PendingEventId).ToList(),
                 progress,
                 CancellationToken.None);

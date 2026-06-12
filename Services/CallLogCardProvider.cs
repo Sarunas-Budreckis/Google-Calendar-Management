@@ -1,6 +1,4 @@
 using System.Collections.Concurrent;
-using CommunityToolkit.Mvvm.Messaging;
-using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,8 +11,6 @@ public sealed class CallLogCardProvider : IDataSourceCardProvider, IDataSourceCa
     private readonly IServiceProvider _serviceProvider;
     private readonly ICallLogRepository _repository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
-    private readonly IPendingEventRepository _pendingEventRepository;
-    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly ConcurrentDictionary<DateOnly, bool> _hasDataByDate = [];
 
@@ -22,15 +18,11 @@ public sealed class CallLogCardProvider : IDataSourceCardProvider, IDataSourceCa
         IServiceProvider serviceProvider,
         ICallLogRepository repository,
         IPendingEventDraftService pendingEventDraftService,
-        IPendingEventRepository pendingEventRepository,
-        ICalendarSelectionService calendarSelectionService,
-        IEventRepository? eventRepository = null)
+        ICalendarSelectionService calendarSelectionService)
     {
         _serviceProvider = serviceProvider;
         _repository = repository;
         _pendingEventDraftService = pendingEventDraftService;
-        _pendingEventRepository = pendingEventRepository;
-        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
     }
 
@@ -88,22 +80,19 @@ public sealed class CallLogCardProvider : IDataSourceCardProvider, IDataSourceCa
         {
             var startLocal = DateTime.SpecifyKind(entry.Date, DateTimeKind.Local);
             var endLocal = startLocal.AddSeconds(entry.DurationSeconds);
-            var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal, BuildTitle(entry), ct);
-            draft.Summary = BuildTitle(entry);
-            draft.IsAllDay = false;
-            draft.SourceSystem = "call_log";
-            draft.ColorId = "azure";
-            if (_eventRepository is not null)
-            {
-                await _eventRepository.UpsertAsync(draft, ct);
-            }
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
-            lastPendingEventId = draft.EventId;
+            var candidate = await _pendingEventDraftService.CreateCandidateAsync(
+                startLocal,
+                endLocal,
+                BuildTitle(entry),
+                sourceSystem: "call_log",
+                colorId: "azure",
+                ct: ct);
+            lastPendingEventId = candidate.EventId;
         }
 
         if (lastPendingEventId is not null)
         {
-            _calendarSelectionService.Select(lastPendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+            _calendarSelectionService.Select(lastPendingEventId, CalendarEventSourceKind.Candidate, openInEditMode: true);
         }
     }
 

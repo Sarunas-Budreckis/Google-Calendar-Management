@@ -1,9 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using GoogleCalendarManagement.Data.Entities;
-using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using Microsoft.UI.Xaml;
@@ -15,8 +13,6 @@ public sealed class Civ5DrilldownViewModel : ObservableObject
     private readonly ICiv5SessionRepository _repository;
     private readonly ICiv5SaveScannerService _scannerService;
     private readonly IPendingEventDraftService _pendingEventDraftService;
-    private readonly IPendingEventRepository _pendingEventRepository;
-    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly List<Civ5SessionPoint> _points = [];
     private DateOnly _currentDate;
@@ -28,15 +24,11 @@ public sealed class Civ5DrilldownViewModel : ObservableObject
         ICiv5SessionRepository repository,
         ICiv5SaveScannerService scannerService,
         IPendingEventDraftService pendingEventDraftService,
-        IPendingEventRepository pendingEventRepository,
-        ICalendarSelectionService calendarSelectionService,
-        IEventRepository? eventRepository = null)
+        ICalendarSelectionService calendarSelectionService)
     {
         _repository = repository;
         _scannerService = scannerService;
         _pendingEventDraftService = pendingEventDraftService;
-        _pendingEventRepository = pendingEventRepository;
-        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
 
         ScanSavesCommand = new AsyncRelayCommand(ScanSavesAsync, () => !IsScanning);
@@ -154,22 +146,18 @@ public sealed class Civ5DrilldownViewModel : ObservableObject
             }
 
             var title = Civ5SessionCoalescer.GetEventTitle(window);
-            var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal, title);
-            draft.Summary = title;
-            draft.IsAllDay = false;
-            draft.SourceSystem = "civ5";
-            draft.ColorId = "yellow";
-            if (_eventRepository is not null)
-            {
-                await _eventRepository.UpsertAsync(draft);
-            }
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
-            firstDraftId ??= draft.EventId;
+            var candidate = await _pendingEventDraftService.CreateCandidateAsync(
+                startLocal,
+                endLocal,
+                title,
+                sourceSystem: "civ5",
+                colorId: "yellow");
+            firstDraftId ??= candidate.EventId;
         }
 
         if (firstDraftId is not null)
         {
-            _calendarSelectionService.Select(firstDraftId, CalendarEventSourceKind.Pending, openInEditMode: true);
+            _calendarSelectionService.Select(firstDraftId, CalendarEventSourceKind.Candidate, openInEditMode: true);
         }
     }
 

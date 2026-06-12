@@ -106,8 +106,8 @@ public sealed class EventRepositoryTests : IDisposable
             new DateOnly(2026, 04, 05),
             CancellationToken.None);
 
-        events.Select(e => e.EventId).Should().Contain("evt-overlap");
-        events.Select(e => e.EventId).Should().NotContain(["evt-outside", "evt-candidate", "evt-deleted"]);
+        events.Select(e => e.EventId).Should().Contain(["evt-overlap", "evt-candidate"]);
+        events.Select(e => e.EventId).Should().NotContain(["evt-outside", "evt-deleted"]);
     }
 
     [Fact]
@@ -120,6 +120,12 @@ public sealed class EventRepositoryTests : IDisposable
 
         var stored = await repository.GetByEventIdAsync("evt-delete", CancellationToken.None);
         stored.Should().BeNull();
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var tombstone = await context.DeletedEvents.SingleAsync();
+        tombstone.EventId.Should().Be("evt-delete");
+        tombstone.GcalEventId.Should().Be("gcal-delete");
+        tombstone.DeletionSource.Should().Be("user");
     }
 
     public void Dispose()

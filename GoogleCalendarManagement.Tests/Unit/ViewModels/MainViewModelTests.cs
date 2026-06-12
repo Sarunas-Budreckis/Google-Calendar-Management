@@ -654,7 +654,7 @@ public sealed class MainViewModelTests : IDisposable
         var queryService = new RecordingCalendarQueryService();
         var navigationStateService = new StubNavigationStateService(
             new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
-        var publishService = new StubPendingEventPublishService
+        var publishService = new StubEventPublishService
         {
             PendingItems =
             [
@@ -676,7 +676,7 @@ public sealed class MainViewModelTests : IDisposable
         var viewModel = CreateViewModel(
             queryService,
             navigationStateService,
-            pendingEventPublishService: publishService);
+            eventPublishService: publishService);
 
         await viewModel.InitializeAsync();
         await viewModel.LoadPendingPublishItemsAsync();
@@ -697,7 +697,7 @@ public sealed class MainViewModelTests : IDisposable
         var queryService = new RecordingCalendarQueryService();
         var navigationStateService = new StubNavigationStateService(
             new NavigationState(ViewMode.Month, new DateOnly(2026, 04, 05)));
-        var publishService = new StubPendingEventPublishService
+        var publishService = new StubEventPublishService
         {
             PendingItems =
             [
@@ -735,7 +735,7 @@ public sealed class MainViewModelTests : IDisposable
             queryService,
             navigationStateService,
             dialogService: dialogService.Object,
-            pendingEventPublishService: publishService);
+            eventPublishService: publishService);
 
         await viewModel.InitializeAsync();
         await viewModel.LoadPendingPublishItemsAsync();
@@ -760,7 +760,7 @@ public sealed class MainViewModelTests : IDisposable
         StubSyncStatusService? syncStatusService = null,
         ISyncManager? syncManager = null,
         IContentDialogService? dialogService = null,
-        IPendingEventPublishService? pendingEventPublishService = null,
+        IEventPublishService? eventPublishService = null,
         ICalendarSelectionService? calendarSelectionService = null,
         ICalendarDaySelectionService? calendarDaySelectionService = null,
         IIcsExportService? exportService = null,
@@ -774,7 +774,7 @@ public sealed class MainViewModelTests : IDisposable
             syncStatusService ?? new StubSyncStatusService(),
             syncManager ?? Mock.Of<ISyncManager>(),
             dialogService ?? Mock.Of<IContentDialogService>(),
-            pendingEventPublishService ?? Mock.Of<IPendingEventPublishService>(),
+            eventPublishService ?? Mock.Of<IEventPublishService>(),
             calendarSelectionService ?? Mock.Of<ICalendarSelectionService>(),
             exportService ?? Mock.Of<IIcsExportService>(),
             importService ?? Mock.Of<IIcsImportService>(),
@@ -911,7 +911,7 @@ public sealed class MainViewModelTests : IDisposable
         }
     }
 
-    private sealed class StubPendingEventPublishService : IPendingEventPublishService
+    private sealed class StubEventPublishService : IEventPublishService
     {
         public IReadOnlyList<PendingPublishListItem> PendingItems { get; set; } = [];
 

@@ -16,7 +16,6 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
     private readonly ITogglSleepRepository _repository;
     private readonly ITogglSleepQualityRepository _qualityRepository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
-    private readonly IPendingEventRepository _pendingEventRepository;
     private readonly IEventRepository _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly List<TogglEntry> _entries = [];
@@ -28,14 +27,12 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
         ITogglSleepRepository repository,
         ITogglSleepQualityRepository qualityRepository,
         IPendingEventDraftService pendingEventDraftService,
-        IPendingEventRepository pendingEventRepository,
         ICalendarSelectionService calendarSelectionService,
         IEventRepository eventRepository)
     {
         _repository = repository;
         _qualityRepository = qualityRepository;
         _pendingEventDraftService = pendingEventDraftService;
-        _pendingEventRepository = pendingEventRepository;
         _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
         CreateCandidateEventCommand = new AsyncRelayCommand(CreateCandidateEventAsync, () => HasEntries);
@@ -106,13 +103,12 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
 
     private async Task UpdateSleepEventTitleAsync(int? quality, CancellationToken ct)
     {
-        var pendingEvent = await _pendingEventRepository.GetSleepEventForDateAsync(_currentDate, ct);
-        if (pendingEvent is not null)
+        var sleepEvent = await _eventRepository.GetSleepEventForDateAsync(_currentDate, ct);
+        if (sleepEvent is not null)
         {
-            pendingEvent.Summary = BuildSleepTitle(pendingEvent.Summary, quality);
-            pendingEvent.UpdatedAt = DateTime.UtcNow;
-            await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(pendingEvent.PendingEventId));
+            MarkEventTitleChanged(sleepEvent, quality);
+            await _eventRepository.UpsertAsync(sleepEvent, ct);
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(sleepEvent.EventId));
             return;
         }
 
@@ -126,43 +122,26 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
             return;
         }
 
-        var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(linkedGcalEventId, ct);
-        if (gcalEvent is null)
+        var linkedEvent = await _eventRepository.GetByGcalEventIdAsync(linkedGcalEventId, ct);
+        if (linkedEvent is null)
         {
             return;
         }
 
-        var linkedPending = await _pendingEventRepository.GetByGcalEventIdAsync(linkedGcalEventId, ct);
-        var utcNow = DateTime.UtcNow;
+        MarkEventTitleChanged(linkedEvent, quality);
+        await _eventRepository.UpsertAsync(linkedEvent, ct);
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(linkedEvent.EventId));
+    }
 
-        if (linkedPending is null)
+    private static void MarkEventTitleChanged(Event ev, int? quality)
+    {
+        ev.Summary = BuildSleepTitle(ev.Summary, quality);
+        if (ev.Publish == "published")
         {
-            linkedPending = new PendingEvent
-            {
-                PendingEventId = $"pending_{Guid.NewGuid():N}",
-                GcalEventId = linkedGcalEventId,
-                CalendarId = gcalEvent.CalendarId,
-                Summary = BuildSleepTitle(gcalEvent.Summary, quality),
-                Description = gcalEvent.Description,
-                StartDatetime = gcalEvent.StartDatetime,
-                EndDatetime = gcalEvent.EndDatetime,
-                IsAllDay = gcalEvent.IsAllDay,
-                ColorId = gcalEvent.ColorId,
-                AppCreated = false,
-                SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
-                ReadyToPublish = false,
-                CreatedAt = utcNow,
-                UpdatedAt = utcNow
-            };
-        }
-        else
-        {
-            linkedPending.Summary = BuildSleepTitle(linkedPending.Summary, quality);
-            linkedPending.UpdatedAt = utcNow;
+            ev.HasUnpublishedChanges = true;
         }
 
-        await _pendingEventRepository.UpsertAsync(linkedPending, ct);
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(linkedPending.PendingEventId));
+        ev.UpdatedAt = DateTime.UtcNow;
     }
 
     private async Task CreateCandidateEventAsync()
@@ -181,14 +160,13 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
             endLocal = startLocal.AddMinutes(15);
         }
 
-        var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal, "Sleep");
-        draft.Summary = BuildSleepTitle(_quality);
-        draft.IsAllDay = false;
-        draft.SourceSystem = "toggl";
-        draft.ColorId = "grey";
-        await _eventRepository.UpsertAsync(draft);
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
-        _calendarSelectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        var candidate = await _pendingEventDraftService.CreateCandidateAsync(
+            startLocal,
+            endLocal,
+            BuildSleepTitle(_quality),
+            sourceSystem: "toggl",
+            colorId: "grey");
+        _calendarSelectionService.Select(candidate.EventId, CalendarEventSourceKind.Candidate, openInEditMode: true);
     }
 
     private async Task AddEntryAsync(TogglEntry entry)
@@ -202,14 +180,13 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
             endLocal = startLocal.AddMinutes(15);
         }
 
-        var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal, "Sleep");
-        draft.Summary = BuildSleepTitle(_quality);
-        draft.IsAllDay = false;
-        draft.SourceSystem = "toggl";
-        draft.ColorId = "grey";
-        await _eventRepository.UpsertAsync(draft);
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
-        _calendarSelectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        var candidate = await _pendingEventDraftService.CreateCandidateAsync(
+            startLocal,
+            endLocal,
+            BuildSleepTitle(_quality),
+            sourceSystem: "toggl",
+            colorId: "grey");
+        _calendarSelectionService.Select(candidate.EventId, CalendarEventSourceKind.Candidate, openInEditMode: true);
     }
 
     private static string BuildSleepTitle(string? currentTitle, int? quality)

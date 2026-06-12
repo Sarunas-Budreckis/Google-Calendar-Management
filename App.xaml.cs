@@ -267,7 +267,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton(TimeProvider.System);
             services.AddSingleton<IEventRepository, EventRepository>();
             services.AddSingleton<IEventIdentityService, EventIdentityService>();
-            services.AddSingleton<IPendingEventRepository, PendingEventRepository>();
+            services.AddSingleton<ISourcePointerResolverRegistry, SourcePointerResolverRegistry>();
             services.AddSingleton<IConfigRepository, ConfigRepository>();
             services.AddSingleton<IDataSourceRepository, DataSourceRepository>();
             services.AddSingleton<DataSourceImportHandlerRegistry>();
@@ -276,7 +276,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ITogglSleepQualityRepository, TogglSleepQualityRepository>();
             services.AddSingleton<TogglSleepCardProvider>();
             services.AddSingleton<IPendingEventDraftService, PendingEventDraftService>();
-            services.AddSingleton<IPendingEventPublishService, PendingEventPublishService>();
+            services.AddSingleton<IEventPublishService, EventPublishService>();
             services.AddSingleton<ISystemStateRepository, SystemStateRepository>();
             services.AddSingleton<IColorMappingService, ColorMappingService>();
             services.AddSingleton<ICalendarQueryService, CalendarQueryService>();

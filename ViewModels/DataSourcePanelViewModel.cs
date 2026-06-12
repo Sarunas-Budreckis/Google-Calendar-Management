@@ -35,7 +35,6 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IEventRepository _eventRepository;
-    private readonly IPendingEventRepository _pendingEventRepository;
     private readonly ICalendarViewRangeProvider _viewRangeProvider;
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _isMinimized;
@@ -59,7 +58,6 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         DataSourceCardProviderRegistry cardProviderRegistry,
         ICalendarSelectionService calendarSelectionService,
         IPendingEventDraftService pendingEventDraftService,
-        IPendingEventRepository pendingEventRepository,
         ICalendarViewRangeProvider viewRangeProvider,
         IEventRepository eventRepository)
     {
@@ -71,7 +69,6 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         _cardProviderRegistry = cardProviderRegistry;
         _calendarSelectionService = calendarSelectionService;
         _pendingEventDraftService = pendingEventDraftService;
-        _pendingEventRepository = pendingEventRepository;
         _eventRepository = eventRepository;
         _viewRangeProvider = viewRangeProvider;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
@@ -744,24 +741,26 @@ public sealed class DataSourcePanelViewModel : ObservableObject
 
     private async Task<DayNameEventReference?> GetDayNameEventAsync(DateOnly date, CancellationToken ct)
     {
-        var pendingEvent = await _pendingEventRepository.GetDayNameEventAsync(date, ct);
-        if (pendingEvent is not null)
-        {
-            return new DayNameEventReference(
-                pendingEvent.PendingEventId,
-                CalendarEventSourceKind.Pending,
-                pendingEvent.Summary);
-        }
-
-        var rangeEvents = await _eventRepository.GetByDateRangeAsync(date, date, ct);
-        var dayNameEvent = rangeEvents
-            .Where(e => e.IsAllDay == true && string.Equals(e.SourceSystem, "day_name", StringComparison.Ordinal))
-            .OrderByDescending(e => e.UpdatedAt)
-            .FirstOrDefault();
+        var dayNameEvent = await _eventRepository.GetDayNameEventAsync(date, ct);
 
         return dayNameEvent is null
             ? null
-            : new DayNameEventReference(dayNameEvent.GcalEventId ?? dayNameEvent.EventId, CalendarEventSourceKind.Google, dayNameEvent.Summary);
+            : new DayNameEventReference(
+                dayNameEvent.EventId,
+                GetSourceKind(dayNameEvent),
+                dayNameEvent.Summary);
+    }
+
+    private static CalendarEventSourceKind GetSourceKind(Event ev)
+    {
+        if (ev.Lifecycle == "candidate")
+        {
+            return CalendarEventSourceKind.Candidate;
+        }
+
+        return ev.Publish == "local_only" || ev.HasUnpublishedChanges
+            ? CalendarEventSourceKind.Pending
+            : CalendarEventSourceKind.Google;
     }
 
     private sealed record DayNameEventReference(string EventId, CalendarEventSourceKind SourceKind, string? Summary);

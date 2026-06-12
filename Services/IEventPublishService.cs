@@ -1,6 +1,6 @@
 namespace GoogleCalendarManagement.Services;
 
-public interface IPendingEventPublishService
+public interface IEventPublishService
 {
     Task<IReadOnlyList<PendingPublishListItem>> GetPendingItemsAsync(CancellationToken ct = default);
 

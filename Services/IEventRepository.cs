@@ -16,6 +16,10 @@ public interface IEventRepository
 
     Task DeleteByEventIdAsync(string eventId, CancellationToken ct = default);
 
+    Task UpdateLifecycleAsync(string eventId, string lifecycle, CancellationToken ct = default);
+
+    Task<bool> RevertToLastSyncedAsync(string eventId, CancellationToken ct = default);
+
     Task<Event?> GetDayNameEventAsync(DateOnly date, CancellationToken ct = default);
 
     Task<Event?> GetSleepEventForDateAsync(DateOnly date, CancellationToken ct = default);

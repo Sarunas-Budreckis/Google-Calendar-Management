@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
-using CommunityToolkit.Mvvm.Messaging;
 using GoogleCalendarManagement.Data.Entities;
-using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,8 +12,6 @@ public sealed class TogglTransitCardProvider : IDataSourceCardProvider, IDataSou
     private readonly IServiceProvider _serviceProvider;
     private readonly ITogglTransitRepository _repository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
-    private readonly IPendingEventRepository _pendingEventRepository;
-    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly EightFifteenRuleService _eightFifteenRule;
     private readonly ConcurrentDictionary<DateOnly, bool> _hasDataByDate = [];
@@ -24,16 +20,12 @@ public sealed class TogglTransitCardProvider : IDataSourceCardProvider, IDataSou
         IServiceProvider serviceProvider,
         ITogglTransitRepository repository,
         IPendingEventDraftService pendingEventDraftService,
-        IPendingEventRepository pendingEventRepository,
         ICalendarSelectionService calendarSelectionService,
-        EightFifteenRuleService eightFifteenRule,
-        IEventRepository? eventRepository = null)
+        EightFifteenRuleService eightFifteenRule)
     {
         _serviceProvider = serviceProvider;
         _repository = repository;
         _pendingEventDraftService = pendingEventDraftService;
-        _pendingEventRepository = pendingEventRepository;
-        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
         _eightFifteenRule = eightFifteenRule;
     }
@@ -98,17 +90,14 @@ public sealed class TogglTransitCardProvider : IDataSourceCardProvider, IDataSou
             var blocks = _eightFifteenRule.ApplyRule(startLocal, endLocal);
             foreach (var (blockStart, blockEnd) in blocks)
             {
-                var draft = await _pendingEventDraftService.CreateDraftAsync(blockStart, blockEnd, "Driving", ct);
-                draft.Summary = "Driving";
-                draft.IsAllDay = false;
-                draft.SourceSystem = "toggl";
-                draft.ColorId = "lavender";
-                if (_eventRepository is not null)
-                {
-                    await _eventRepository.UpsertAsync(draft, ct);
-                }
-                WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
-                createdEvents.Add(draft);
+                var candidate = await _pendingEventDraftService.CreateCandidateAsync(
+                    blockStart,
+                    blockEnd,
+                    "Driving",
+                    sourceSystem: "toggl",
+                    colorId: "lavender",
+                    ct: ct);
+                createdEvents.Add(candidate);
             }
         }
 
@@ -118,7 +107,7 @@ public sealed class TogglTransitCardProvider : IDataSourceCardProvider, IDataSou
         }
 
         var selectId = createdEvents[0].EventId;
-        _calendarSelectionService.Select(selectId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        _calendarSelectionService.Select(selectId, CalendarEventSourceKind.Candidate, openInEditMode: true);
     }
 
     private static DateTime NormalizeUtc(DateTime value) =>

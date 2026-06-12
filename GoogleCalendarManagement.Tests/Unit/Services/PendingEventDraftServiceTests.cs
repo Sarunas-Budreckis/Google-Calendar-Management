@@ -39,6 +39,40 @@ public sealed class PendingEventDraftServiceTests
         storedDraft!.Summary.Should().BeNull();
     }
 
+    [Fact]
+    public async Task CreateCandidateAsync_StoresCandidateEventWithSourceAndColor()
+    {
+        var repositoryMock = new Mock<IEventRepository>();
+        var identityMock = new Mock<IEventIdentityService>();
+        Event? storedCandidate = null;
+        identityMock
+            .Setup(service => service.MintEventId())
+            .Returns("candidate_1");
+        repositoryMock
+            .Setup(repository => repository.UpsertAsync(It.IsAny<Event>(), It.IsAny<CancellationToken>()))
+            .Callback<Event, CancellationToken>((ev, _) => storedCandidate = ev)
+            .Returns(Task.CompletedTask);
+        var service = new PendingEventDraftService(
+            repositoryMock.Object,
+            identityMock.Object,
+            new FixedTimeProvider(new DateTimeOffset(new DateTime(2026, 5, 13, 12, 0, 0, DateTimeKind.Utc))));
+
+        var candidate = await service.CreateCandidateAsync(
+            new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Local),
+            new DateTime(2026, 5, 13, 10, 0, 0, DateTimeKind.Local),
+            "Sleep",
+            sourceSystem: "toggl",
+            colorId: "grey");
+
+        candidate.EventId.Should().Be("candidate_1");
+        candidate.Lifecycle.Should().Be("candidate");
+        candidate.Publish.Should().Be("local_only");
+        candidate.SourceSystem.Should().Be("toggl");
+        candidate.ColorId.Should().Be("grey");
+        storedCandidate.Should().NotBeNull();
+        storedCandidate!.Lifecycle.Should().Be("candidate");
+    }
+
     private sealed class FixedTimeProvider : TimeProvider
     {
         private readonly DateTimeOffset _utcNow;

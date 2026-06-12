@@ -20,6 +20,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private const string PendingSourceDisplay = "Local changes, pending push to GCal";
     private const string PendingDeleteSourceDisplay = "Pending delete — will be removed from Google Calendar when pushed";
     private const string DraftSourceDisplay = "Not yet published to Google Calendar";
+    private const string CandidateSourceDisplay = "Candidate event — approve to add to calendar";
     private const string NoDescriptionPlaceholder = "No description provided.";
     private const string UndoFieldEditTitle = nameof(EditTitle);
     private const string UndoFieldEditSingleDate = nameof(EditSingleDate);
@@ -35,7 +36,6 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private readonly ICalendarSelectionService _selectionService;
     private readonly IColorMappingService _colorMappingService;
     private readonly IEventRepository _eventRepository;
-    private readonly IPendingEventRepository _pendingEventRepository;
     private readonly IContentDialogService? _contentDialogService;
     private readonly DispatcherQueue? _dispatcherQueue;
     private readonly TimeProvider _timeProvider;
@@ -81,7 +81,6 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         ICalendarSelectionService selectionService,
         IColorMappingService colorMappingService,
         IEventRepository eventRepository,
-        IPendingEventRepository pendingEventRepository,
         TimeProvider? timeProvider = null,
         IContentDialogService? contentDialogService = null)
     {
@@ -89,7 +88,6 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         _selectionService = selectionService;
         _colorMappingService = colorMappingService;
         _eventRepository = eventRepository;
-        _pendingEventRepository = pendingEventRepository;
         _contentDialogService = contentDialogService;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -101,6 +99,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         RevertPendingChangesCommand = new AsyncRelayCommand(RevertPendingChangesAsync);
         SelectColorCommand = new AsyncRelayCommand<string?>(SelectColorAsync);
         DeleteCommand = new AsyncRelayCommand(DeleteEventAsync);
+        ApproveCommand = new AsyncRelayCommand(ApproveAsync, CanApprove);
 
         WeakReferenceMessenger.Default.Register<EventDetailsPanelViewModel, EventSelectedMessage>(
             this,
@@ -205,6 +204,9 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     public Visibility RevertButtonVisibility =>
         IsPendingEvent ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ApproveButtonVisibility =>
+        _currentSourceKind == CalendarEventSourceKind.Candidate ? Visibility.Visible : Visibility.Collapsed;
 
     public bool IsEditMode
     {
@@ -367,6 +369,39 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     public IAsyncRelayCommand DeleteCommand { get; }
 
+    public IAsyncRelayCommand ApproveCommand { get; }
+
+    private bool CanApprove() => _currentSourceKind == CalendarEventSourceKind.Candidate && _currentEventId is not null;
+
+    public async Task ApproveAsync(CancellationToken ct = default)
+    {
+        if (_currentEventId is null || _currentSourceKind != CalendarEventSourceKind.Candidate)
+        {
+            return;
+        }
+
+        if (IsEditMode && _hasPendingLocalChanges)
+        {
+            await SaveNowAsync(keepEditMode: false, ct);
+        }
+
+        var capturedEventId = _currentEventId;
+        await _eventRepository.UpdateLifecycleAsync(capturedEventId, "approved", ct);
+        var refreshedEvent = await _queryService.GetEventByIdAsync(capturedEventId, ct);
+        if (refreshedEvent is not null)
+        {
+            RunOnUiThread(() =>
+            {
+                ApplyEventDetails(refreshedEvent, capturedEventId, keepEditMode: false);
+                WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(capturedEventId));
+            });
+        }
+        else
+        {
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(capturedEventId));
+        }
+    }
+
     public void EnterEditMode()
     {
         if (!IsPanelVisible || _currentEvent is null)
@@ -506,74 +541,23 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         try
         {
+            var ev = await _eventRepository.GetByEventIdAsync(_currentEventId, ct);
+            if (ev is null)
+            {
+                SaveStatusText = string.Empty;
+                return false;
+            }
+
             var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-            PendingEvent? pendingEvent;
-
-            if (_currentSourceKind == CalendarEventSourceKind.Pending)
-            {
-                pendingEvent = await _pendingEventRepository.GetByPendingEventIdAsync(_currentEventId, ct);
-                if (pendingEvent is null)
-                {
-                    SaveStatusText = string.Empty;
-                    return false;
-                }
-
-                var (draftStartUtc, draftEndUtc, _, _) = BuildEditDateTimes();
-                pendingEvent.Summary = EditTitle.Trim();
-                pendingEvent.Description = NormalizeDescription(EditDescription);
-                pendingEvent.StartDatetime = draftStartUtc;
-                pendingEvent.EndDatetime = draftEndUtc;
-                pendingEvent.ColorId = EditColorId;
-                pendingEvent.ReadyToPublish = pendingEvent.ReadyToPublish || markReadyToPublish;
-                pendingEvent.UpdatedAt = utcNow;
-                await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
-            }
-            else
-            {
-                var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
-                if (gcalEvent is null)
-                {
-                    SaveStatusText = string.Empty;
-                    return false;
-                }
-
-                pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
-                var (startUtc, endUtc, _, _) = BuildEditDateTimes();
-
-                if (pendingEvent is null)
-                {
-                    pendingEvent = new PendingEvent
-                    {
-                        PendingEventId = $"pending_{Guid.NewGuid():N}",
-                        GcalEventId = _currentEventId,
-                        CalendarId = gcalEvent.CalendarId,
-                        Summary = EditTitle.Trim(),
-                        Description = NormalizeDescription(EditDescription),
-                        StartDatetime = startUtc,
-                        EndDatetime = endUtc,
-                        IsAllDay = gcalEvent.IsAllDay,
-                        ColorId = EditColorId,
-                        AppCreated = false,
-                        SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
-                        ReadyToPublish = markReadyToPublish,
-                        CreatedAt = utcNow,
-                        UpdatedAt = utcNow
-                    };
-                }
-                else
-                {
-                    pendingEvent.Summary = EditTitle.Trim();
-                    pendingEvent.Description = NormalizeDescription(EditDescription);
-                    pendingEvent.StartDatetime = startUtc;
-                    pendingEvent.EndDatetime = endUtc;
-                    pendingEvent.IsAllDay = gcalEvent.IsAllDay;
-                    pendingEvent.ColorId = EditColorId;
-                    pendingEvent.ReadyToPublish = pendingEvent.ReadyToPublish || markReadyToPublish;
-                    pendingEvent.UpdatedAt = utcNow;
-                }
-
-                await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
-            }
+            var (startUtc, endUtc, _, _) = BuildEditDateTimes();
+            ev.Summary = EditTitle.Trim();
+            ev.Description = NormalizeDescription(EditDescription);
+            ev.StartDatetime = startUtc;
+            ev.EndDatetime = endUtc;
+            ev.ColorId = EditColorId;
+            ev.HasUnpublishedChanges = ev.Publish == "published" || ev.HasUnpublishedChanges;
+            ev.UpdatedAt = utcNow;
+            await _eventRepository.UpsertAsync(ev, ct);
 
             var refreshedEvent = await _queryService.GetEventByIdAsync(_currentEventId, ct);
             if (refreshedEvent is not null)
@@ -720,62 +704,16 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             return;
         }
 
-        var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-        switch (sourceKind)
+        var ev = await _eventRepository.GetByEventIdAsync(eventId, ct);
+        if (ev is null)
         {
-            case CalendarEventSourceKind.Pending:
-            {
-                var pendingDraft = await _pendingEventRepository.GetByPendingEventIdAsync(eventId, ct);
-                if (pendingDraft is null)
-                {
-                    return;
-                }
-
-                pendingDraft.ColorId = normalizedColorKey;
-                pendingDraft.UpdatedAt = utcNow;
-                await _pendingEventRepository.UpsertAsync(pendingDraft, ct);
-                break;
-            }
-
-            case CalendarEventSourceKind.Google:
-            {
-                var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(eventId, ct);
-                if (gcalEvent is null)
-                {
-                    return;
-                }
-
-                var pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(eventId, ct);
-                if (pendingEvent is null)
-                {
-                    pendingEvent = new PendingEvent
-                    {
-                        PendingEventId = $"pending_{Guid.NewGuid():N}",
-                        GcalEventId = eventId,
-                        CalendarId = gcalEvent.CalendarId,
-                        Summary = currentDisplayEvent.Title,
-                        Description = NormalizeDescription(currentDisplayEvent.Description),
-                        StartDatetime = currentDisplayEvent.StartUtc,
-                        EndDatetime = currentDisplayEvent.EndUtc,
-                        IsAllDay = currentDisplayEvent.IsAllDay,
-                        ColorId = normalizedColorKey,
-                        AppCreated = false,
-                        SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
-                        ReadyToPublish = false,
-                        CreatedAt = utcNow,
-                        UpdatedAt = utcNow
-                    };
-                }
-                else
-                {
-                    pendingEvent.ColorId = normalizedColorKey;
-                    pendingEvent.UpdatedAt = utcNow;
-                }
-
-                await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
-                break;
-            }
+            return;
         }
+
+        ev.ColorId = normalizedColorKey;
+        ev.HasUnpublishedChanges = ev.Publish == "published" || ev.HasUnpublishedChanges;
+        ev.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
+        await _eventRepository.UpsertAsync(ev, ct);
 
         if (string.Equals(_currentEventId, eventId, StringComparison.Ordinal))
         {
@@ -819,21 +757,20 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         switch (sourceKind)
         {
+            case CalendarEventSourceKind.Candidate:
             case CalendarEventSourceKind.Pending:
-                await _pendingEventRepository.DeleteByPendingEventIdAsync(eventId, ct);
+                await _eventRepository.DeleteByEventIdAsync(eventId, ct);
                 break;
 
             case CalendarEventSourceKind.Google:
             {
-                var currentDisplayEvent = isCurrentEvent
-                    ? _currentEvent
-                    : await _queryService.GetEventByIdAsync(eventId, ct);
-                if (currentDisplayEvent is null || !currentDisplayEvent.IsPending)
+                var ev = await _eventRepository.GetByEventIdAsync(eventId, ct);
+                if (ev is null || (!ev.HasUnpublishedChanges && !ev.IsDeleted))
                 {
                     return;
                 }
 
-                await _pendingEventRepository.DeleteByGcalEventIdAsync(eventId, ct);
+                await _eventRepository.RevertToLastSyncedAsync(eventId, ct);
                 break;
             }
 
@@ -843,7 +780,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         if (isCurrentEvent)
         {
-            if (sourceKind == CalendarEventSourceKind.Pending)
+            if (sourceKind is CalendarEventSourceKind.Pending or CalendarEventSourceKind.Candidate)
             {
                 RunOnUiThread(HidePanel);
             }
@@ -942,79 +879,28 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         var endUtc = endLocalWithKind.ToUniversalTime();
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
 
-        PendingEvent? previousPendingEvent;
-        PendingEvent pendingEvent;
-        switch (sourceKind)
+        var ev = await _eventRepository.GetByEventIdAsync(eventId, ct);
+        if (ev is null || ev.IsAllDay == true)
         {
-            case CalendarEventSourceKind.Pending:
-                previousPendingEvent = await _pendingEventRepository.GetByPendingEventIdAsync(eventId, ct);
-                if (previousPendingEvent is null)
-                {
-                    return false;
-                }
-
-                pendingEvent = ClonePendingEvent(previousPendingEvent);
-                pendingEvent.StartDatetime = startUtc;
-                pendingEvent.EndDatetime = endUtc;
-                pendingEvent.IsAllDay = false;
-                pendingEvent.OperationType = "edit";
-                pendingEvent.UpdatedAt = utcNow;
-                break;
-
-            case CalendarEventSourceKind.Google:
-            {
-                var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(eventId, ct);
-                if (gcalEvent is null || gcalEvent.IsAllDay == true)
-                {
-                    return false;
-                }
-
-                previousPendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(eventId, ct);
-                if (previousPendingEvent?.OperationType == "delete")
-                {
-                    return false;
-                }
-
-                pendingEvent = previousPendingEvent is null
-                    ? new PendingEvent
-                    {
-                        PendingEventId = $"pending_{Guid.NewGuid():N}",
-                        GcalEventId = eventId,
-                        CalendarId = gcalEvent.CalendarId,
-                        Summary = currentDisplayEvent.Title,
-                        Description = NormalizeDescription(currentDisplayEvent.Description),
-                        IsAllDay = false,
-                        ColorId = currentDisplayEvent.ColorKey,
-                        AppCreated = false,
-                        SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
-                        ReadyToPublish = false,
-                        OperationType = "edit",
-                        CreatedAt = utcNow
-                    }
-                    : ClonePendingEvent(previousPendingEvent);
-
-                pendingEvent.StartDatetime = startUtc;
-                pendingEvent.EndDatetime = endUtc;
-                pendingEvent.IsAllDay = false;
-                pendingEvent.OperationType = "edit";
-                pendingEvent.UpdatedAt = utcNow;
-                break;
-            }
-
-            default:
-                return false;
+            return false;
         }
 
         _dragRescheduleUndoState = new DragRescheduleUndoState(
             eventId,
             sourceKind,
-            previousPendingEvent is null ? null : ClonePendingEvent(previousPendingEvent));
+            ev.StartDatetime,
+            ev.EndDatetime);
 
         var previewEvent = BuildReschedulePreviewEvent(currentDisplayEvent, startLocalWithKind, endLocalWithKind, utcNow);
         ApplyCurrentEventAfterReschedule(eventId, sourceKind, previewEvent);
         WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(eventId, previewEvent));
 
-        await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
+        ev.StartDatetime = startUtc;
+        ev.EndDatetime = endUtc;
+        ev.IsAllDay = false;
+        ev.HasUnpublishedChanges = ev.Publish == "published" || ev.HasUnpublishedChanges;
+        ev.UpdatedAt = utcNow;
+        await _eventRepository.UpsertAsync(ev, ct);
         WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(eventId));
         return true;
     }
@@ -1029,32 +915,17 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         var undoState = _dragRescheduleUndoState;
         _dragRescheduleUndoState = null;
 
-        switch (undoState.SourceKind)
+        var ev = await _eventRepository.GetByEventIdAsync(undoState.EventId, ct);
+        if (ev is null)
         {
-            case CalendarEventSourceKind.Pending:
-                if (undoState.PreviousPendingEvent is null)
-                {
-                    return false;
-                }
-
-                await _pendingEventRepository.UpsertAsync(ClonePendingEvent(undoState.PreviousPendingEvent), ct);
-                break;
-
-            case CalendarEventSourceKind.Google:
-                if (undoState.PreviousPendingEvent is null)
-                {
-                    await _pendingEventRepository.DeleteByGcalEventIdAsync(undoState.EventId, ct);
-                }
-                else
-                {
-                    await _pendingEventRepository.UpsertAsync(ClonePendingEvent(undoState.PreviousPendingEvent), ct);
-                }
-
-                break;
-
-            default:
-                return false;
+            return false;
         }
+
+        ev.StartDatetime = undoState.PreviousStartDatetime;
+        ev.EndDatetime = undoState.PreviousEndDatetime;
+        ev.IsAllDay = false;
+        ev.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
+        await _eventRepository.UpsertAsync(ev, ct);
 
         if (IsCurrentEvent(undoState.EventId, undoState.SourceKind))
         {
@@ -1127,7 +998,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             {
                 _ = DeleteUneditedDraftAsync(previousUneditedDraftId);
             }
-            else if (_hasPendingLocalChanges && _currentSourceKind == CalendarEventSourceKind.Pending)
+            else if (_hasPendingLocalChanges && _currentSourceKind is CalendarEventSourceKind.Pending or CalendarEventSourceKind.Candidate)
             {
                 await SaveNowAsync(keepEditMode: false, ct);
             }
@@ -1138,7 +1009,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         if (!isSwitchingAwayFromUneditedDraft &&
             _hasPendingLocalChanges &&
-            _currentSourceKind == CalendarEventSourceKind.Pending)
+            _currentSourceKind is CalendarEventSourceKind.Pending or CalendarEventSourceKind.Candidate)
         {
             await SaveNowAsync(keepEditMode: false, ct);
         }
@@ -1178,7 +1049,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             if (!ct.IsCancellationRequested)
             {
                 ApplyEventDetails(loadedEvent, message.EventId!, keepEditMode: false);
-                if (message.OpenInEditMode && loadedEvent.SourceKind == CalendarEventSourceKind.Pending)
+                if (message.OpenInEditMode && loadedEvent.SourceKind is CalendarEventSourceKind.Pending or CalendarEventSourceKind.Candidate)
                 {
                     _isUneditedNewDraft = string.IsNullOrWhiteSpace(loadedEvent.Title);
                     OnPropertyChanged(nameof(IsNewUneditedDraft));
@@ -1204,7 +1075,9 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             : evt.Description;
         IsPendingEvent = evt.IsPending;
         IsPendingDeleteEvent = evt.IsPendingDelete;
-        SourceDisplay = evt.SourceKind == CalendarEventSourceKind.Pending
+        SourceDisplay = evt.SourceKind == CalendarEventSourceKind.Candidate
+            ? CandidateSourceDisplay
+            : evt.SourceKind == CalendarEventSourceKind.Pending
             ? DraftSourceDisplay
             : evt.IsPendingDelete
                 ? PendingDeleteSourceDisplay
@@ -1219,6 +1092,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             : "No local changes";
         StartEndDisplay = BuildStartEndDisplay(evt.StartLocal, evt.EndLocal, evt.IsAllDay);
         IsPanelVisible = true;
+        OnPropertyChanged(nameof(ApproveButtonVisibility));
+        ApproveCommand.NotifyCanExecuteChanged();
 
         if (!keepEditMode || !isSameEvent)
         {
@@ -1263,7 +1138,6 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         if (string.Equals(_currentEventId, message.PreviousEventId, StringComparison.Ordinal))
         {
             _currentEventId = message.EventId;
-            _currentSourceKind = CalendarEventSourceKind.Google;
         }
 
         _loadCts.Cancel();
@@ -1296,6 +1170,8 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         IsPendingEvent = false;
         IsPendingDeleteEvent = false;
         SourceDisplay = DefaultSourceDisplay;
+        OnPropertyChanged(nameof(ApproveButtonVisibility));
+        ApproveCommand.NotifyCanExecuteChanged();
         LastSyncedDisplay = string.Empty;
         LastSavedLocallyDisplay = "No local changes";
         ResetEditSession();
@@ -1343,7 +1219,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     private bool AllowsBlankDraftTitle()
     {
-        return _currentSourceKind == CalendarEventSourceKind.Pending &&
+        return _currentSourceKind is CalendarEventSourceKind.Pending or CalendarEventSourceKind.Candidate &&
             _currentEvent?.IsPending == true;
     }
 
@@ -1583,9 +1459,11 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             IsPending = true,
             Opacity = 0.6,
             PendingUpdatedAt = _timeProvider.GetUtcNow().UtcDateTime,
-            StatusLabel = _currentEvent.SourceKind == CalendarEventSourceKind.Pending
-                ? DraftSourceDisplay
-                : PendingSourceDisplay
+            StatusLabel = _currentEvent.SourceKind == CalendarEventSourceKind.Candidate
+                ? CandidateSourceDisplay
+                : _currentEvent.SourceKind == CalendarEventSourceKind.Pending
+                    ? DraftSourceDisplay
+                    : PendingSourceDisplay
         };
 
         _currentEvent = previewEvent;
@@ -1618,9 +1496,11 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             IsPending = true,
             Opacity = 0.6,
             PendingUpdatedAt = utcNow,
-            StatusLabel = currentDisplayEvent.SourceKind == CalendarEventSourceKind.Pending
-                ? DraftSourceDisplay
-                : PendingSourceDisplay
+            StatusLabel = currentDisplayEvent.SourceKind == CalendarEventSourceKind.Candidate
+                ? CandidateSourceDisplay
+                : currentDisplayEvent.SourceKind == CalendarEventSourceKind.Pending
+                    ? DraftSourceDisplay
+                    : PendingSourceDisplay
         };
     }
 
@@ -1665,30 +1545,6 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             _currentSourceKind == sourceKind;
     }
 
-    private static PendingEvent ClonePendingEvent(PendingEvent source)
-    {
-        return new PendingEvent
-        {
-            PendingEventId = source.PendingEventId,
-            GcalEventId = source.GcalEventId,
-            CalendarId = source.CalendarId,
-            Summary = source.Summary,
-            Description = source.Description,
-            StartDatetime = source.StartDatetime,
-            EndDatetime = source.EndDatetime,
-            IsAllDay = source.IsAllDay,
-            ColorId = source.ColorId,
-            AppCreated = source.AppCreated,
-            SourceSystem = source.SourceSystem,
-            ReadyToPublish = source.ReadyToPublish,
-            PublishAttemptedAt = source.PublishAttemptedAt,
-            PublishError = source.PublishError,
-            OperationType = source.OperationType,
-            CreatedAt = source.CreatedAt,
-            UpdatedAt = source.UpdatedAt
-        };
-    }
-
     private void ApplyEditColor(string? colorId)
     {
         var normalizedColorKey = _colorMappingService.NormalizeColorKey(colorId);
@@ -1713,12 +1569,13 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             return;
         }
 
-        if (_currentSourceKind == CalendarEventSourceKind.Pending)
+        if (_currentSourceKind is CalendarEventSourceKind.Pending or CalendarEventSourceKind.Candidate)
         {
             var idToDelete = _currentEventId;
+            var wasCandidate = _currentSourceKind == CalendarEventSourceKind.Candidate;
             StopDebounce();
-            var snapshot = await _pendingEventRepository.GetByPendingEventIdAsync(idToDelete, ct);
-            await _pendingEventRepository.DeleteByPendingEventIdAsync(idToDelete, ct);
+            var snapshot = await _eventRepository.GetByEventIdAsync(idToDelete, ct);
+            await _eventRepository.DeleteByEventIdAsync(idToDelete, ct);
             RunOnUiThread(HidePanel);
             _selectionService.ClearSelection();
             WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(idToDelete));
@@ -1726,65 +1583,27 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             if (snapshot is not null)
             {
                 WeakReferenceMessenger.Default.Send(new RequestUndoToastMessage(
-                    "Draft deleted",
+                    wasCandidate ? "Candidate deleted" : "Draft deleted",
                     async undoCt =>
                     {
-                        await _pendingEventRepository.UpsertAsync(snapshot, undoCt);
-                        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(snapshot.PendingEventId));
+                        await _eventRepository.UpsertAsync(snapshot, undoCt);
+                        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(snapshot.EventId));
                     }));
             }
 
             return;
         }
 
-        var pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
-
-        if (pendingEvent is null)
+        var publishedEvent = await _eventRepository.GetByEventIdAsync(_currentEventId, ct);
+        if (publishedEvent is null)
         {
-            var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
-            if (gcalEvent is null)
-            {
-                return;
-            }
+            return;
+        }
 
-            var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-            var deletePending = new PendingEvent
-            {
-                PendingEventId = $"pending_{Guid.NewGuid():N}",
-                GcalEventId = _currentEventId,
-                CalendarId = gcalEvent.CalendarId,
-                Summary = _currentEvent.Title,
-                Description = _currentEvent.Description,
-                StartDatetime = _currentEvent.StartUtc,
-                EndDatetime = _currentEvent.EndUtc,
-                IsAllDay = _currentEvent.IsAllDay,
-                ColorId = _currentEvent.ColorKey,
-                AppCreated = false,
-                SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
-                ReadyToPublish = false,
-                OperationType = "delete",
-                CreatedAt = utcNow,
-                UpdatedAt = utcNow
-            };
-            await _pendingEventRepository.UpsertAsync(deletePending, ct);
-        }
-        else if (pendingEvent.OperationType == "edit")
-        {
-            var choice = await _contentDialogService.ShowDeleteWithPendingEditAsync(_currentEvent.Title);
-            switch (choice)
-            {
-                case DeleteWithPendingEditChoice.Cancel:
-                    return;
-                case DeleteWithPendingEditChoice.RevertChanges:
-                    await RevertPendingChangesForEventAsync(_currentEventId, CalendarEventSourceKind.Google, ct);
-                    return;
-                case DeleteWithPendingEditChoice.DeleteEvent:
-                    pendingEvent.OperationType = "delete";
-                    pendingEvent.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
-                    await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
-                    break;
-            }
-        }
+        publishedEvent.IsDeleted = true;
+        publishedEvent.HasUnpublishedChanges = true;
+        publishedEvent.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
+        await _eventRepository.UpsertAsync(publishedEvent, ct);
 
         var eventId = _currentEventId;
         var refreshedEvent = await _queryService.GetEventByIdAsync(eventId, ct);
@@ -1820,11 +1639,12 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             return;
         }
 
-        if (sourceKind == CalendarEventSourceKind.Pending)
+        if (sourceKind is CalendarEventSourceKind.Pending or CalendarEventSourceKind.Candidate)
         {
+            var isCandidate = sourceKind == CalendarEventSourceKind.Candidate;
             var confirmed = await _contentDialogService.ShowConfirmationAsync(
-                "Delete Draft",
-                "This local draft will be permanently deleted.",
+                isCandidate ? "Delete Candidate" : "Delete Draft",
+                isCandidate ? "This candidate event will be permanently deleted." : "This local draft will be permanently deleted.",
                 "Delete");
             if (!confirmed)
             {
@@ -1832,7 +1652,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             }
 
             StopDebounce();
-            await _pendingEventRepository.DeleteByPendingEventIdAsync(eventId, ct);
+            await _eventRepository.DeleteByEventIdAsync(eventId, ct);
             if (isCurrentlySelected)
             {
                 RunOnUiThread(HidePanel);
@@ -1843,62 +1663,25 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             return;
         }
 
-        var pendingEvent = await _pendingEventRepository.GetByGcalEventIdAsync(eventId, ct);
-
-        if (pendingEvent is null)
+        var confirmedDelete = await _contentDialogService.ShowConfirmationAsync(
+            "Stage Deletion",
+            "This event will be staged for deletion and removed from Google Calendar when you push your changes.",
+            "Stage Delete");
+        if (!confirmedDelete)
         {
-            var confirmed = await _contentDialogService.ShowConfirmationAsync(
-                "Stage Deletion",
-                "This event will be staged for deletion and removed from Google Calendar when you push your changes.",
-                "Stage Delete");
-            if (!confirmed)
-            {
-                return;
-            }
-
-            var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(eventId, ct);
-            if (gcalEvent is null)
-            {
-                return;
-            }
-
-            var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-            await _pendingEventRepository.UpsertAsync(new PendingEvent
-            {
-                PendingEventId = $"pending_{Guid.NewGuid():N}",
-                GcalEventId = eventId,
-                CalendarId = gcalEvent.CalendarId,
-                Summary = evt.Title,
-                Description = evt.Description,
-                StartDatetime = evt.StartUtc,
-                EndDatetime = evt.EndUtc,
-                IsAllDay = evt.IsAllDay,
-                ColorId = evt.ColorKey,
-                AppCreated = false,
-                SourceSystem = gcalEvent.SourceSystem ?? "google-overlay",
-                ReadyToPublish = false,
-                OperationType = "delete",
-                CreatedAt = utcNow,
-                UpdatedAt = utcNow
-            }, ct);
+            return;
         }
-        else if (pendingEvent.OperationType == "edit")
+
+        var publishedEvent = await _eventRepository.GetByEventIdAsync(eventId, ct);
+        if (publishedEvent is null)
         {
-            var choice = await _contentDialogService.ShowDeleteWithPendingEditAsync(evt.Title);
-            switch (choice)
-            {
-                case DeleteWithPendingEditChoice.Cancel:
-                    return;
-                case DeleteWithPendingEditChoice.RevertChanges:
-                    await RevertPendingChangesForEventAsync(eventId, CalendarEventSourceKind.Google, ct);
-                    return;
-                case DeleteWithPendingEditChoice.DeleteEvent:
-                    pendingEvent.OperationType = "delete";
-                    pendingEvent.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
-                    await _pendingEventRepository.UpsertAsync(pendingEvent, ct);
-                    break;
-            }
+            return;
         }
+
+        publishedEvent.IsDeleted = true;
+        publishedEvent.HasUnpublishedChanges = true;
+        publishedEvent.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
+        await _eventRepository.UpsertAsync(publishedEvent, ct);
 
         if (isCurrentlySelected)
         {
@@ -1914,7 +1697,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
     private async Task DeleteUneditedDraftAsync(string pendingEventId)
     {
-        await _pendingEventRepository.DeleteByPendingEventIdAsync(pendingEventId);
+        await _eventRepository.DeleteByEventIdAsync(pendingEventId);
         WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(pendingEventId));
     }
 
@@ -1944,5 +1727,6 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private sealed record DragRescheduleUndoState(
         string EventId,
         CalendarEventSourceKind SourceKind,
-        PendingEvent? PreviousPendingEvent);
+        DateTime? PreviousStartDatetime,
+        DateTime? PreviousEndDatetime);
 }

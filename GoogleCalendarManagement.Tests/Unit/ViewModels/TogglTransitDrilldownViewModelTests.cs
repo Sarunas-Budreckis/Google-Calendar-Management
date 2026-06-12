@@ -61,10 +61,9 @@ public sealed class TogglTransitDrilldownViewModelTests
             startUtc: new DateTime(2026, 06, 04, 13, 0, 0, DateTimeKind.Utc),
             endUtc: new DateTime(2026, 06, 04, 13, 10, 0, DateTimeKind.Utc));
         var repository = new StubTogglTransitRepository { Entries = [entry] };
-        var pendingEventRepo = new StubPendingEventRepository();
         var draftService = new StubPendingEventDraftService();
         var selectionService = new StubCalendarSelectionService();
-        var viewModel = CreateViewModel(repository, pendingEventRepo, selectionService, draftService);
+        var viewModel = CreateViewModel(repository, selectionService, draftService);
 
         await viewModel.LoadAsync(new DateOnly(2026, 06, 04));
         await viewModel.CreateCandidateEventsCommand.ExecuteAsync(null);
@@ -89,9 +88,8 @@ public sealed class TogglTransitDrilldownViewModelTests
                 new DateTime(2026, 06, 04, 17, 20, 0, DateTimeKind.Utc))
         };
         var repository = new StubTogglTransitRepository { Entries = entries };
-        var pendingEventRepo = new StubPendingEventRepository();
         var draftService = new StubPendingEventDraftService();
-        var viewModel = CreateViewModel(repository, pendingEventRepo, draftService: draftService);
+        var viewModel = CreateViewModel(repository, draftService: draftService);
 
         await viewModel.LoadAsync(new DateOnly(2026, 06, 04));
         await viewModel.CreateCandidateEventsCommand.ExecuteAsync(null);
@@ -110,29 +108,26 @@ public sealed class TogglTransitDrilldownViewModelTests
     public async Task CreateCandidateEventsCommand_WhenNoEntries_CreatesNoEvents()
     {
         var repository = new StubTogglTransitRepository();
-        var pendingEventRepo = new StubPendingEventRepository();
-        var viewModel = CreateViewModel(repository, pendingEventRepo);
+        var draftService = new StubPendingEventDraftService();
+        var viewModel = CreateViewModel(repository, draftService: draftService);
 
         await viewModel.LoadAsync(new DateOnly(2026, 06, 04));
 
         viewModel.CreateCandidateEventsCommand.CanExecute(null).Should().BeFalse();
-        pendingEventRepo.Upserted.Should().BeEmpty();
+        draftService.Created.Should().BeEmpty();
     }
 
     private static TogglTransitDrilldownViewModel CreateViewModel(
         ITogglTransitRepository repository,
-        StubPendingEventRepository? pendingEventRepo = null,
         StubCalendarSelectionService? selectionService = null,
         StubPendingEventDraftService? draftService = null)
     {
         draftService ??= new StubPendingEventDraftService();
-        pendingEventRepo ??= new StubPendingEventRepository();
         selectionService ??= new StubCalendarSelectionService();
         var eightFifteen = new EightFifteenRuleService();
         return new TogglTransitDrilldownViewModel(
             repository,
             draftService,
-            pendingEventRepo,
             selectionService,
             eightFifteen);
     }
@@ -174,24 +169,29 @@ public sealed class TogglTransitDrilldownViewModelTests
             Created.Add(draft);
             return Task.FromResult(draft);
         }
-    }
 
-    private sealed class StubPendingEventRepository : IPendingEventRepository
-    {
-        public List<PendingEvent> Upserted { get; } = [];
-
-        public Task UpsertAsync(PendingEvent pendingEvent, CancellationToken ct = default)
+        public Task<Event> CreateCandidateAsync(
+            DateTime startLocal,
+            DateTime endLocal,
+            string? summary = null,
+            string? sourceSystem = null,
+            string? colorId = null,
+            CancellationToken ct = default)
         {
-            Upserted.Add(pendingEvent);
-            return Task.CompletedTask;
+            var candidate = new Event
+            {
+                EventId = Guid.NewGuid().ToString(),
+                StartDatetime = startLocal,
+                EndDatetime = endLocal,
+                Summary = summary,
+                Lifecycle = "candidate",
+                Publish = "local_only",
+                SourceSystem = sourceSystem,
+                ColorId = colorId
+            };
+            Created.Add(candidate);
+            return Task.FromResult(candidate);
         }
-
-        public Task<PendingEvent?> GetByPendingEventIdAsync(string pendingEventId, CancellationToken ct = default) => Task.FromResult<PendingEvent?>(null);
-        public Task<PendingEvent?> GetByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default) => Task.FromResult<PendingEvent?>(null);
-        public Task<PendingEvent?> GetDayNameEventAsync(DateOnly date, CancellationToken ct = default) => Task.FromResult<PendingEvent?>(null);
-        public Task<PendingEvent?> GetSleepEventForDateAsync(DateOnly date, CancellationToken ct = default) => Task.FromResult<PendingEvent?>(null);
-        public Task DeleteByPendingEventIdAsync(string pendingEventId, CancellationToken ct = default) => Task.CompletedTask;
-        public Task DeleteByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private sealed class StubCalendarSelectionService : ICalendarSelectionService

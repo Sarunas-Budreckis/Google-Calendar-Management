@@ -478,9 +478,12 @@ public sealed partial class MainPage : Page
 
         var menu = new MenuFlyout();
 
-        var revertLabel = item.EventSourceKind == CalendarEventSourceKind.Pending
-            ? "Discard draft"
-            : "Revert pending edit";
+        var revertLabel = item.EventSourceKind switch
+        {
+            CalendarEventSourceKind.Candidate => "Delete Candidate",
+            CalendarEventSourceKind.Pending => "Discard draft",
+            _ => "Revert pending edit"
+        };
         var revertItem = new MenuFlyoutItem { Text = revertLabel };
         revertItem.Click += async (_, _) => await ViewModel.RevertPendingPublishItemAsync(item);
         menu.Items.Add(revertItem);

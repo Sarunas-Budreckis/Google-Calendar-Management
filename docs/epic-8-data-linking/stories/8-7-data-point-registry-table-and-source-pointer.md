@@ -1,7 +1,7 @@
 # Story 8.7: `data_point` Registry Table + Source-Pointer Model
 
 **Epic:** 8 — Event Model & Raw Data Linking Engine
-**Status:** ready-for-dev
+**Status:** done
 **Agent:** Sonnet · **Effort:** medium
 **Dependencies:** 8.2 (blocking — the unified `event` table + EF migration infra must exist before adding a companion migration)
 
@@ -51,54 +51,54 @@ so that every raw imported record can be normalized into a single addressable ro
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create `DataPoint` entity (AC: #1)
-  - [ ] 1.1 Create `Data/Entities/DataPoint.cs` with all properties from AC #1
-  - [ ] 1.2 Namespace: `GoogleCalendarManagement.Data.Entities`
+- [x] Task 1: Create `DataPoint` entity (AC: #1)
+  - [x] 1.1 Create `Data/Entities/DataPoint.cs` with all properties from AC #1
+  - [x] 1.2 Namespace: `GoogleCalendarManagement.Data.Entities`
 
-- [ ] Task 2: Create `DataPointConfiguration` (AC: #2)
-  - [ ] 2.1 Create `Data/Configurations/DataPointConfiguration.cs` implementing `IEntityTypeConfiguration<DataPoint>`
-  - [ ] 2.2 `builder.ToTable("data_point")`
-  - [ ] 2.3 `builder.HasKey(e => e.DataPointId)` — `ValueGeneratedOnAdd()` for auto-increment
-  - [ ] 2.4 Map all column names in snake_case (follow existing configuration files like `SpotifyStreamConfiguration.cs`)
-  - [ ] 2.5 `builder.Property(e => e.SourceKey).HasColumnName("source_key").IsRequired().HasMaxLength(100)`
-  - [ ] 2.6 `builder.Property(e => e.SourceRef).HasColumnName("source_ref").IsRequired().HasMaxLength(500)`
-  - [ ] 2.7 `builder.Property(e => e.StartUtc).HasColumnName("start_utc").IsRequired()`
-  - [ ] 2.8 `builder.Property(e => e.EndUtc).HasColumnName("end_utc").IsRequired()`
-  - [ ] 2.9 `builder.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired()`
-  - [ ] 2.10 Add index: `.HasIndex(e => e.StartUtc).HasDatabaseName("idx_data_point_start_utc")`
-  - [ ] 2.11 Add composite index: `.HasIndex(e => new { e.SourceKey, e.StartUtc }).HasDatabaseName("idx_data_point_source_key_start_utc")`
+- [x] Task 2: Create `DataPointConfiguration` (AC: #2)
+  - [x] 2.1 Create `Data/Configurations/DataPointConfiguration.cs` implementing `IEntityTypeConfiguration<DataPoint>`
+  - [x] 2.2 `builder.ToTable("data_point")`
+  - [x] 2.3 `builder.HasKey(e => e.DataPointId)` — `ValueGeneratedOnAdd()` for auto-increment
+  - [x] 2.4 Map all column names in snake_case (follow existing configuration files like `SpotifyStreamConfiguration.cs`)
+  - [x] 2.5 `builder.Property(e => e.SourceKey).HasColumnName("source_key").IsRequired().HasMaxLength(100)`
+  - [x] 2.6 `builder.Property(e => e.SourceRef).HasColumnName("source_ref").IsRequired().HasMaxLength(500)`
+  - [x] 2.7 `builder.Property(e => e.StartUtc).HasColumnName("start_utc").IsRequired()`
+  - [x] 2.8 `builder.Property(e => e.EndUtc).HasColumnName("end_utc").IsRequired()`
+  - [x] 2.9 `builder.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired()`
+  - [x] 2.10 Add index: `.HasIndex(e => e.StartUtc).HasDatabaseName("idx_data_point_start_utc")`
+  - [x] 2.11 Add composite index: `.HasIndex(e => new { e.SourceKey, e.StartUtc }).HasDatabaseName("idx_data_point_source_key_start_utc")`
 
-- [ ] Task 3: Add `DbSet` to `CalendarDbContext` (AC: #3)
-  - [ ] 3.1 Open `Data/CalendarDbContext.cs` and add `public DbSet<DataPoint> DataPoints { get; set; }` after the existing `DbSet` declarations
-  - [ ] 3.2 Add `using GoogleCalendarManagement.Data.Entities;` if not already wildcard-imported
+- [x] Task 3: Add `DbSet` to `CalendarDbContext` (AC: #3)
+  - [x] 3.1 Open `Data/CalendarDbContext.cs` and add `public DbSet<DataPoint> DataPoints { get; set; }` after the existing `DbSet` declarations
+  - [x] 3.2 Add `using GoogleCalendarManagement.Data.Entities;` if not already wildcard-imported
 
-- [ ] Task 4: Create EF Core migration (AC: #4)
-  - [ ] 4.1 Run `dotnet ef migrations add AddDataPoint --project GoogleCalendarManagement.csproj` from the project root
-  - [ ] 4.2 Verify the generated migration file creates `data_point` table with all 6 columns and both indexes (no extra tables from other in-progress work)
-  - [ ] 4.3 Verify `dotnet ef database update` runs without error against the design-time db (`design_time.db`)
-  - [ ] 4.4 Migration timestamp in filename must be `20260612000000` (or the actual generation time — do not hand-write; let `dotnet ef` generate the file)
+- [x] Task 4: Create EF Core migration (AC: #4)
+  - [x] 4.1 Run `dotnet ef migrations add AddDataPoint --project GoogleCalendarManagement.csproj` from the project root
+  - [x] 4.2 Verify the generated migration file creates `data_point` table with all 6 columns and both indexes (no extra tables from other in-progress work)
+  - [x] 4.3 Verify `dotnet ef database update` runs without error against the design-time db (`design_time.db`)
+  - [x] 4.4 Migration timestamp in filename must be `20260612000000` (or the actual generation time — do not hand-write; let `dotnet ef` generate the file)
 
-- [ ] Task 5: Create `ISourcePointerResolver` interface (AC: #5)
-  - [ ] 5.1 Create `Services/ISourcePointerResolver.cs`
-  - [ ] 5.2 Namespace: `GoogleCalendarManagement.Services`
-  - [ ] 5.3 Properties + methods per AC #5
+- [x] Task 5: Create `ISourcePointerResolver` interface (AC: #5)
+  - [x] 5.1 Create `Services/ISourcePointerResolver.cs`
+  - [x] 5.2 Namespace: `GoogleCalendarManagement.Services`
+  - [x] 5.3 Properties + methods per AC #5
 
-- [ ] Task 6: Create `ISourcePointerResolverRegistry` + `SourcePointerResolverRegistry` (AC: #6, #7)
-  - [ ] 6.1 Create `Services/ISourcePointerResolverRegistry.cs` with methods from AC #6
-  - [ ] 6.2 Create `Services/SourcePointerResolverRegistry.cs` — internal dictionary `Dictionary<string, ISourcePointerResolver> _resolvers`
-  - [ ] 6.3 `Register` — `_resolvers[resolver.SourceKey] = resolver` (overwrite if duplicate key)
-  - [ ] 6.4 `GetResolver` — `_resolvers.TryGetValue(sourceKey, out var r) ? r : null`
-  - [ ] 6.5 `ResolveDisplayAsync` — dispatch to resolver if found; return `null` if not registered (do NOT throw)
-  - [ ] 6.6 No locking needed — `Register` is called only during DI startup before concurrent access begins
-  - [ ] 6.7 Namespace: `GoogleCalendarManagement.Services`
+- [x] Task 6: Create `ISourcePointerResolverRegistry` + `SourcePointerResolverRegistry` (AC: #6, #7)
+  - [x] 6.1 Create `Services/ISourcePointerResolverRegistry.cs` with methods from AC #6
+  - [x] 6.2 Create `Services/SourcePointerResolverRegistry.cs` — internal dictionary `Dictionary<string, ISourcePointerResolver> _resolvers`
+  - [x] 6.3 `Register` — `_resolvers[resolver.SourceKey] = resolver` (overwrite if duplicate key)
+  - [x] 6.4 `GetResolver` — `_resolvers.TryGetValue(sourceKey, out var r) ? r : null`
+  - [x] 6.5 `ResolveDisplayAsync` — dispatch to resolver if found; return `null` if not registered (do NOT throw)
+  - [x] 6.6 No locking needed — `Register` is called only during DI startup before concurrent access begins
+  - [x] 6.7 Namespace: `GoogleCalendarManagement.Services`
 
-- [ ] Task 7: DI registration (AC: #8)
-  - [ ] 7.1 Open `App.xaml.cs`, add `services.AddSingleton<ISourcePointerResolverRegistry, SourcePointerResolverRegistry>()` alongside the other singleton registrations (around lines 268–310)
+- [x] Task 7: DI registration (AC: #8)
+  - [x] 7.1 Open `App.xaml.cs`, add `services.AddSingleton<ISourcePointerResolverRegistry, SourcePointerResolverRegistry>()` alongside the other singleton registrations (around lines 268–310)
 
-- [ ] Task 8: Integration tests (AC: #9)
-  - [ ] 8.1 Create `GoogleCalendarManagement.Tests/Integration/DataPointRepositoryTests.cs`
-  - [ ] 8.2 Use the standard in-memory SQLite test pattern (see Dev Notes: Testing framework)
-  - [ ] 8.3 Write tests per AC #9 — five test cases
+- [x] Task 8: Integration tests (AC: #9)
+  - [x] 8.1 Create `GoogleCalendarManagement.Tests/Integration/DataPointRepositoryTests.cs`
+  - [x] 8.2 Use the standard in-memory SQLite test pattern (see Dev Notes: Testing framework)
+  - [x] 8.3 Write tests per AC #9 — five test cases
 
 ---
 
@@ -321,9 +321,44 @@ Namespace convention: `GoogleCalendarManagement.Data.Entities` / `GoogleCalendar
 ## Dev Agent Record
 
 ### Agent Model Used
+GPT-5 Codex
 
 ### Debug Log References
+- `dotnet test GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj --filter FullyQualifiedName~DataPointRepositoryTests -p:Platform=x64` — red phase failed on missing `DataPoint` type.
+- `dotnet test GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj --filter FullyQualifiedName~DataPointRepositoryTests -p:Platform=x64` — focused tests passed, 5/5.
+- `dotnet ef migrations add AddDataPoint --project GoogleCalendarManagement.csproj` — generated `20260612194057_AddDataPoint`.
+- `dotnet ef database update --project GoogleCalendarManagement.csproj` — applied migration chain through `20260612194057_AddDataPoint`.
+- `dotnet test GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj -p:Platform=x64` — full regression suite passed, 463 passed, 19 skipped.
 
 ### Completion Notes List
+- Added the `DataPoint` entity, EF configuration, `CalendarDbContext.DataPoints`, and generated migration-backed snapshot entries for the `data_point` registry table.
+- Added source pointer resolver contracts and an empty singleton registry implementation using a concurrent dictionary for safe singleton lookup/registration behavior.
+- Added shared source-key constants for follow-on Epic 8 projector work.
+- Added integration tests for data point round-tripping, start-range querying, instant datapoints, and unknown-key resolver registry behavior.
 
 ### File List
+- `App.xaml.cs`
+- `Constants/SourceKeys.cs`
+- `Data/CalendarDbContext.cs`
+- `Data/Configurations/DataPointConfiguration.cs`
+- `Data/Entities/DataPoint.cs`
+- `Data/Migrations/20260612194057_AddDataPoint.cs`
+- `Data/Migrations/20260612194057_AddDataPoint.Designer.cs`
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs`
+- `GoogleCalendarManagement.Tests/Integration/DataPointRepositoryTests.cs`
+- `Services/ISourcePointerResolver.cs`
+- `Services/ISourcePointerResolverRegistry.cs`
+- `Services/SourcePointerResolverRegistry.cs`
+- `docs/epic-8-data-linking/stories/8-7-data-point-registry-table-and-source-pointer.md`
+- `docs/sprint-status.yaml`
+
+### Change Log
+- 2026-06-12: Implemented story 8.7 data point registry schema, source pointer resolver registry contracts, DI registration, migration, and integration tests.
+
+### Review Findings
+
+- [x] [Review][Patch] `SourcePointerResolverRegistry.Register` silently overwrites existing resolver — fixed: `TryAdd` used; throws `InvalidOperationException` on duplicate source key during startup. [`Services/SourcePointerResolverRegistry.cs`]
+
+- [x] [Review][Defer] `DataPoint.SourceRef` max length 500 unenforced at C# layer [`Data/Configurations/DataPointConfiguration.cs`] — deferred, SQLite TEXT doesn't enforce `HasMaxLength`; pre-existing pattern across all string-typed EF configurations in this project; future projectors in 8.9 should validate before insert
+
+- [x] [Review][Defer] `TestDbContextFactory` inner class duplicated in `DataPointRepositoryTests` [`GoogleCalendarManagement.Tests/Integration/DataPointRepositoryTests.cs`] — deferred, pre-existing pattern (present in 20+ integration test classes); no functionality impact; consolidation is a future cleanup
