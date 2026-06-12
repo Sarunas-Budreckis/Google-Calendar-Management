@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="GoogleCalendarManagement.Views.OutlookDrilldownControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel
+        Padding="12"
+        Spacing="12">
+
+        <TextBlock
+            FontWeight="SemiBold"
+            Text="{Binding SummaryLabel}"
+            Visibility="{Binding DataVisibility}"
+            TextWrapping="WrapWholeWords" />
+
+        <ItemsControl
+            ItemsSource="{Binding Items}"
+            Visibility="{Binding DataVisibility}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border
+                        Margin="0,0,0,6"
+                        Padding="10"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Opacity="{Binding ItemOpacity}">
+                        <StackPanel Spacing="4">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    FontWeight="SemiBold"
+                                    Text="{Binding SubjectDisplay}"
+                                    TextWrapping="WrapWholeWords" />
+                                <Button
+                                    Grid.Column="1"
+                                    MinWidth="0"
+                                    Padding="8,2"
+                                    Command="{Binding ToggleSuppressCommand}"
+                                    Content="{Binding SuppressButtonLabel}"
+                                    FontSize="11" />
+                            </Grid>
+                            <TextBlock
+                                Opacity="0.72"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{Binding TimeLabel}"
+                                TextWrapping="NoWrap" />
+                            <TextBlock
+                                Opacity="0.6"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{Binding Organizer}"
+                                TextWrapping="NoWrap"
+                                Visibility="{Binding OrganizerVisibility}" />
+                            <TextBlock
+                                Opacity="0.6"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{Binding Location}"
+                                TextWrapping="WrapWholeWords"
+                                Visibility="{Binding LocationVisibility}" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock
+            Margin="0,8,0,0"
+            Opacity="0.6"
+            Text="No work events for this day."
+            TextWrapping="WrapWholeWords"
+            Visibility="{Binding EmptyStateVisibility}" />
+    </StackPanel>
+</UserControl>

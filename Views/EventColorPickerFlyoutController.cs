@@ -23,11 +23,13 @@ public sealed class EventColorPickerFlyoutController
     private readonly Func<string, Task> _onColorSelectedAsync;
     private readonly Func<Task> _onRevertAsync;
     private readonly Func<Task> _onTogglePendingPublishSelectionAsync;
+    private readonly Func<Task> _onPushNowAsync;
     private readonly Func<Task> _onDeleteAsync;
     private readonly Dictionary<string, ColorOptionVisual> _optionVisuals = new(StringComparer.OrdinalIgnoreCase);
     private readonly Flyout _flyout;
     private readonly StackPanel _actionPanel;
     private readonly Button _togglePendingPublishSelectionButton;
+    private readonly Button _pushNowButton;
     private readonly Button _revertButton;
     private readonly Button _deleteButton;
 
@@ -38,6 +40,7 @@ public sealed class EventColorPickerFlyoutController
         Func<EventColorPickerMenuState>? getMenuState = null,
         Func<Task>? onRevertAsync = null,
         Func<Task>? onTogglePendingPublishSelectionAsync = null,
+        Func<Task>? onPushNowAsync = null,
         Func<Task>? onDeleteAsync = null)
     {
         _getSelectedColorId = getSelectedColorId;
@@ -45,8 +48,10 @@ public sealed class EventColorPickerFlyoutController
         _onColorSelectedAsync = onColorSelectedAsync;
         _onRevertAsync = onRevertAsync ?? (() => Task.CompletedTask);
         _onTogglePendingPublishSelectionAsync = onTogglePendingPublishSelectionAsync ?? (() => Task.CompletedTask);
+        _onPushNowAsync = onPushNowAsync ?? (() => Task.CompletedTask);
         _onDeleteAsync = onDeleteAsync ?? (() => Task.CompletedTask);
         _togglePendingPublishSelectionButton = CreateActionButton("Select for Push", TogglePendingPublishSelectionButton_Click);
+        _pushNowButton = CreateActionButton("Push now", PushNowButton_Click);
         _revertButton = CreateActionButton("Revert", RevertButton_Click);
         _deleteButton = CreateActionButton("Delete", DeleteButton_Click);
         if (Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var critBrush) &&
@@ -60,6 +65,7 @@ public sealed class EventColorPickerFlyoutController
             Children =
             {
                 _togglePendingPublishSelectionButton,
+                _pushNowButton,
                 _revertButton,
                 _deleteButton
             }
@@ -102,6 +108,9 @@ public sealed class EventColorPickerFlyoutController
         _togglePendingPublishSelectionButton.Content = menuState.IsSelectedForPush
             ? "Deselect from Push"
             : "Select for Push";
+        _pushNowButton.Visibility = menuState.ShowPendingPublishSelectionToggle
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         _revertButton.Visibility = menuState.ShowRevert ? Visibility.Visible : Visibility.Collapsed;
         _deleteButton.IsEnabled = menuState.ShowDelete;
         var selectedColorId = _getSelectedColorId() ?? string.Empty;
@@ -272,6 +281,12 @@ public sealed class EventColorPickerFlyoutController
         await _onTogglePendingPublishSelectionAsync();
         RefreshVisualState();
         Hide();
+    }
+
+    private async void PushNowButton_Click(object sender, RoutedEventArgs e)
+    {
+        Hide();
+        await _onPushNowAsync();
     }
 
     private void Flyout_Opened(object? sender, object e)

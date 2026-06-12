@@ -5,6 +5,13 @@ Author: Sarunas Budreckis
 Epic ID: epic-1
 Status: Draft
 
+> **[2026-06-08 Migration Note]** Runtime file locations changed. All references to `%LocalAppData%\GoogleCalendarManagement\` in this document are superseded:
+> - Database: `[project-root]\database\calendar.db` (backups in `database\backups\`)
+> - Logs: `[project-root]\logs\`
+> - Credentials: `[project-root]\credentials\`
+>
+> The project root is resolved by `Infrastructure\ProjectPaths.GetProjectRoot()`. Threshold constants previously in the `config` table now live in `Constants\ImportThresholds.cs`.
+
 ---
 
 ## Overview

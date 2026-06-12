@@ -512,6 +512,78 @@ public sealed class MainViewModel : ObservableObject, ICalendarViewRangeProvider
         matchingItem.IsSelected = !matchingItem.IsSelected;
     }
 
+    public async Task PushEventNowAsync(string eventId)
+    {
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return;
+        }
+
+        var matchingItem = _pendingPublishItems.FirstOrDefault(item =>
+            string.Equals(item.DisplayEventId, eventId, StringComparison.Ordinal));
+        if (matchingItem is null)
+        {
+            await LoadPendingPublishItemsAsync();
+            matchingItem = _pendingPublishItems.FirstOrDefault(item =>
+                string.Equals(item.DisplayEventId, eventId, StringComparison.Ordinal));
+        }
+
+        if (matchingItem is null || IsPublishingPendingEvents)
+        {
+            return;
+        }
+
+        IsPublishingPendingEvents = true;
+        _publishCompletedCount = 0;
+        _publishTotalCount = 1;
+        PendingPublishSummaryText = string.Empty;
+        OnPropertyChanged(nameof(PublishProgressText));
+        OnPropertyChanged(nameof(PublishProgressVisibility));
+
+        try
+        {
+            var progress = new Progress<PendingPublishProgress>(value =>
+            {
+                _publishCompletedCount = value.CompletedCount;
+                _publishTotalCount = value.TotalCount;
+                OnPropertyChanged(nameof(PublishProgressText));
+            });
+
+            var result = await _pendingEventPublishService.PublishAsync(
+                [matchingItem.PendingEventId],
+                progress,
+                CancellationToken.None);
+
+            var failureDetails = BuildPendingPublishFailureDetails(result, [matchingItem]);
+            PendingPublishSummaryText = result.FailureCount == 0
+                ? $"{result.SuccessCount} event(s) published."
+                : BuildPendingPublishFailureSummary(result);
+
+            var severity = result.FailureCount switch
+            {
+                0 => InfoBarSeverity.Success,
+                var failures when failures == result.TotalCount => InfoBarSeverity.Error,
+                _ => InfoBarSeverity.Warning
+            };
+            ShowNotification(PendingPublishSummaryText, severity, failureDetails);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while publishing event {EventId}.", eventId);
+            PendingPublishSummaryText = "Unable to publish the event. Check the log for details and try again.";
+            ShowNotification(PendingPublishSummaryText, InfoBarSeverity.Error, ex.ToString());
+        }
+        finally
+        {
+            IsPublishingPendingEvents = false;
+            _publishCompletedCount = 0;
+            _publishTotalCount = 0;
+            OnPropertyChanged(nameof(PublishProgressText));
+            OnPropertyChanged(nameof(PublishProgressVisibility));
+            await LoadPendingPublishItemsAsync();
+        }
+    }
+
     public async Task GoToPendingPublishItemAsync(PendingPublishItemViewModel item)
     {
         ArgumentNullException.ThrowIfNull(item);

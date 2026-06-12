@@ -12,7 +12,7 @@ public class MigrationService : IMigrationService
     private readonly CalendarDbContext _context;
     private readonly ILogger<MigrationService> _logger;
     private readonly string _dbPath;
-    private readonly string _appDataDir;
+    private readonly string _backupDir;
 
     public MigrationService(CalendarDbContext context, DatabaseOptions dbOptions, ILogger<MigrationService> logger)
     {
@@ -20,7 +20,7 @@ public class MigrationService : IMigrationService
         _logger = logger;
         var builder = new SqliteConnectionStringBuilder(dbOptions.ConnectionString);
         _dbPath = builder.DataSource;
-        _appDataDir = Path.GetDirectoryName(_dbPath)!;
+        _backupDir = Path.Combine(Path.GetDirectoryName(_dbPath)!, "backups");
     }
 
     public async Task RunStartupAsync()
@@ -46,6 +46,18 @@ public class MigrationService : IMigrationService
         _logger.LogInformation("Found {Count} pending migrations: {Names}", pending.Count, string.Join(", ", pending));
         await CreateBackupAsync("pre-migration");
         _context.Database.CloseConnection();
+
+        // A stale lock row (left from a crashed migration run) causes MigrateAsync to hang
+        // indefinitely waiting to acquire the lock. Safe to clear unconditionally for a
+        // single-user desktop app — concurrent migration is impossible.
+        try
+        {
+            await _context.Database.ExecuteSqlRawAsync("DELETE FROM __EFMigrationsLock WHERE Id = 1");
+        }
+        catch
+        {
+            // Table may not exist on a brand-new DB; that's fine.
+        }
 
         var directSqlMigrations = new HashSet<string>
         {
@@ -158,12 +170,13 @@ public class MigrationService : IMigrationService
             return Task.CompletedTask;
         }
 
+        Directory.CreateDirectory(_backupDir);
         var backupName = $"calendar_backup_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{backupReason}.db";
-        var backupPath = Path.Combine(_appDataDir, backupName);
+        var backupPath = Path.Combine(_backupDir, backupName);
         File.Copy(_dbPath, backupPath, overwrite: false);
         _logger.LogInformation("Created backup: {BackupPath}", backupPath);
 
-        var oldBackups = Directory.GetFiles(_appDataDir, "calendar_backup_*.db")
+        var oldBackups = Directory.GetFiles(_backupDir, "calendar_backup_*.db")
             .OrderByDescending(File.GetCreationTimeUtc)
             .Skip(5)
             .ToList();

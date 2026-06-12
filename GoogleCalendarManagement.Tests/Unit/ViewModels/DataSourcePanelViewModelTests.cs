@@ -709,6 +709,9 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         public Task<DataSourceImportLog> AddImportLogAsync(DataSourceImportLog log, CancellationToken ct = default)
             => Task.FromResult(log);
 
+        public Task UpdateSourceColorAsync(int dataSourceId, string? colorHex, CancellationToken ct = default)
+            => Task.CompletedTask;
+
         public async Task WaitForGetAllSourcesCallsAsync(int expectedCallCount)
         {
             while (GetAllSourcesCallCount < expectedCallCount)

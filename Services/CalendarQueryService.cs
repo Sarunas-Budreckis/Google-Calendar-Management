@@ -11,6 +11,8 @@ public sealed class CalendarQueryService : ICalendarQueryService
     private const string DraftStatusLabel = "Not yet published to Google Calendar";
     private const string PendingOverlayStatusLabel = "Local changes, pending push to GCal";
     private const string PendingDeleteStatusLabel = "Pending delete — will be removed from Google Calendar when pushed";
+    private const string OutlookPurpleHex = "#8B5CF6";
+    private const string OutlookColorName = "Purple (Work)";
 
     private readonly IDbContextFactory<CalendarDbContext> _dbContextFactory;
     private readonly IColorMappingService _colorMappingService;
@@ -63,7 +65,16 @@ public sealed class CalendarQueryService : ICalendarQueryService
             .ThenBy(pendingEvent => pendingEvent.Summary)
             .ToListAsync(ct);
 
-        var result = new List<CalendarEventDisplayModel>(googleRows.Count + draftRows.Count);
+        var outlookRows = await context.OutlookEvents
+            .AsNoTracking()
+            .Where(e => !e.IsSuppressed &&
+                        e.StartDatetime < rangeEndExclusiveUtc &&
+                        e.EndDatetime >= rangeStartUtc)
+            .OrderBy(e => e.StartDatetime)
+            .ThenBy(e => e.Subject)
+            .ToListAsync(ct);
+
+        var result = new List<CalendarEventDisplayModel>(googleRows.Count + draftRows.Count + outlookRows.Count);
         foreach (var row in googleRows)
         {
             var model = TryMapGoogleEventToDisplayModel(row.GcalEvent, row.PendingEvent);
@@ -77,6 +88,15 @@ public sealed class CalendarQueryService : ICalendarQueryService
         {
             var model = TryMapPendingDraftToDisplayModel(pendingEvent);
             if (model is not null && OverlapsRange(model, from, to))
+            {
+                result.Add(model);
+            }
+        }
+
+        foreach (var outlookEvent in outlookRows)
+        {
+            var model = MapOutlookEventToDisplayModel(outlookEvent);
+            if (OverlapsRange(model, from, to))
             {
                 result.Add(model);
             }
@@ -118,6 +138,15 @@ public sealed class CalendarQueryService : ICalendarQueryService
                 : pendingDraft.GcalEventId is null
                     ? TryMapPendingDraftToDisplayModel(pendingDraft)
                     : await GetGoogleEventByIdAsync(context, pendingDraft.GcalEventId, ct);
+        }
+
+        if (eventId.StartsWith("outlook_", StringComparison.Ordinal))
+        {
+            var outlookId = eventId["outlook_".Length..];
+            var outlookEvent = await context.OutlookEvents
+                .AsNoTracking()
+                .SingleOrDefaultAsync(e => e.OutlookEventId == outlookId, ct);
+            return outlookEvent is null ? null : MapOutlookEventToDisplayModel(outlookEvent);
         }
 
         return await GetGoogleEventByIdAsync(context, eventId, ct);
@@ -272,6 +301,39 @@ public sealed class CalendarQueryService : ICalendarQueryService
         return date
             .ToDateTime(TimeOnly.MinValue, DateTimeKind.Local)
             .ToUniversalTime();
+    }
+
+    private static CalendarEventDisplayModel MapOutlookEventToDisplayModel(OutlookEvent e)
+    {
+        var startUtc = DateTime.SpecifyKind(e.StartDatetime, DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(e.EndDatetime, DateTimeKind.Utc);
+
+        DateTime startLocal, endLocal;
+        if (e.IsAllDay)
+        {
+            startLocal = startUtc.Date;
+            endLocal = endUtc.Date;
+        }
+        else
+        {
+            startLocal = startUtc.ToLocalTime();
+            endLocal = endUtc.ToLocalTime();
+        }
+
+        return new CalendarEventDisplayModel(
+            "outlook_" + e.OutlookEventId,
+            CalendarEventSourceKind.Outlook,
+            e.Subject,
+            startUtc,
+            endUtc,
+            startLocal,
+            endLocal,
+            e.IsAllDay,
+            OutlookPurpleHex,
+            OutlookColorName,
+            e.IsRecurring,
+            e.BodyPreview,
+            e.LastSyncedAt);
     }
 
     private sealed record GoogleCalendarQueryRow(GcalEvent GcalEvent, PendingEvent? PendingEvent);

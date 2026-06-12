@@ -102,4 +102,17 @@ public sealed class DataSourceRepository : IDataSourceRepository
         await db.SaveChangesAsync(ct);
         return log;
     }
+
+    public async Task UpdateSourceColorAsync(int dataSourceId, string? colorHex, CancellationToken ct = default)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
+        var source = await db.DataSources.SingleOrDefaultAsync(s => s.DataSourceId == dataSourceId, ct);
+        if (source is null)
+        {
+            return;
+        }
+
+        source.ColorHex = colorHex;
+        await db.SaveChangesAsync(ct);
+    }
 }

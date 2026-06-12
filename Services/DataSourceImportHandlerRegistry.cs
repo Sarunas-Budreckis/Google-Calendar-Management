@@ -7,6 +7,9 @@ public sealed class DataSourceImportHandlerRegistry
     private readonly ConcurrentDictionary<string, IDataSourceImportHandler> _handlers =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly ConcurrentDictionary<string, IDataSourceImportHandler> _csvHandlers =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public void Register(IDataSourceImportHandler handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
@@ -17,6 +20,13 @@ public sealed class DataSourceImportHandlerRegistry
         }
 
         _handlers[handler.SourceKey] = handler;
+    }
+
+    public void RegisterCsvHandler(string sourceKey, IDataSourceImportHandler handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceKey);
+        _csvHandlers[sourceKey] = handler;
     }
 
     public IReadOnlyCollection<IDataSourceImportHandler> GetHandlers()
@@ -44,5 +54,23 @@ public sealed class DataSourceImportHandlerRegistry
         return string.IsNullOrWhiteSpace(sourceKey)
             ? null
             : _handlers.GetValueOrDefault(sourceKey);
+    }
+
+    public bool IsApiFetch(string sourceKey)
+    {
+        var handler = GetHandler(sourceKey);
+        return handler?.IsApiFetch ?? false;
+    }
+
+    public bool HasCsvHandler(string sourceKey)
+    {
+        return !string.IsNullOrWhiteSpace(sourceKey) && _csvHandlers.ContainsKey(sourceKey);
+    }
+
+    public IDataSourceImportHandler? GetCsvHandler(string sourceKey)
+    {
+        return string.IsNullOrWhiteSpace(sourceKey)
+            ? null
+            : _csvHandlers.GetValueOrDefault(sourceKey);
     }
 }

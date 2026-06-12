@@ -27,11 +27,26 @@
                         Grid.Column="0"
                         MinWidth="0"
                         Spacing="4">
-                        <TextBlock
-                            FontWeight="SemiBold"
-                            Text="{Binding DisplayName}"
-                            TextTrimming="CharacterEllipsis"
-                            TextWrapping="NoWrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button
+                                Width="16"
+                                Height="16"
+                                Padding="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="ColorSwatchButton_Click"
+                                ToolTipService.ToolTip="Change color">
+                                <Ellipse
+                                    Width="14"
+                                    Height="14"
+                                    Fill="{Binding ColorBrush}" />
+                            </Button>
+                            <TextBlock
+                                FontWeight="SemiBold"
+                                Text="{Binding DisplayName}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
+                        </StackPanel>
                         <ItemsControl
                             ItemsSource="{Binding DayDataMarkers}"
                             Visibility="{Binding DayDataMarkersVisibility}">
@@ -102,6 +117,16 @@
                             Height="18"
                             IsActive="{Binding IsImporting}"
                             Visibility="{Binding ImportProgressVisibility}" />
+                        <Button
+                            Command="{Binding CsvImportCommand}"
+                            Content="{Binding CsvImportButtonContent}"
+                            IsEnabled="{Binding IsCsvImportEnabled}"
+                            Visibility="{Binding CsvImportVisibility}" />
+                        <ProgressRing
+                            Width="18"
+                            Height="18"
+                            IsActive="{Binding IsCsvImporting}"
+                            Visibility="{Binding CsvImportProgressVisibility}" />
                     </StackPanel>
                 </Grid>
             </Border>

@@ -12,7 +12,7 @@ public class CalendarDbContextFactory : IDesignTimeDbContextFactory<CalendarDbCo
     public CalendarDbContext CreateDbContext(string[] args)
     {
         var optionsBuilder = new DbContextOptionsBuilder<CalendarDbContext>();
-        optionsBuilder.UseSqlite("Data Source=design_time.db");
+        optionsBuilder.UseSqlite("Data Source=database/design_time.db");
         return new CalendarDbContext(optionsBuilder.Options);
     }
 }

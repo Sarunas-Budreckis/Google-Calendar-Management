@@ -72,3 +72,9 @@
 - **All timeline dots placed at same X position** — Multiple tracks within the same clock minute overlap completely with no visual indicator of stacking. [`Views/VerticalDotTimelineControl.xaml.cs:SetItems`]
 - **`EnsureDataSourceAsync` TOCTOU race on first concurrent import** — Unlikely in a single-user desktop app; both calls could insert a duplicate data-source row if they race. [`Services/SpotifyImportService.cs:EnsureDataSourceAsync`]
 - **Token encryption write path not verified in filtered diff** — Verify `SetConfigValueAsync(StatsFmTokenConfigKey, token, encrypt: true)` is used in `SettingsViewModel` save handler. [`ViewModels/SettingsViewModel.cs`]
+
+## Deferred from: code review of api-fetch-rename-toggl-csv-import (2026-06-08)
+
+- **Phone rule logic duplicated inline in `TogglCsvImportService`** — `ClassifyEntry` replicates `TogglPhoneClassificationService.MatchesAnyRule` verbatim; the two paths will silently diverge if phone-rule matching logic evolves. Consider extracting a shared static helper. [`Services/TogglCsvImportService.cs`, `Services/TogglPhoneClassificationService.cs`]
+- **Sleep repository filter is non-exhaustive** — `TogglSleepRepository` queries `WHERE TogglDataType IS NULL`; any future new `TogglDataType` value that is not sleep will silently disappear from sleep views. A positive `== TogglSleep` filter (with a new enum value) would be safer long-term. [`Services/TogglSleepRepository.cs`]
+- **Zero-duration CSV entries classified as phone** — A CSV row with duration `0:00:00` whose description matches a phone rule will be marked `TogglPhone`; cancelled/deleted Toggl entries may produce this. [`Services/TogglCsvImportService.cs:ClassifyEntry`]

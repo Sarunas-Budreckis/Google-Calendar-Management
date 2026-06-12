@@ -1,7 +1,7 @@
 # Story 7.8: Outlook Work Calendar Sync (Investigation + MVP)
 
 **Epic:** 7 — Additional Data Source Integrations
-**Status:** Draft
+**Status:** review
 **Dependencies:** Story 7.1 (data_source registry), Story 5.5 (left panel day mode)
 
 ---
@@ -111,3 +111,135 @@ The user has a Mayo Clinic work Outlook account. Work calendar events should app
 - Purple color: use the existing Lavender/Purple from the app's 9-color palette (whichever is `#8B5CF6` or nearest — verify against `_color-definitions.md`)
 - Recurring event expansion: fetch expanded instances from Graph (not master + recurrence rule) to avoid implementing recurrence expansion locally
 - Investigation findings should be completed before coding Phase 2; if blocked by IT, implement ICS fallback only
+
+---
+
+## Tasks/Subtasks
+
+- [x] Phase 1: Investigation documented in `docs/epic-7-data-sources/key-decisions.md`
+  - [x] Decision: Manual Graph Explorer token (no OAuth in-app) due to Mayo Clinic tenant restrictions
+- [x] Phase 2: Data layer
+  - [x] Add `OutlookEvent` entity (`Data/Entities/OutlookEvent.cs`)
+  - [x] Add `OutlookEventConfiguration` EF config (`Data/Configurations/OutlookEventConfiguration.cs`)
+  - [x] Update `CalendarDbContext` with `OutlookEvents` DbSet
+  - [x] Create migration `20260608170000_AddOutlookEvent` creating `outlook_event` table and seeding `data_source` row
+  - [x] Update `CalendarDbContextModelSnapshot` with new entity
+- [x] Phase 2: Calendar integration
+  - [x] Add `CalendarEventSourceKind.Outlook` to enum
+  - [x] Update `CalendarQueryService.GetEventsForRangeAsync` to include non-suppressed Outlook events as Purple (#8B5CF6)
+  - [x] Update `CalendarQueryService.GetEventByIdAsync` to handle `outlook_` prefixed IDs
+- [x] Phase 2: Graph API client
+  - [x] Create `IGraphApiClient` with DTOs (`GraphEventDto`, `GraphDateTimeDto`, `GraphOrganizerDto`, `GraphLocationDto`, `GraphEmailAddressDto`)
+  - [x] Create `GraphApiClient` calling `GET /me/calendarView` with Bearer token
+- [x] Phase 2: Import service & handler
+  - [x] Create `OutlookImportResult` record
+  - [x] Create `IOutlookImportService` and `OutlookImportService` with upsert + import log
+  - [x] Create `OutlookImportHandler` with token-paste + date-range dialog
+- [x] Phase 2: Repository
+  - [x] Create `IOutlookEventRepository` and `OutlookEventRepository` (by-date queries, suppress toggle)
+- [x] Phase 2: Card UI
+  - [x] Create `OutlookCardProvider`
+  - [x] Create `OutlookCompactCardViewModel` (event count + work hours)
+  - [x] Create `OutlookDrilldownViewModel` with suppress/unsuppress per item
+  - [x] Create `OutlookCompactCardControl.xaml/.cs`
+  - [x] Create `OutlookDrilldownControl.xaml/.cs` with Hide/Show toggle buttons
+- [x] Phase 2: DI registration in `App.xaml.cs`
+- [x] Tests
+  - [x] `OutlookImportServiceTests` (8 unit tests)
+  - [x] `OutlookCompactCardViewModelTests` (5 unit tests)
+  - [x] `SchemaTests.OutlookEvent_TableExistsWithExpectedColumns_AfterMigration`
+
+---
+
+## Dev Notes
+
+### Authentication Approach (from key-decisions.md)
+
+Per investigation in Phase 1, OAuth is blocked by Mayo Clinic's Azure AD tenant policy. The chosen approach is:
+1. User opens Graph Explorer in browser (uses pre-existing SSO session — works)
+2. User copies the access token from the "Access token" tab
+3. User pastes the token into the sync dialog
+4. App calls `GET /me/calendarView` with that token
+5. Token expires after ~1 hour; user repeats when needed
+
+### Event ID Prefix Convention
+
+Outlook events use the prefix `outlook_` in `CalendarQueryService` when returned as `CalendarEventDisplayModel.EventId`, to distinguish from GCal IDs in the selection pipeline. The raw Outlook event ID is stored without prefix in `outlook_event.id`.
+
+### Suppress Behavior
+
+- `IsSuppressed = true` means the event is hidden from the calendar view but remains in the DB and the drilldown
+- Re-import does NOT overwrite `IsSuppressed` — the field is only modified via `OutlookEventRepository.SetSuppressedAsync`
+- Drilldown shows all events (suppressed shown with `[Hidden]` prefix and reduced opacity) with per-item Hide/Show toggle
+
+### Purple Color
+
+Fixed color `#8B5CF6` used for all Outlook events in `CalendarQueryService`. Not routed through `ColorMappingService` since it's a fixed non-configurable source color.
+
+---
+
+## Dev Agent Record
+
+### Implementation Plan
+
+Implemented in 8 layers following the story ACs and key-decisions.md:
+1. Data layer (entity, config, migration, snapshot)
+2. CalendarEventSourceKind.Outlook + CalendarQueryService integration
+3. Graph API HTTP client
+4. Import service + result type
+5. Import handler (token paste dialog per key-decisions.md)
+6. Repository (queries + suppress toggle)
+7. Card provider + ViewModels + Views
+8. DI wiring + tests
+
+### Completion Notes
+
+- All 14 new tests pass; 515 passing in full suite (4 pre-existing failures unrelated to this story)
+- Phase 2 (Graph API path) fully implemented per key-decisions.md: manual token paste from Graph Explorer instead of OAuth
+- Calendar display: Outlook events appear as purple (#8B5CF6) events alongside GCal events; suppressed events excluded
+- Drilldown: chronological list with per-event Hide/Show toggle; suppressed shown as `[Hidden] Subject` at 45% opacity
+- Compact card: event count + work hours label for the selected day
+- Import handler shows instructions for Graph Explorer token retrieval in the sync dialog
+
+---
+
+## File List
+
+### New Files
+- `Data/Entities/OutlookEvent.cs`
+- `Data/Configurations/OutlookEventConfiguration.cs`
+- `Data/Migrations/20260608170000_AddOutlookEvent.cs`
+- `Data/Migrations/20260608170000_AddOutlookEvent.Designer.cs`
+- `Services/IOutlookEventRepository.cs`
+- `Services/OutlookEventRepository.cs`
+- `Services/IGraphApiClient.cs`
+- `Services/GraphApiClient.cs`
+- `Services/OutlookImportResult.cs`
+- `Services/IOutlookImportService.cs`
+- `Services/OutlookImportService.cs`
+- `Services/OutlookImportHandler.cs`
+- `Services/OutlookCardProvider.cs`
+- `ViewModels/OutlookCompactCardViewModel.cs`
+- `ViewModels/OutlookDrilldownViewModel.cs`
+- `Views/OutlookCompactCardControl.xaml`
+- `Views/OutlookCompactCardControl.xaml.cs`
+- `Views/OutlookDrilldownControl.xaml`
+- `Views/OutlookDrilldownControl.xaml.cs`
+- `GoogleCalendarManagement.Tests/Unit/Services/OutlookImportServiceTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/OutlookCompactCardViewModelTests.cs`
+- `docs/epic-7-data-sources/key-decisions.md`
+
+### Modified Files
+- `Data/CalendarDbContext.cs` — added `OutlookEvents` DbSet
+- `Data/Migrations/CalendarDbContextModelSnapshot.cs` — added OutlookEvent entity to snapshot
+- `Models/CalendarEventSourceKind.cs` — added `Outlook` value
+- `Services/CalendarQueryService.cs` — added Outlook event query and mapping
+- `App.xaml.cs` — registered all Outlook services and handlers
+- `docs/epic-7-data-sources/stories/7-8-outlook-work-calendar-sync.md` — story updated
+- `docs/sprint-status.yaml` — status set to review
+
+---
+
+## Change Log
+
+- 2026-06-08: Phase 2 implementation complete. Graph API path with manual token paste approach per key-decisions.md. All schema, services, card UI, calendar integration, and tests implemented. Story status: review.

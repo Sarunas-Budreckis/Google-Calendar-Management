@@ -39,20 +39,22 @@ A WinUI 3 desktop application for managing Google Calendar events on Windows.
    - Go to **APIs & Services → Credentials**.
    - Create an **OAuth client ID** for a **Desktop app**.
    - Download the client secret JSON file from Google.
-   - Create this folder on your machine if it does not already exist:
-     `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\`
+   - Create this folder at the project root if it does not already exist:
+     `credentials\`
    - Copy the downloaded file into that folder and rename it to:
      `client_secret.json`
    - The final runtime path must be:
-     `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\client_secret.json`
-   - This file must stay in AppData and must not be committed to the repository.
+     `[project-root]\credentials\client_secret.json`
+   - This file must not be committed to the repository (it is gitignored).
    - The `credentials` folder and `client_secret.json` are intentionally ignored by git and are treated as local-only machine secrets.
 
 6. **Run the application**
    - In Visual Studio: press **F5** (Debug → Start Debugging)
    - The application window opens and runs the database migration service on startup.
    - On first launch, the SQLite database is created at:
-     `%LOCALAPPDATA%\GoogleCalendarManagement\calendar.db`
+     `[project-root]\database\calendar.db`
+   - Backups are written to `[project-root]\database\backups\` on each migration run.
+   - Logs are written to `[project-root]\logs\`.
    - If `client_secret.json` is missing, the app starts in a disconnected state and logs a warning instead of crashing.
 
 ## Build Commands
@@ -107,13 +109,19 @@ dotnet ef migrations add <MigrationName> -p:Platform=x64
 ```
 
 ### Published executable fails to find the database
-All file paths must use `Environment.GetFolderPath(SpecialFolder.LocalApplicationData)`. Hard-coded paths like `C:\Users\...` break the published build on other machines.
+`ProjectPaths.GetProjectRoot()` walks up from `AppContext.BaseDirectory` looking for a directory containing a `*.csproj` file. In a published build (no `.csproj` present), it falls back to `AppContext.BaseDirectory`. Ensure `database/`, `logs/`, and `credentials/` exist relative to the executable in that case.
 
 ### Google Calendar connect says `client_secret.json` is missing
 The OAuth client secret is not loaded from the repository. It must exist at:
-`%LOCALAPPDATA%\GoogleCalendarManagement\credentials\client_secret.json`
+`[project-root]\credentials\client_secret.json`
 
 If your downloaded file has a longer Google-generated name, copy it into that folder and rename it to `client_secret.json`.
+
+### Migrating from the old AppData location
+Prior to 2026-06-08, runtime files lived under `%LOCALAPPDATA%\GoogleCalendarManagement\`. To migrate:
+1. Copy `%LOCALAPPDATA%\GoogleCalendarManagement\calendar.db` → `[project-root]\database\calendar.db`
+2. Copy `%LOCALAPPDATA%\GoogleCalendarManagement\credentials\` → `[project-root]\credentials\`
+3. The old AppData folder can be deleted afterward.
 
 ### Trimming issues in published build
 All publish profiles use `PublishTrimmed=false`. EF Core migrations and the WinUI 3 XAML loader use reflection incompatible with IL trimming. Do not enable trimming.

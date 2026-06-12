@@ -17,6 +17,57 @@ namespace GoogleCalendarManagement.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.12");
 
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.AuditLog", b =>
+                {
+                    b.Property<int>("LogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("log_id");
+
+                    b.Property<string>("AffectedDates")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("affected_dates");
+
+                    b.Property<string>("AffectedEvents")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("affected_events");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("OperationDetails")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("operation_details");
+
+                    b.Property<string>("OperationType")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("operation_type");
+
+                    b.Property<bool?>("Success")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("success");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("timestamp");
+
+                    b.Property<bool?>("UserAction")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_action");
+
+                    b.HasKey("LogId");
+
+                    b.HasIndex("OperationType")
+                        .HasDatabaseName("idx_audit_operation");
+
+                    b.HasIndex("Timestamp")
+                        .HasDatabaseName("idx_audit_timestamp");
+
+                    b.ToTable("audit_log", (string)null);
+                });
+
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.CallLogEntry", b =>
                 {
                     b.Property<int>("Id")
@@ -71,10 +122,10 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.HasIndex("Date")
                         .HasDatabaseName("idx_call_log_entry_date");
 
+                    b.HasIndex("ImportId");
+
                     b.HasIndex("Date", "Number", "DurationSeconds")
                         .HasDatabaseName("idx_call_log_entry_dedup");
-
-                    b.HasIndex("ImportId");
 
                     b.ToTable("call_log_entry", (string)null);
                 });
@@ -112,55 +163,115 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.ToTable("call_log_import", (string)null);
                 });
 
-            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.AuditLog", b =>
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.Civ5SessionPoint", b =>
                 {
-                    b.Property<int>("LogId")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
-                        .HasColumnName("log_id");
+                        .HasColumnName("id");
 
-                    b.Property<string>("AffectedDates")
+                    b.Property<DateTime>("FileModifiedAt")
                         .HasColumnType("TEXT")
-                        .HasColumnName("affected_dates");
+                        .HasColumnName("file_modified_at");
 
-                    b.Property<string>("AffectedEvents")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("affected_events");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("error_message");
-
-                    b.Property<string>("OperationDetails")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("operation_details");
-
-                    b.Property<string>("OperationType")
+                    b.Property<string>("GameMode")
                         .IsRequired()
                         .HasColumnType("TEXT")
-                        .HasColumnName("operation_type");
+                        .HasColumnName("game_mode");
 
-                    b.Property<bool?>("Success")
+                    b.Property<string>("LinkedEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("linked_event_id");
+
+                    b.Property<string>("LinkedEventType")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("linked_event_type");
+
+                    b.Property<DateTime>("ScannedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scanned_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileModifiedAt")
+                        .HasDatabaseName("idx_civ5_data_file_modified_at");
+
+                    b.HasIndex("FileModifiedAt", "GameMode")
+                        .IsUnique()
+                        .HasDatabaseName("idx_civ5_data_dedup");
+
+                    b.ToTable("civ5_data", (string)null);
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.ComfyUIFolder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
-                        .HasColumnName("success");
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("added_at");
+
+                    b.Property<string>("FolderPath")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("folder_path");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FolderPath")
+                        .IsUnique()
+                        .HasDatabaseName("idx_comfyui_folder_path");
+
+                    b.ToTable("comfyui_folder", (string)null);
+                });
+
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.ComfyUIScanPoint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("event_type");
+
+                    b.Property<string>("LinkedEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("linked_event_id");
+
+                    b.Property<string>("LinkedEventType")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("linked_event_type");
+
+                    b.Property<DateTime>("ScannedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scanned_at");
 
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("TEXT")
                         .HasColumnName("timestamp");
 
-                    b.Property<bool?>("UserAction")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("user_action");
-
-                    b.HasKey("LogId");
-
-                    b.HasIndex("OperationType")
-                        .HasDatabaseName("idx_audit_operation");
+                    b.HasKey("Id");
 
                     b.HasIndex("Timestamp")
-                        .HasDatabaseName("idx_audit_timestamp");
+                        .HasDatabaseName("idx_comfyui_data_timestamp");
 
-                    b.ToTable("audit_log", (string)null);
+                    b.HasIndex("Timestamp", "EventType")
+                        .IsUnique()
+                        .HasDatabaseName("idx_comfyui_data_dedup");
+
+                    b.ToTable("comfyui_data", (string)null);
                 });
 
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.Config", b =>
@@ -188,56 +299,6 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.HasKey("ConfigKey");
 
                     b.ToTable("config", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            ConfigKey = "min_event_duration_minutes",
-                            ConfigType = "integer",
-                            ConfigValue = "5",
-                            Description = "Minimum duration to show events",
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
-                        },
-                        new
-                        {
-                            ConfigKey = "phone_coalesce_gap_minutes",
-                            ConfigType = "integer",
-                            ConfigValue = "15",
-                            Description = "Max gap for phone coalescing",
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
-                        },
-                        new
-                        {
-                            ConfigKey = "youtube_coalesce_gap_minutes",
-                            ConfigType = "integer",
-                            ConfigValue = "30",
-                            Description = "Gap after video duration for YouTube",
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
-                        },
-                        new
-                        {
-                            ConfigKey = "call_min_duration_minutes",
-                            ConfigType = "integer",
-                            ConfigValue = "3",
-                            Description = "Minimum call duration to import",
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
-                        },
-                        new
-                        {
-                            ConfigKey = "youtube_char_limit_short",
-                            ConfigType = "integer",
-                            ConfigValue = "40",
-                            Description = "Char limit for events <90min",
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
-                        },
-                        new
-                        {
-                            ConfigKey = "eight_fifteen_threshold",
-                            ConfigType = "integer",
-                            ConfigValue = "8",
-                            Description = "Minutes required in 15-min block",
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
-                        });
                 });
 
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.DataSource", b =>
@@ -250,6 +311,10 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("ColorHex")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("color_hex");
 
                     b.Property<string>("Description")
                         .HasColumnType("TEXT")
@@ -688,6 +753,44 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.ToTable("gcal_event_version", (string)null);
                 });
 
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.MapsTimelineRaw", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly?>("CoveredDateMax")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("covered_date_max");
+
+                    b.Property<DateOnly?>("CoveredDateMin")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("covered_date_min");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("file_name");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("file_size_bytes");
+
+                    b.Property<DateTime>("ImportedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("imported_at");
+
+                    b.Property<string>("RawJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("raw_json");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("maps_timeline_raw", (string)null);
+                });
+
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.PendingEvent", b =>
                 {
                     b.Property<string>("PendingEventId")
@@ -873,6 +976,70 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.ToTable("save_state", (string)null);
                 });
 
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.OutlookEvent", b =>
+                {
+                    b.Property<string>("OutlookEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BodyPreview")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("body_preview");
+
+                    b.Property<DateTime>("EndDatetime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("end_datetime");
+
+                    b.Property<bool>("IsAllDay")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_all_day");
+
+                    b.Property<bool>("IsRecurring")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_recurring");
+
+                    b.Property<bool>("IsSuppressed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_suppressed");
+
+                    b.Property<DateTime>("LastSyncedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_synced_at");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("location");
+
+                    b.Property<string>("Organizer")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("organizer");
+
+                    b.Property<string>("SeriesMasterId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("series_master_id");
+
+                    b.Property<DateTime>("StartDatetime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("start_datetime");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subject");
+
+                    b.HasKey("OutlookEventId");
+
+                    b.HasIndex("StartDatetime")
+                        .HasDatabaseName("idx_outlook_event_start");
+
+                    b.HasIndex("IsSuppressed")
+                        .HasDatabaseName("idx_outlook_event_suppressed");
+
+                    b.ToTable("outlook_event", (string)null);
+                });
+
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.SpotifyStream", b =>
                 {
                     b.Property<int>("Id")
@@ -908,11 +1075,12 @@ namespace GoogleCalendarManagement.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex(new[] { "PlayedAt", "TrackName" }, "idx_spotify_data_dedup")
-                        .IsUnique();
-
                     b.HasIndex("PlayedAt")
                         .HasDatabaseName("idx_spotify_data_played_at");
+
+                    b.HasIndex("PlayedAt", "TrackName")
+                        .IsUnique()
+                        .HasDatabaseName("idx_spotify_data_dedup");
 
                     b.ToTable("spotify_data", (string)null);
                 });
@@ -1019,35 +1187,13 @@ namespace GoogleCalendarManagement.Data.Migrations
 
                     b.HasIndex("PublishedGcalEventId");
 
-                    b.HasIndex("StartTime", "EndTime")
-                        .HasDatabaseName("idx_toggl_date");
-
                     b.HasIndex("TogglDataType")
                         .HasDatabaseName("idx_toggl_type");
 
+                    b.HasIndex("StartTime", "EndTime")
+                        .HasDatabaseName("idx_toggl_date");
+
                     b.ToTable("toggl_data", (string)null);
-                });
-
-            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.TogglSleepQuality", b =>
-                {
-                    b.Property<DateOnly>("Date")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("date");
-
-                    b.Property<int?>("Quality")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("quality");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Date");
-
-                    b.ToTable("toggl_sleep_quality", t =>
-                        {
-                            t.HasCheckConstraint("CK_toggl_sleep_quality_quality_range", "quality IS NULL OR (quality >= 0 AND quality <= 10)");
-                        });
                 });
 
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.TogglPhoneRule", b =>
@@ -1089,153 +1235,26 @@ namespace GoogleCalendarManagement.Data.Migrations
                     b.ToTable("toggl_phone_rule", (string)null);
                 });
 
-            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.MapsTimelineRaw", b =>
+            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.TogglSleepQuality", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("date");
+
+                    b.Property<int?>("Quality")
                         .HasColumnType("INTEGER")
-                        .HasColumnName("id");
+                        .HasColumnName("quality");
 
-                    b.Property<DateTime>("ImportedAt")
+                    b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT")
-                        .HasColumnName("imported_at");
+                        .HasColumnName("updated_at");
 
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("file_name");
+                    b.HasKey("Date");
 
-                    b.Property<long>("FileSizeBytes")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("file_size_bytes");
-
-                    b.Property<DateOnly?>("CoveredDateMin")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("covered_date_min");
-
-                    b.Property<DateOnly?>("CoveredDateMax")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("covered_date_max");
-
-                    b.Property<string>("RawJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("raw_json");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("maps_timeline_raw", (string)null);
-                });
-
-            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.Civ5SessionPoint", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("ScannedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("scanned_at");
-
-                    b.Property<DateTime>("FileModifiedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("file_modified_at");
-
-                    b.Property<string>("GameMode")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("game_mode");
-
-                    b.Property<string>("LinkedEventId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("linked_event_id");
-
-                    b.Property<string>("LinkedEventType")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("linked_event_type");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FileModifiedAt", "GameMode")
-                        .IsUnique()
-                        .HasDatabaseName("idx_civ5_data_dedup");
-
-                    b.HasIndex("FileModifiedAt")
-                        .HasDatabaseName("idx_civ5_data_file_modified_at");
-
-                    b.ToTable("civ5_data", (string)null);
-                });
-
-            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.ComfyUIFolder", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("id");
-
-                    b.Property<string>("FolderPath")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("folder_path");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<DateTime>("AddedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("added_at");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FolderPath")
-                        .IsUnique()
-                        .HasDatabaseName("idx_comfyui_folder_path");
-
-                    b.ToTable("comfyui_folder", (string)null);
-                });
-
-            modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.ComfyUIScanPoint", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("ScannedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("scanned_at");
-
-                    b.Property<DateTime>("Timestamp")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("timestamp");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("event_type");
-
-                    b.Property<string>("LinkedEventId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("linked_event_id");
-
-                    b.Property<string>("LinkedEventType")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("linked_event_type");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Timestamp")
-                        .HasDatabaseName("idx_comfyui_data_timestamp");
-
-                    b.HasIndex("Timestamp", "EventType")
-                        .IsUnique()
-                        .HasDatabaseName("idx_comfyui_data_dedup");
-
-                    b.ToTable("comfyui_data", (string)null);
+                    b.ToTable("toggl_sleep_quality", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_toggl_sleep_quality_quality_range", "quality IS NULL OR (quality >= 0 AND quality <= 10)");
+                        });
                 });
 
             modelBuilder.Entity("GoogleCalendarManagement.Data.Entities.CallLogEntry", b =>

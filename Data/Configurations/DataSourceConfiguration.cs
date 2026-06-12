@@ -16,6 +16,7 @@ public class DataSourceConfiguration : IEntityTypeConfiguration<DataSource>
         builder.Property(e => e.DisplayName).HasColumnName("display_name").IsRequired();
         builder.Property(e => e.Description).HasColumnName("description");
         builder.Property(e => e.SupportsNoDataHint).HasColumnName("supports_no_data_hint").HasDefaultValue(false);
+        builder.Property(e => e.ColorHex).HasColumnName("color_hex");
         builder.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired();
 
         builder.HasIndex(e => e.SourceKey).IsUnique().HasDatabaseName("idx_data_source_key");

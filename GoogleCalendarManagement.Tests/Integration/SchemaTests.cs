@@ -123,22 +123,51 @@ public class SchemaTests
     }
 
     [Fact]
-    public async Task Config_SeedData_PresentAfterMigration()
+    public async Task OutlookEvent_TableExistsWithExpectedColumns_AfterMigration()
     {
-        // Arrange — MigrateAsync runs HasData seed
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info('outlook_event')";
+        var columns = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            columns.Add(reader.GetString(1));
+
+        // Assert
+        columns.Should().Contain("id");
+        columns.Should().Contain("subject");
+        columns.Should().Contain("start_datetime");
+        columns.Should().Contain("end_datetime");
+        columns.Should().Contain("is_all_day");
+        columns.Should().Contain("organizer");
+        columns.Should().Contain("location");
+        columns.Should().Contain("body_preview");
+        columns.Should().Contain("is_recurring");
+        columns.Should().Contain("series_master_id");
+        columns.Should().Contain("last_synced_at");
+        columns.Should().Contain("is_suppressed");
+    }
+
+    [Fact]
+    public async Task Config_ThresholdRows_RemovedAfterMigration()
+    {
+        // Arrange — RemoveThresholdConfigRows migration deletes the 6 seed rows; thresholds now live in ImportThresholds.cs
         using var ctx = await CreateMigratedInMemoryContextAsync();
 
         // Act
         var configs = await ctx.Configs.ToListAsync();
 
-        // Assert
-        configs.Should().HaveCount(6);
-        configs.Should().Contain(c => c.ConfigKey == "min_event_duration_minutes" && c.ConfigValue == "5");
-        configs.Should().Contain(c => c.ConfigKey == "phone_coalesce_gap_minutes" && c.ConfigValue == "15");
-        configs.Should().Contain(c => c.ConfigKey == "youtube_coalesce_gap_minutes" && c.ConfigValue == "30");
-        configs.Should().Contain(c => c.ConfigKey == "call_min_duration_minutes" && c.ConfigValue == "3");
-        configs.Should().Contain(c => c.ConfigKey == "youtube_char_limit_short" && c.ConfigValue == "40");
-        configs.Should().Contain(c => c.ConfigKey == "eight_fifteen_threshold" && c.ConfigValue == "8");
+        // Assert — config table exists but threshold rows are gone
+        configs.Should().NotContain(c => c.ConfigKey == "min_event_duration_minutes");
+        configs.Should().NotContain(c => c.ConfigKey == "phone_coalesce_gap_minutes");
+        configs.Should().NotContain(c => c.ConfigKey == "youtube_coalesce_gap_minutes");
+        configs.Should().NotContain(c => c.ConfigKey == "call_min_duration_minutes");
+        configs.Should().NotContain(c => c.ConfigKey == "youtube_char_limit_short");
+        configs.Should().NotContain(c => c.ConfigKey == "eight_fifteen_threshold");
     }
 
     [Fact]
@@ -248,6 +277,25 @@ public class SchemaTests
         columns.Should().Contain("description");
         columns.Should().Contain("supports_no_data_hint");
         columns.Should().Contain("created_at");
+    }
+
+    [Fact]
+    public async Task DataSource_HasColorHexColumn_AfterMigration()
+    {
+        // Arrange
+        await using var ctx = await CreateMigratedInMemoryContextAsync();
+        var connection = ctx.Database.GetDbConnection();
+
+        // Act
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "PRAGMA table_info('data_source')";
+        var columns = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            columns.Add(reader.GetString(1));
+
+        // Assert
+        columns.Should().Contain("color_hex", "data_source table must have color_hex column after AddDataSourceColorHex migration");
     }
 
     [Fact]

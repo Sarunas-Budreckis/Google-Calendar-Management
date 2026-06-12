@@ -26,6 +26,8 @@ public sealed class TogglTransitImportHandler : IDataSourceImportHandler
 
     public string SourceKey => TogglTransitImportService.SourceKey;
 
+    public bool IsApiFetch => true;
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         var selection = await ShowDateRangeDialogAsync(ct);
@@ -83,6 +85,26 @@ public sealed class TogglTransitImportHandler : IDataSourceImportHandler
             Text = "Start date must be before end date.",
             Visibility = Visibility.Collapsed
         };
+        var rateLimitWarning = new Border
+        {
+            Padding = new Thickness(12, 10, 12, 10),
+            CornerRadius = new CornerRadius(4),
+            BorderBrush = (Brush)Application.Current.Resources["SystemFillColorCautionBrush"],
+            BorderThickness = new Thickness(2),
+            Visibility = Visibility.Collapsed,
+            Child = new TextBlock
+            {
+                TextWrapping = TextWrapping.WrapWholeWords,
+                FontSize = 12,
+                Text =
+                    "Rate limit warning: Toggl's free plan allows only 30 API requests per hour. " +
+                    "A large date range or dates older than 3 months may require many paginated requests — " +
+                    "exceeding the limit returns a '402 Payment Required' error (not a billing issue) and " +
+                    "pauses the import for up to an hour.\n\n" +
+                    "For ranges over a month, consider exporting your data from toggl.com and using " +
+                    "the CSV import feature instead."
+            }
+        };
         var progressRing = new ProgressRing
         {
             Width = 24,
@@ -103,6 +125,7 @@ public sealed class TogglTransitImportHandler : IDataSourceImportHandler
                 fromPicker,
                 toPicker,
                 validationText,
+                rateLimitWarning,
                 progressRing
             }
         };
@@ -125,6 +148,11 @@ public sealed class TogglTransitImportHandler : IDataSourceImportHandler
             var isValid = from <= to;
             validationText.Visibility = isValid ? Visibility.Collapsed : Visibility.Visible;
             dialog.IsPrimaryButtonEnabled = isValid;
+
+            var threeMonthsAgo = DateOnly.FromDateTime(DateTime.Today.AddDays(-90));
+            var rangeInDays = (to.ToDateTime(TimeOnly.MinValue) - from.ToDateTime(TimeOnly.MinValue)).TotalDays;
+            var showRateLimitWarning = isValid && (rangeInDays > 31 || from < threeMonthsAgo);
+            rateLimitWarning.Visibility = showRateLimitWarning ? Visibility.Visible : Visibility.Collapsed;
         }
 
         fromPicker.DateChanged += (_, _) => UpdateValidation();

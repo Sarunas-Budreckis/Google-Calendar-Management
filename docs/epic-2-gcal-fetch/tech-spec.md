@@ -5,6 +5,12 @@ Author: Sarunas Budreckis
 Epic ID: epic-2
 Status: Draft
 
+> **[2026-06-08 Migration Note]** Runtime file locations changed. All references to `%LocalAppData%\GoogleCalendarManagement\` in this document are superseded:
+> - Database: `[project-root]\database\calendar.db`
+> - Credentials: `[project-root]\credentials\`
+>
+> The project root is resolved by `Infrastructure\ProjectPaths.GetProjectRoot()`.
+
 ---
 
 ## Overview

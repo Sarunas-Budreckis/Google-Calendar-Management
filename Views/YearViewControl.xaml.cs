@@ -113,6 +113,15 @@ public sealed partial class YearViewControl : Page
                     return;
                 }
 
+                await ViewModel.PushEventNowAsync(_activeColorTarget.EventId);
+            },
+            async () =>
+            {
+                if (_activeColorTarget is null)
+                {
+                    return;
+                }
+
                 await _eventDetailsViewModel.DeleteEventByIdAsync(
                     _activeColorTarget.EventId,
                     _activeColorTarget.SourceKind);

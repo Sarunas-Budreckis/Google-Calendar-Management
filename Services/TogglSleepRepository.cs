@@ -23,7 +23,8 @@ public sealed class TogglSleepRepository : ITogglSleepRepository
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
         return await context.TogglEntries
             .AsNoTracking()
-            .Where(entry => entry.StartTime >= utcStart && entry.StartTime < utcEndExclusive)
+            .Where(entry => entry.StartTime >= utcStart && entry.StartTime < utcEndExclusive
+                            && entry.TogglDataType == null)
             .OrderBy(entry => entry.StartTime)
             .ThenBy(entry => entry.TogglId)
             .ToListAsync(ct);
@@ -39,7 +40,8 @@ public sealed class TogglSleepRepository : ITogglSleepRepository
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
         var entries = await context.TogglEntries
             .AsNoTracking()
-            .Where(entry => entry.StartTime >= utcStart && entry.StartTime < utcEndExclusive)
+            .Where(entry => entry.StartTime >= utcStart && entry.StartTime < utcEndExclusive
+                            && entry.TogglDataType == null)
             .Select(entry => entry.StartTime)
             .ToListAsync(ct);
 

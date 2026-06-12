@@ -26,6 +26,8 @@ public sealed class SpotifyImportHandler : IDataSourceImportHandler
 
     public string SourceKey => SpotifyImportService.SourceKey;
 
+    public bool IsApiFetch => true;
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         var selection = await ShowDateRangeDialogAsync(ct);

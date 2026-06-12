@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using GoogleCalendarManagement.Data;
+using GoogleCalendarManagement.Infrastructure;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using GoogleCalendarManagement.Views;
@@ -85,6 +86,15 @@ namespace GoogleCalendarManagement
                 .Register(serviceProvider.GetRequiredService<ComfyUICardProvider>());
             serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
                 .Register(serviceProvider.GetRequiredService<ComfyUIImportHandler>());
+            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
+                .Register(serviceProvider.GetRequiredService<OutlookImportHandler>());
+            serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
+                .Register(serviceProvider.GetRequiredService<OutlookCardProvider>());
+            var csvHandler = serviceProvider.GetRequiredService<TogglCsvImportHandler>();
+            var importRegistry = serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>();
+            importRegistry.RegisterCsvHandler(TogglSleepImportService.SourceKey, csvHandler);
+            importRegistry.RegisterCsvHandler(TogglTransitImportService.SourceKey, csvHandler);
+            importRegistry.RegisterCsvHandler(TogglPhoneCardProvider.SourceKey, csvHandler);
 
             // Create and activate main window (must happen before RunStartupAsync for ContentDialog XamlRoot)
             window = new Window
@@ -143,12 +153,10 @@ namespace GoogleCalendarManagement
                 catch (Exception ex)
                 {
                     Log.Error(ex, "Database error on startup");
-                    var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                    var backupDir = Path.Combine(localAppData, "GoogleCalendarManagement");
                     var dialog = new ContentDialog
                     {
                         Title = "Startup Error",
-                        Content = $"A database error occurred on startup. Please restore from a backup in:\n{backupDir}",
+                        Content = $"A database error occurred on startup. Please restore from a backup in:\n{Path.Combine(ProjectPaths.GetProjectRoot(), "database", "backups")}",
                         CloseButtonText = "Exit",
                         XamlRoot = startupXamlRoot
                     };
@@ -230,8 +238,8 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ILoggingService, LoggingService>();
             services.AddSingleton<IErrorHandlingService, ErrorHandlingService>();
 
-            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var dbFolder = Path.Combine(localAppData, "GoogleCalendarManagement");
+            var projectRoot = ProjectPaths.GetProjectRoot();
+            var dbFolder = Path.Combine(projectRoot, "database");
             Directory.CreateDirectory(dbFolder);
             var dbPath = Path.Combine(dbFolder, "calendar.db");
 
@@ -240,7 +248,7 @@ namespace GoogleCalendarManagement
                 ConnectionString = $"Data Source={dbPath}"
             };
             services.AddSingleton(dbOptions);
-            services.AddSingleton(new GoogleCalendarOptions(dbFolder));
+            services.AddSingleton(new GoogleCalendarOptions(projectRoot));
             services.AddDbContext<CalendarDbContext>(options =>
                 options.UseSqlite(dbOptions.ConnectionString)
                        .AddInterceptors(new SqliteConnectionInterceptor()));
@@ -290,6 +298,8 @@ namespace GoogleCalendarManagement
             services.AddSingleton<MapsTimelineCardProvider>();
             services.AddSingleton<ITogglPhoneRuleRepository, TogglPhoneRuleRepository>();
             services.AddSingleton<ITogglPhoneClassificationService, TogglPhoneClassificationService>();
+            services.AddSingleton<ITogglCsvImportService, TogglCsvImportService>();
+            services.AddSingleton<TogglCsvImportHandler>();
             services.AddSingleton<ITogglPhoneRepository, TogglPhoneRepository>();
             services.AddSingleton<TogglSlidingWindowService>();
             services.AddSingleton<TogglPhoneCardProvider>();
@@ -361,6 +371,18 @@ namespace GoogleCalendarManagement
             services.AddTransient<ComfyUIDrilldownViewModel>();
             services.AddTransient<ComfyUICompactCardControl>();
             services.AddTransient<ComfyUIDrilldownControl>();
+            services.AddHttpClient<IGraphApiClient, GraphApiClient>(client =>
+            {
+                client.BaseAddress = new Uri("https://graph.microsoft.com/");
+            });
+            services.AddSingleton<IOutlookEventRepository, OutlookEventRepository>();
+            services.AddSingleton<IOutlookImportService, OutlookImportService>();
+            services.AddSingleton<OutlookImportHandler>();
+            services.AddSingleton<OutlookCardProvider>();
+            services.AddTransient<OutlookCompactCardViewModel>();
+            services.AddTransient<OutlookDrilldownViewModel>();
+            services.AddTransient<OutlookCompactCardControl>();
+            services.AddTransient<OutlookDrilldownControl>();
             services.AddTransient<YearViewControl>();
             services.AddTransient<MonthViewControl>();
             services.AddTransient<WeekViewControl>();

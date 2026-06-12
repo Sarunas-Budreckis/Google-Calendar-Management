@@ -26,6 +26,8 @@ public sealed class TogglSleepImportHandler : IDataSourceImportHandler
 
     public string SourceKey => TogglSleepImportService.SourceKey;
 
+    public bool IsApiFetch => true;
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         var selection = await ShowDateRangeDialogAsync(ct);

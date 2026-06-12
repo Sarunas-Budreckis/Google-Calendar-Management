@@ -11,4 +11,5 @@ public interface IDataSourceRepository
     Task<DateSourceIntegration> SetIntegrationAsync(DateOnly date, int dataSourceId, bool integrated, CancellationToken ct = default);
     Task<DataSourceImportLog?> GetLastImportAsync(int dataSourceId, CancellationToken ct = default);
     Task<DataSourceImportLog> AddImportLogAsync(DataSourceImportLog log, CancellationToken ct = default);
+    Task UpdateSourceColorAsync(int dataSourceId, string? colorHex, CancellationToken ct = default);
 }

@@ -31,6 +31,7 @@ public class CalendarDbContext : DbContext
     public DbSet<SpotifyStream> SpotifyStreams { get; set; }
     public DbSet<ComfyUIFolder> ComfyUIFolders { get; set; }
     public DbSet<ComfyUIScanPoint> ComfyUIScanPoints { get; set; }
+    public DbSet<OutlookEvent> OutlookEvents { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

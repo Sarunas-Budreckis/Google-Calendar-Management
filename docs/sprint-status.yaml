@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-06-05T00:00:00-05:00
+last_updated: 2026-06-11T00:00:00-05:00
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
@@ -94,6 +94,7 @@ development_status:
   5-6-toggl-sleep-import: review
   5-7-toggl-sleep-card-and-drilldown: review
   5-8-toggl-reports-api-historical-import: review
+  5-9-data-source-custom-color-picker: review
   epic-5-retrospective: optional
 
   epic-6: backlog  # Batch Day Management — scope doc at docs/epic-6-batch-multi-select/epic-overview.md
@@ -104,6 +105,7 @@ development_status:
   6-5-batch-approve-action: backlog
   6-6-batch-mark-integration-action: backlog
   6-7-batch-select-events: backlog
+  6-8-batch-approve-candidate-events-by-type: backlog  # added for Epic 8/9 linking; depends on Epic 8 + Story 4.6
   epic-6-retrospective: optional
 
   epic-7: contexted  # Additional Data Source Integrations
@@ -114,7 +116,40 @@ development_status:
   7-5-toggl-phone-date-range-rules: done
   7-6-ios-call-log-import: done
   7-7-google-maps-timeline-import: review
+  7-8-outlook-work-calendar-sync: review
   7-10-spotify-stats-fm: done
   7-11-civilization-5-saves: in-progress
   7-12-comfyui-tracking: review
+  7-16-google-maps-timeline-parse: backlog  # added for Epic 8/9 linking; parses maps_timeline_raw into datapoints; depends on 8.7 + 8.11
   epic-7-retrospective: optional
+
+  epic-8: backlog  # Event Model & Raw Data Linking Engine — scope at docs/epic-8-data-linking/epic-overview.md; concepts at docs/epic-8-data-linking/concepts.md
+  # Each story tagged agent (Opus/Sonnet/Codex) + effort (high/medium/low) in the epic overview.
+  8-1-terminology-doc-sweep: backlog                              # Codex, low
+  8-2-unified-event-table-and-migration: backlog                  # Opus, high
+  8-3-event-repository-and-identity-service: backlog              # Opus, medium
+  8-4-migrate-sync-reconciler-to-unified-event-table: backlog     # Opus, high
+  8-5-rendering-and-drilldowns-mint-candidates: backlog           # Sonnet, medium
+  8-6-repoint-history-deleted-recurring-remove-dead-pending: backlog  # Opus, medium
+  8-7-data-point-registry-table-and-source-pointer: backlog       # Sonnet, medium
+  8-8-import-projector-contract-guard-test-reconciliation-sweep: backlog  # Opus, high
+  8-9-project-all-sources-into-datapoints: backlog                # Codex, medium
+  8-10-coverage-service-and-delete-date-source-integration: backlog  # Sonnet, medium
+  8-11-block-clump-provider-contract: backlog                     # Sonnet, medium
+  8-12-link-table-and-link-ignore-unlink-operations: backlog      # Opus, high
+  8-13-link-to-any-event-picker: backlog                          # Sonnet, medium
+  8-14-rule-engine-pipeline: backlog                              # Opus, high
+  8-15-first-rules-spotify-autolink-outlook-generate-candidate: backlog  # Opus, high
+  8-16-closing-code-terminology-cleanup-and-naming-guard: backlog # Codex, low
+  epic-8-retrospective: optional
+
+  epic-9: backlog  # Linking Panel & Workflows — scope at docs/epic-9-linking-panel/epic-overview.md
+  9-1-left-icon-strip-and-three-panels: backlog                   # Sonnet, medium
+  9-2-sources-panel-coverage-rollup-and-ordering: backlog         # Sonnet, medium
+  9-3-linking-panel-by-source-lens: backlog                       # Sonnet, high
+  9-4-linking-panel-by-event-lens: backlog                        # Sonnet, medium
+  9-5-linking-panel-gaps-lens: backlog                            # Sonnet, high
+  9-6-gap-calendar-rendering: backlog                             # Sonnet, medium
+  9-7-gap-detail-panel: backlog                                   # Sonnet, medium
+  9-8-coverage-indicators-and-certified-day-dot: backlog          # Sonnet, low
+  epic-9-retrospective: optional

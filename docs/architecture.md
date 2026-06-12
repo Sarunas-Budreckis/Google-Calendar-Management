@@ -5,6 +5,13 @@
 **Date:** 2026-01-30
 **Architecture Version:** 1.0
 
+> **[2026-06-08 Migration Note]** Runtime file locations changed. All references in this document to `%LocalAppData%\GoogleCalendarManagement\` are superseded:
+> - Database: `[project-root]\database\calendar.db` (backups in `database\backups\`)
+> - Logs: `[project-root]\logs\`
+> - Credentials: `[project-root]\credentials\`
+>
+> The project root is resolved at runtime by `Infrastructure\ProjectPaths.GetProjectRoot()`, which walks up from `AppContext.BaseDirectory` until it finds a directory containing a `*.csproj` file. Threshold constants previously seeded into the `config` table now live in `Constants\ImportThresholds.cs`.
+
 ## Executive Summary
 
 This architecture document defines the technical foundation for Google Calendar Management, a Windows desktop application built with .NET 9 and WinUI 3. The application transforms retroactive life tracking from a tedious chore into a beautiful, satisfying ritual through intelligent data consolidation and approval workflows.

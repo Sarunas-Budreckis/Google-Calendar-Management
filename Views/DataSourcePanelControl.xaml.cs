@@ -1,5 +1,6 @@
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI.Input;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.Foundation;
 
@@ -206,4 +207,60 @@ public sealed partial class DataSourcePanelControl : UserControl
         _dragHandle = null;
         _isDraggingDayCard = false;
     }
+
+    private void ColorSwatchButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.DataContext is not DataSourceSummaryViewModel vm)
+        {
+            return;
+        }
+
+        ShowColorPickerFlyout(button, vm);
+    }
+
+    private void ShowColorPickerFlyout(Button anchor, DataSourceSummaryViewModel vm)
+    {
+        var picker = new ColorPicker
+        {
+            IsAlphaEnabled = false,
+            IsHexInputVisible = true,
+            Color = ParseHexToColor(vm.ColorHex ?? "#22874A")
+        };
+
+        var applyButton = new Button
+        {
+            Content = "Apply",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(0, 8, 0, 0),
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"]
+        };
+
+        var flyout = new Flyout
+        {
+            Content = new StackPanel
+            {
+                Children = { picker, applyButton }
+            }
+        };
+
+        applyButton.Click += async (_, _) =>
+        {
+            flyout.Hide();
+            await vm.UpdateColorAsync(FormatColorToHex(picker.Color));
+        };
+
+        flyout.ShowAt(anchor);
+    }
+
+    private static Windows.UI.Color ParseHexToColor(string hex)
+    {
+        var s = hex.TrimStart('#');
+        var r = Convert.ToByte(s.Substring(0, 2), 16);
+        var g = Convert.ToByte(s.Substring(2, 2), 16);
+        var b = Convert.ToByte(s.Substring(4, 2), 16);
+        return Windows.UI.Color.FromArgb(0xFF, r, g, b);
+    }
+
+    private static string FormatColorToHex(Windows.UI.Color c) =>
+        $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 }

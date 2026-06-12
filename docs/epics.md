@@ -5,6 +5,13 @@
 **Project Level:** Level 2 (Medium Complexity Desktop Application)
 **Target Scale:** Personal single-user Windows desktop application
 
+> **[2026-06-08 Migration Note]** Runtime file locations changed. All references to `%LocalAppData%\GoogleCalendarManagement\` in this document are superseded:
+> - Database: `[project-root]\database\calendar.db` (backups in `database\backups\`)
+> - Logs: `[project-root]\logs\`
+> - Credentials: `[project-root]\credentials\`
+>
+> Threshold constants previously seeded into the `config` DB table now live in `Constants\ImportThresholds.cs`.
+
 ---
 
 ## Overview
@@ -1367,8 +1374,11 @@ so that **I can categorize events visually**.
 - 6.5: Batch approve action (bulk approval with confirmation)
 - 6.6: Batch mark integration action (source picker; bulk write to `date_source_integration`)
 - 6.7: Batch select events (select all events across batch dates; feeds into multi-select)
+- 6.8: Batch-approve candidate events by type (select all candidates of a source — e.g. all Outlook — and approve at once) — **added for Epic 8/9 linking**; depends on Epic 8 candidate lifecycle + Story 4.6 multi-select
 
-**Epic 6 Sequencing:** Depends on Epic 5 complete. Story 6.7 also depends on Story 4.6 (multi-select events).
+> **[2026-06-11 Note]** Story 6.6 ("mark integration") is superseded by computed **coverage** in Epic 8 (the `date_source_integration` table is being deleted). Re-scope or drop 6.6 when Epic 6 is contexted. See [epic-8-data-linking/concepts.md](epic-8-data-linking/concepts.md).
+
+**Epic 6 Sequencing:** Depends on Epic 5 complete. Story 6.7 also depends on Story 4.6 (multi-select events). Story 6.8 depends on Epic 8.
 
 **What's NOT in Epic 6:**
 ❌ Multiple simultaneous batches
@@ -1401,8 +1411,9 @@ so that **I can categorize events visually**.
 - 7.13: Voice Memos — .m4a metadata; playback from drilldown; no candidate events
 - 7.14: Chrome Search History — local DB or Takeout JSON; full copy; vertical dot drilldown
 - 7.15: iOS Screen Time investigation — findings document only, no implementation
+- 7.16: Google Maps Timeline parse — parse `maps_timeline_raw` JSON into per-segment location datapoints (using the Google Maps API, as the standalone viewer does) — **added for Epic 8/9 linking**; emits into the Epic 8 datapoint registry shape; depends on Stories 8.7 + 8.11
 
-**Epic 7 Sequencing:** Depends on Epic 5 complete. Does NOT require Epic 6. Individual stories are largely independent of each other (7.1 is a prerequisite for 7.2–7.4).
+**Epic 7 Sequencing:** Depends on Epic 5 complete. Does NOT require Epic 6. Individual stories are largely independent of each other (7.1 is a prerequisite for 7.2–7.4). Story 7.16 depends on Epic 8 Phase 1.
 
 **What's NOT in Epic 7:**
 ❌ Automated Google Takeout export (future — noted in 7.9)
@@ -1412,3 +1423,67 @@ so that **I can categorize events visually**.
 ❌ iOS Screen Time implementation (7.15 is investigation only)
 ❌ Batch operations across sources (Epic 6)
 ❌ Source configuration UI (future)
+
+---
+
+## Epic 8: Event Model & Raw Data Linking Engine
+
+**Goal:** Build the foundation and engine for total raw-data accountability — a unified event model with stable local identity, a normalized **datapoint** registry every source projects into, an undoable **link/ignore/unlink** model, and a hardcoded **rule engine** that proposes link/ignore/generate-candidate operations while preserving linkage integrity across any sequence of operations.
+
+**Concepts & data model:** [docs/epic-8-data-linking/concepts.md](epic-8-data-linking/concepts.md) — canonical vocabulary (datapoint, clump/block, candidate vs approved event, coverage, rules vs link order).
+**Full scope:** [docs/epic-8-data-linking/epic-overview.md](epic-8-data-linking/epic-overview.md)
+
+Each story is tagged with a recommended implementing **agent** (Opus / Sonnet / Codex) and **thinking effort** (high / medium / low).
+
+**Story Candidates:**
+- 8.1: Terminology doc-sweep across planning artifacts — *Codex, low*
+- 8.2: Unified `event` table + stable id + atomic migration (merges `gcal_event` + `pending_event`) — *Opus, high*
+- 8.3: Event repository + identity service — *Opus, medium*
+- 8.4: Migrate sync reconciler to unified event table — *Opus, high*
+- 8.5: Rendering + drilldowns mint candidates in new model (candidate = translucent) — *Sonnet, medium*
+- 8.6: Repoint version history / deleted / recurring; remove dead pending code — *Opus, medium*
+- 8.7: `data_point` registry table + source-pointer model — *Sonnet, medium*
+- 8.8: Import projector contract + reflection guard test + reconciliation sweep — *Opus, high*
+- 8.9: Project all existing sources into datapoints (+ natural keys for re-import) — *Codex, medium*
+- 8.10: Coverage service + delete `DateSourceIntegration` — *Sonnet, medium*
+- 8.11: Block/clump provider contract + adapt existing coalescers (computed, not persisted) — *Sonnet, medium*
+- 8.12: `link` table + link/ignore/unlink operations (undoable, clump-grouped) — *Opus, high*
+- 8.13: Link-to-any-event picker (tolerates non-concurrency) — *Sonnet, medium*
+- 8.14: Rule engine pipeline (propose-ops, invariants, triggers, reversal) — *Opus, high*
+- 8.15: First concrete rules — Spotify auto-link, Outlook generate-candidate — *Opus, high*
+- 8.16: Closing code terminology-cleanup + naming guard — *Codex, low*
+
+**Epic 8 Sequencing:** Phase 0 (event unification, 8.1–8.6) → Phase 1 (registry & coverage, 8.7–8.11) → Phase 2 (link model & rules, 8.12–8.16). Depends on Epic 7 sources existing. Uses Story 1.4 backup-before-migration infra.
+
+**What's NOT in Epic 8:**
+❌ Linking panel UI and the four workflows (Epic 9)
+❌ Full 10+ rule catalog beyond the first two (deferred)
+❌ Rules/automation visibility panel (unscoped)
+❌ Playback / embedding (future epic)
+❌ Maps JSON → datapoint parsing (Story 7.16)
+
+---
+
+## Epic 9: Linking Panel & Workflows
+
+**Goal:** Deliver the user experience for total raw-data accountability on top of the Epic 8 engine — a third left panel (**Linking panel**) hosting the four linking workflows, a left **icon strip** to switch panels, gap visualization on the calendar, and coverage indicators throughout. Focus on ease of linking and readability of what is/isn't accounted for.
+
+**Full scope:** [docs/epic-9-linking-panel/epic-overview.md](epic-9-linking-panel/epic-overview.md)
+
+**Story Candidates:**
+- 9.1: Left icon strip + 3 selectable panels (Sources, Day Detail, Linking) — *Sonnet, medium*
+- 9.2: Sources panel coverage rollup + rule-driven ordering (`x/y datapoints`) — *Sonnet, medium*
+- 9.3: Linking panel — By Source lens (W1+W2; view or date-range scope; link/ignore/unlink/+event) — *Sonnet, high*
+- 9.4: Linking panel — By Event lens (W3; right-click → concurrent data; bulk link/ignore) — *Sonnet, medium*
+- 9.5: Linking panel — Gaps lens (W4; cross-source blank-period clumps; create-event-from-gap) — *Sonnet, high*
+- 9.6: Gap calendar rendering (gray outlines + `+` when Gaps active; gaps ≤24h) — *Sonnet, medium*
+- 9.7: Gap detail panel (top-4 sources, vertical color dots, expandable) — later, details TBD — *Sonnet, medium*
+- 9.8: Coverage indicators everywhere + tiny dot on certified days with unlinked data — *Sonnet, low*
+
+**Epic 9 Sequencing:** Depends on Epic 8 complete. Uses Epic 5 three-panel layout and Story 4.6 multi-select. **Milestone:** Stories 8.10 + 9.3 together make the system usable for bulk linking across 3+ data sources.
+
+**What's NOT in Epic 9:**
+❌ Engine/data concerns (Epic 8)
+❌ Rules/automation visibility panel (unscoped)
+❌ Per-source rendering specifics beyond shared dot/clump patterns (deferred)
+❌ Playback / embedding (future epic)

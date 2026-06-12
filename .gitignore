@@ -64,13 +64,12 @@ credentials/
 appsettings.secrets.json
 
 ## Runtime database artifacts
-# The app's real SQLite database is NOT stored in this repository.
-# Runtime files live under %LOCALAPPDATA%\GoogleCalendarManagement\calendar.db.
+# The app's SQLite database lives at database/calendar.db (project root).
+# Backups go to database/backups/. The entire database/ folder is gitignored.
 # Do not ignore the repo's `Data/` folder here: `Data/Entities`, `Data/Configurations`,
 # and `Data/Migrations` are tracked C# source files, not local user data.
-*.db
-*.db-shm
-*.db-wal
+database/
+logs/
 
 ## OS specific
 # Windows

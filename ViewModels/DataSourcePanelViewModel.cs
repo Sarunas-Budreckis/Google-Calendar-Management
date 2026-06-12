@@ -436,7 +436,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                     displayName: FormatSourceKey(handler.SourceKey),
                     lastDataDateLabel: "Never imported",
                     lastImportedRelativeLabel: null,
-                    handlerRegistry: _importHandlerRegistry));
+                    handlerRegistry: _importHandlerRegistry,
+                    dataSourceRepository: _dataSourceRepository));
             }
 
             Sources.Clear();
@@ -487,7 +488,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                     {
                         WeakReferenceMessenger.Default.Send(new DataSourceDayOpenRequestedMessage(date, source.SourceKey));
                         return Task.CompletedTask;
-                    }))
+                    },
+                    source.ColorHex))
                 .ToList();
         }
 
@@ -498,6 +500,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
             lastDataDateLabel,
             lastImportedRelativeLabel,
             _importHandlerRegistry,
+            _dataSourceRepository,
+            source.ColorHex,
             dayDataMarkers);
     }
 

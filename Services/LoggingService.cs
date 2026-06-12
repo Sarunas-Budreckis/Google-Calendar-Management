@@ -1,4 +1,5 @@
 using System.Reflection;
+using GoogleCalendarManagement.Infrastructure;
 using Serilog;
 using Serilog.Events;
 
@@ -8,9 +9,7 @@ public class LoggingService : ILoggingService
 {
     public void Configure()
     {
-        var logFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GoogleCalendarManagement", "logs");
+        var logFolder = Path.Combine(ProjectPaths.GetProjectRoot(), "logs");
         Directory.CreateDirectory(logFolder);
 
         Log.Logger = new LoggerConfiguration()

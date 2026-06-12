@@ -2,15 +2,14 @@ namespace GoogleCalendarManagement.Services;
 
 public sealed class GoogleCalendarOptions
 {
-    public GoogleCalendarOptions(string appDataDirectory)
+    public GoogleCalendarOptions(string projectRoot)
     {
-        AppDataDirectory = appDataDirectory;
-        // OAuth client secrets are intentionally loaded from LocalAppData so they stay outside the repo and git history.
-        CredentialsDirectoryPath = Path.Combine(appDataDirectory, "credentials");
+        ProjectRoot = projectRoot;
+        CredentialsDirectoryPath = Path.Combine(projectRoot, "credentials");
         ClientSecretPath = Path.Combine(CredentialsDirectoryPath, "client_secret.json");
     }
 
-    public string AppDataDirectory { get; }
+    public string ProjectRoot { get; }
 
     public string CredentialsDirectoryPath { get; }
 
