@@ -6,18 +6,18 @@ namespace GoogleCalendarManagement.Services;
 
 public sealed class IcsExportService : IIcsExportService
 {
-    private readonly IGcalEventRepository _gcalEventRepository;
+    private readonly IEventRepository _eventRepository;
     private readonly IIcsFileSavePickerService _fileSavePickerService;
     private readonly ILogger<IcsExportService> _logger;
     private readonly TimeProvider _timeProvider;
 
     public IcsExportService(
-        IGcalEventRepository gcalEventRepository,
+        IEventRepository eventRepository,
         IIcsFileSavePickerService fileSavePickerService,
         ILogger<IcsExportService> logger,
         TimeProvider? timeProvider = null)
     {
-        _gcalEventRepository = gcalEventRepository;
+        _eventRepository = eventRepository;
         _fileSavePickerService = fileSavePickerService;
         _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -40,7 +40,7 @@ public sealed class IcsExportService : IIcsExportService
 
         var rangeStartUtc = from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var rangeEndExclusiveUtc = to.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var candidateEvents = await _gcalEventRepository.GetByDateRangeAsync(from, to, ct);
+        var candidateEvents = await _eventRepository.GetByDateRangeAsync(from, to, ct);
         var exportEvents = candidateEvents
             .Where(calendarEvent => IntersectsRange(calendarEvent, rangeStartUtc, rangeEndExclusiveUtc))
             .ToList();
@@ -92,12 +92,15 @@ public sealed class IcsExportService : IIcsExportService
 
     public Task<(DateOnly From, DateOnly To)?> GetStoredEventRangeAsync(CancellationToken ct = default)
     {
-        return _gcalEventRepository.GetStoredDateRangeAsync(ct);
+        return _eventRepository.GetStoredDateRangeAsync(ct);
     }
 
-    private static bool IntersectsRange(GcalEvent calendarEvent, DateTime rangeStartUtc, DateTime rangeEndExclusiveUtc)
+    private static bool IntersectsRange(Event calendarEvent, DateTime rangeStartUtc, DateTime rangeEndExclusiveUtc)
     {
-        if (calendarEvent.IsDeleted || !calendarEvent.StartDatetime.HasValue)
+        // Only published GCal events (with a gcal id) are exportable; skip deleted and local-only rows.
+        if (calendarEvent.IsDeleted ||
+            string.IsNullOrWhiteSpace(calendarEvent.GcalEventId) ||
+            !calendarEvent.StartDatetime.HasValue)
         {
             return false;
         }

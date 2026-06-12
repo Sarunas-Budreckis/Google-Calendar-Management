@@ -37,7 +37,7 @@ public sealed class IcsExportServiceTests : IDisposable
         await SeedEventsAsync();
         var exportPath = Path.Combine(_tempDirectory, "calendar-export-2026-04-05.ics");
         var service = new IcsExportService(
-            new GcalEventRepository(_contextFactory),
+            new EventRepository(_contextFactory),
             new StubIcsFileSavePickerService(exportPath),
             NullLogger<IcsExportService>.Instance,
             new FixedTimeProvider(new DateTimeOffset(2026, 04, 05, 12, 00, 00, TimeSpan.Zero)));
@@ -64,7 +64,7 @@ public sealed class IcsExportServiceTests : IDisposable
     {
         await SeedEventsAsync();
         var service = new IcsExportService(
-            new GcalEventRepository(_contextFactory),
+            new EventRepository(_contextFactory),
             new StubIcsFileSavePickerService(null),
             NullLogger<IcsExportService>.Instance,
             new FixedTimeProvider(new DateTimeOffset(2026, 04, 05, 12, 00, 00, TimeSpan.Zero)));
@@ -79,7 +79,7 @@ public sealed class IcsExportServiceTests : IDisposable
     {
         var exportPath = Path.Combine(_tempDirectory, "empty.ics");
         var service = new IcsExportService(
-            new GcalEventRepository(_contextFactory),
+            new EventRepository(_contextFactory),
             new StubIcsFileSavePickerService(exportPath),
             NullLogger<IcsExportService>.Instance,
             new FixedTimeProvider(new DateTimeOffset(2026, 04, 05, 12, 00, 00, TimeSpan.Zero)));
@@ -95,7 +95,7 @@ public sealed class IcsExportServiceTests : IDisposable
     public async Task ExportToFileAsync_CancelledPicker_ReturnsCancelledResult()
     {
         var service = new IcsExportService(
-            new GcalEventRepository(_contextFactory),
+            new EventRepository(_contextFactory),
             new StubIcsFileSavePickerService(null),
             NullLogger<IcsExportService>.Instance,
             new FixedTimeProvider(new DateTimeOffset(2026, 04, 05, 12, 00, 00, TimeSpan.Zero)));
@@ -120,21 +120,27 @@ public sealed class IcsExportServiceTests : IDisposable
     private async Task SeedEventsAsync()
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        context.GcalEvents.AddRange(
-            new GcalEvent
+        context.Events.AddRange(
+            new Event
             {
+                EventId = "evt-in-range",
                 GcalEventId = "evt-in-range",
                 CalendarId = "primary",
+                Lifecycle = "approved",
+                Publish = "published",
                 Summary = "In Range",
                 StartDatetime = new DateTime(2026, 04, 05, 15, 00, 00, DateTimeKind.Utc),
                 EndDatetime = new DateTime(2026, 04, 05, 16, 00, 00, DateTimeKind.Utc),
                 UpdatedAt = new DateTime(2026, 04, 02, 10, 00, 00, DateTimeKind.Utc),
                 CreatedAt = new DateTime(2026, 04, 02, 10, 00, 00, DateTimeKind.Utc)
             },
-            new GcalEvent
+            new Event
             {
+                EventId = "evt-all-day",
                 GcalEventId = "evt-all-day",
                 CalendarId = "primary",
+                Lifecycle = "approved",
+                Publish = "published",
                 Summary = "All Day",
                 IsAllDay = true,
                 StartDatetime = new DateTime(2026, 04, 10, 00, 00, 00, DateTimeKind.Utc),
@@ -142,10 +148,13 @@ public sealed class IcsExportServiceTests : IDisposable
                 UpdatedAt = new DateTime(2026, 04, 03, 10, 00, 00, DateTimeKind.Utc),
                 CreatedAt = new DateTime(2026, 04, 03, 10, 00, 00, DateTimeKind.Utc)
             },
-            new GcalEvent
+            new Event
             {
+                EventId = "evt-deleted",
                 GcalEventId = "evt-deleted",
                 CalendarId = "primary",
+                Lifecycle = "approved",
+                Publish = "published",
                 Summary = "Deleted",
                 IsDeleted = true,
                 StartDatetime = new DateTime(2026, 04, 12, 09, 00, 00, DateTimeKind.Utc),
@@ -153,20 +162,26 @@ public sealed class IcsExportServiceTests : IDisposable
                 UpdatedAt = new DateTime(2026, 04, 04, 10, 00, 00, DateTimeKind.Utc),
                 CreatedAt = new DateTime(2026, 04, 04, 10, 00, 00, DateTimeKind.Utc)
             },
-            new GcalEvent
+            new Event
             {
+                EventId = "evt-outside",
                 GcalEventId = "evt-outside",
                 CalendarId = "primary",
+                Lifecycle = "approved",
+                Publish = "published",
                 Summary = "Outside",
                 StartDatetime = new DateTime(2026, 05, 01, 09, 00, 00, DateTimeKind.Utc),
                 EndDatetime = new DateTime(2026, 05, 01, 10, 00, 00, DateTimeKind.Utc),
                 UpdatedAt = new DateTime(2026, 04, 04, 10, 00, 00, DateTimeKind.Utc),
                 CreatedAt = new DateTime(2026, 04, 04, 10, 00, 00, DateTimeKind.Utc)
             },
-            new GcalEvent
+            new Event
             {
+                EventId = "evt-boundary",
                 GcalEventId = "evt-boundary",
                 CalendarId = "primary",
+                Lifecycle = "approved",
+                Publish = "published",
                 Summary = "Boundary",
                 StartDatetime = new DateTime(2026, 03, 31, 23, 00, 00, DateTimeKind.Utc),
                 EndDatetime = new DateTime(2026, 04, 01, 00, 00, 00, DateTimeKind.Utc),

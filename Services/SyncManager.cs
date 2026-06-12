@@ -10,15 +10,18 @@ public sealed class SyncManager : ISyncManager
 {
     private readonly IGoogleCalendarService _googleCalendarService;
     private readonly IDbContextFactory<CalendarDbContext> _contextFactory;
+    private readonly IEventIdentityService _eventIdentityService;
     private readonly ILogger<SyncManager> _logger;
 
     public SyncManager(
         IGoogleCalendarService googleCalendarService,
         IDbContextFactory<CalendarDbContext> contextFactory,
+        IEventIdentityService eventIdentityService,
         ILogger<SyncManager> logger)
     {
         _googleCalendarService = googleCalendarService;
         _contextFactory = contextFactory;
+        _eventIdentityService = eventIdentityService;
         _logger = logger;
     }
 
@@ -86,13 +89,109 @@ public sealed class SyncManager : ISyncManager
 
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        // TODO 8.4: persist fetched GCal events into the unified `event` table (match on
-        // gcal_event_id, snapshot version history, reconcile deletes). The gcal_event table was
-        // removed in Story 8.2, so the reconciler is stubbed here — sync still fetches from GCal
-        // and records its metadata (refresh token, audit log), but event rows are not written
-        // until the Story 8.4 reconciler lands. Counts reflect events fetched, not persisted.
-        eventsProcessed = fetchedEvents.Count;
-        _ = syncedAt;
+        try
+        {
+            foreach (var incomingEvent in fetchedEvents)
+            {
+                if (!fetchWasCancelled && ct.IsCancellationRequested)
+                {
+                    cancellationRequestedDuringPersistence = true;
+                    break;
+                }
+
+                // Match on the GCal-assigned id (nullable UNIQUE). Local-only events have a null
+                // gcal_event_id and can never match an incoming GCal id, so they are left untouched.
+                var existingEvent = await context.Events
+                    .SingleOrDefaultAsync(e => e.GcalEventId == incomingEvent.GcalEventId, CancellationToken.None);
+
+                if (existingEvent is null)
+                {
+                    var eventId = _eventIdentityService.MintEventId();
+                    context.Events.Add(CreateEventEntity(incomingEvent, eventId, syncedAt));
+                    if (incomingEvent.IsDeleted)
+                    {
+                        eventsDeleted++;
+                    }
+                    else
+                    {
+                        eventsAdded++;
+                    }
+                }
+                else if (incomingEvent.IsDeleted)
+                {
+                    if (!existingEvent.IsDeleted)
+                    {
+                        if (existingEvent.HasUnpublishedChanges)
+                        {
+                            // GCal is authoritative for deletes; the staged local edit is discarded.
+                            _logger.LogWarning(
+                                "Local edit discarded by remote delete for event {EventId} (gcal_event_id {GcalEventId}).",
+                                existingEvent.EventId,
+                                existingEvent.GcalEventId);
+                        }
+
+                        context.GcalEventVersions.Add(CreateVersionSnapshot(existingEvent, "deleted", syncedAt));
+                        eventsDeleted++;
+                    }
+
+                    ApplyDeletedValues(existingEvent, incomingEvent, syncedAt);
+                }
+                else
+                {
+                    // Local unpublished edits are sacred: never snapshot/overwrite user-facing fields
+                    // while has_unpublished_changes is set (ApplyIncomingValues only refreshes metadata).
+                    if (!existingEvent.HasUnpublishedChanges && ShouldSnapshotForUpdate(existingEvent, incomingEvent))
+                    {
+                        context.GcalEventVersions.Add(CreateVersionSnapshot(existingEvent, "updated", syncedAt));
+                    }
+
+                    var changed = ApplyIncomingValues(existingEvent, incomingEvent, syncedAt);
+                    if (changed)
+                    {
+                        eventsUpdated++;
+                    }
+                }
+
+                await SaveChangesWithRetryAsync(context, ct);
+                eventsProcessed++;
+                progress?.Report(new SyncProgress(
+                    pagesFetched,
+                    eventsProcessed,
+                    $"Persisted {eventsProcessed} of {fetchedEvents.Count} event(s)..."));
+
+                if (!fetchWasCancelled && ct.IsCancellationRequested)
+                {
+                    cancellationRequestedDuringPersistence = true;
+                    break;
+                }
+            }
+        }
+        catch (Exception ex) when (IsDatabaseLockException(ex))
+        {
+            const string databaseBusyMessage =
+                "The local database is busy or locked. Close SQLite Browser or other tools using the database, then try syncing again.";
+
+            _logger.LogWarning(ex, "Google Calendar sync failed because the SQLite database is locked.");
+
+            await TryPersistSyncMetadataAsync(
+                effectiveStart,
+                effectiveEnd,
+                eventsProcessed,
+                success: false,
+                syncToken: null,
+                errorMessage: databaseBusyMessage,
+                added: eventsAdded,
+                updated: eventsUpdated,
+                deleted: eventsDeleted);
+
+            return new SyncResult(
+                false,
+                eventsAdded,
+                eventsUpdated,
+                eventsDeleted,
+                null,
+                databaseBusyMessage);
+        }
 
         var wasCancelled = fetchWasCancelled || cancellationRequestedDuringPersistence;
         var success = !wasCancelled;
@@ -216,9 +315,144 @@ public sealed class SyncManager : ISyncManager
         }
     }
 
-    // NOTE: the GcalEvent/GcalEventVersion mapping + reconciliation helpers were removed in
-    // Story 8.2 (gcal_event table dropped). They are reintroduced against the unified `event`
-    // table by the Story 8.4 sync reconciler.
+    private static Event CreateEventEntity(GcalEventDto incomingEvent, string eventId, DateTime syncedAt)
+    {
+        return new Event
+        {
+            EventId = eventId,
+            GcalEventId = incomingEvent.GcalEventId,
+            CalendarId = incomingEvent.CalendarId,
+            Summary = incomingEvent.Summary,
+            Description = incomingEvent.Description,
+            StartDatetime = incomingEvent.StartDateTimeUtc,
+            EndDatetime = incomingEvent.EndDateTimeUtc,
+            IsAllDay = incomingEvent.IsAllDay,
+            ColorId = incomingEvent.ColorId,
+            Lifecycle = "approved",
+            Publish = "published",
+            HasUnpublishedChanges = false,
+            SourceSystem = null,
+            GcalEtag = incomingEvent.GcalEtag,
+            GcalUpdatedAt = incomingEvent.GcalUpdatedAtUtc,
+            IsDeleted = incomingEvent.IsDeleted,
+            RecurringEventId = incomingEvent.RecurringEventId,
+            IsRecurringInstance = incomingEvent.IsRecurringInstance,
+            LastSyncedAt = syncedAt,
+            CreatedAt = syncedAt,
+            UpdatedAt = syncedAt
+        };
+    }
+
+    private static GcalEventVersion CreateVersionSnapshot(Event existingEvent, string changeReason, DateTime createdAt)
+    {
+        return new GcalEventVersion
+        {
+            EventId = existingEvent.EventId,
+            GcalEtag = existingEvent.GcalEtag,
+            Summary = existingEvent.Summary,
+            Description = existingEvent.Description,
+            StartDatetime = existingEvent.StartDatetime,
+            EndDatetime = existingEvent.EndDatetime,
+            IsAllDay = existingEvent.IsAllDay,
+            ColorId = existingEvent.ColorId,
+            GcalUpdatedAt = existingEvent.GcalUpdatedAt,
+            RecurringEventId = existingEvent.RecurringEventId,
+            IsRecurringInstance = existingEvent.IsRecurringInstance,
+            ChangedBy = "gcal_sync",
+            ChangeReason = changeReason,
+            CreatedAt = createdAt
+        };
+    }
+
+    private static bool ShouldSnapshotForUpdate(Event existingEvent, GcalEventDto incomingEvent)
+    {
+        var resolvedIncomingColorId = ResolveIncomingColorId(existingEvent.ColorId, incomingEvent.ColorId);
+
+        if (existingEvent.IsDeleted)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(incomingEvent.GcalEtag) &&
+            !string.IsNullOrWhiteSpace(existingEvent.GcalEtag) &&
+            !string.Equals(existingEvent.GcalEtag, incomingEvent.GcalEtag, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return existingEvent.CalendarId != incomingEvent.CalendarId ||
+               existingEvent.Summary != incomingEvent.Summary ||
+               existingEvent.Description != incomingEvent.Description ||
+               existingEvent.StartDatetime != incomingEvent.StartDateTimeUtc ||
+               existingEvent.EndDatetime != incomingEvent.EndDateTimeUtc ||
+               existingEvent.IsAllDay != incomingEvent.IsAllDay ||
+               existingEvent.ColorId != resolvedIncomingColorId ||
+               existingEvent.GcalEtag != incomingEvent.GcalEtag ||
+               existingEvent.GcalUpdatedAt != incomingEvent.GcalUpdatedAtUtc ||
+               existingEvent.RecurringEventId != incomingEvent.RecurringEventId ||
+               existingEvent.IsRecurringInstance != incomingEvent.IsRecurringInstance;
+    }
+
+    private static bool ApplyIncomingValues(Event existingEvent, GcalEventDto incomingEvent, DateTime syncedAt)
+    {
+        // Always refresh sync metadata, even when a local edit is being preserved.
+        existingEvent.GcalEtag = incomingEvent.GcalEtag;
+        existingEvent.GcalUpdatedAt = incomingEvent.GcalUpdatedAtUtc;
+        existingEvent.LastSyncedAt = syncedAt;
+        existingEvent.UpdatedAt = syncedAt;
+
+        if (existingEvent.HasUnpublishedChanges)
+        {
+            // Local unpublished edit is authoritative — do NOT overwrite user-facing fields, and do
+            // not report a remote-driven update (the count tracks GCal-applied changes only).
+            return false;
+        }
+
+        var resolvedIncomingColorId = ResolveIncomingColorId(existingEvent.ColorId, incomingEvent.ColorId);
+        var changed =
+            existingEvent.CalendarId != incomingEvent.CalendarId ||
+            existingEvent.Summary != incomingEvent.Summary ||
+            existingEvent.Description != incomingEvent.Description ||
+            existingEvent.StartDatetime != incomingEvent.StartDateTimeUtc ||
+            existingEvent.EndDatetime != incomingEvent.EndDateTimeUtc ||
+            existingEvent.IsAllDay != incomingEvent.IsAllDay ||
+            existingEvent.ColorId != resolvedIncomingColorId ||
+            existingEvent.IsDeleted != incomingEvent.IsDeleted ||
+            existingEvent.RecurringEventId != incomingEvent.RecurringEventId ||
+            existingEvent.IsRecurringInstance != incomingEvent.IsRecurringInstance;
+
+        existingEvent.CalendarId = incomingEvent.CalendarId;
+        existingEvent.Summary = incomingEvent.Summary;
+        existingEvent.Description = incomingEvent.Description;
+        existingEvent.StartDatetime = incomingEvent.StartDateTimeUtc;
+        existingEvent.EndDatetime = incomingEvent.EndDateTimeUtc;
+        existingEvent.IsAllDay = incomingEvent.IsAllDay;
+        existingEvent.ColorId = resolvedIncomingColorId;
+        existingEvent.IsDeleted = incomingEvent.IsDeleted;
+        existingEvent.RecurringEventId = incomingEvent.RecurringEventId;
+        existingEvent.IsRecurringInstance = incomingEvent.IsRecurringInstance;
+
+        return changed;
+    }
+
+    private static string? ResolveIncomingColorId(string? existingColorId, string? incomingColorId)
+    {
+        return string.IsNullOrWhiteSpace(incomingColorId)
+            ? existingColorId
+            : incomingColorId;
+    }
+
+    private static void ApplyDeletedValues(Event existingEvent, GcalEventDto incomingEvent, DateTime syncedAt)
+    {
+        existingEvent.CalendarId = incomingEvent.CalendarId;
+        existingEvent.GcalEtag = incomingEvent.GcalEtag ?? existingEvent.GcalEtag;
+        existingEvent.GcalUpdatedAt = incomingEvent.GcalUpdatedAtUtc;
+        existingEvent.IsDeleted = true;
+        existingEvent.RecurringEventId = incomingEvent.RecurringEventId;
+        existingEvent.IsRecurringInstance = incomingEvent.IsRecurringInstance;
+        existingEvent.LastSyncedAt = syncedAt;
+        existingEvent.UpdatedAt = syncedAt;
+    }
 
     private static async Task SaveChangesWithRetryAsync(CalendarDbContext context, CancellationToken ct)
     {

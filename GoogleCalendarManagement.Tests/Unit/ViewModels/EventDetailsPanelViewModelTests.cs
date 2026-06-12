@@ -17,7 +17,7 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
 
     private readonly Mock<ICalendarQueryService> _queryServiceMock = new();
     private readonly Mock<ICalendarSelectionService> _selectionServiceMock = new();
-    private readonly Mock<IGcalEventRepository> _gcalEventRepositoryMock = new();
+    private readonly Mock<IEventRepository> _gcalEventRepositoryMock = new();
     private readonly Mock<IPendingEventRepository> _pendingEventRepositoryMock = new();
 
     public EventDetailsPanelViewModelTests()
@@ -25,10 +25,13 @@ public sealed class EventDetailsPanelViewModelTests : IDisposable
         WeakReferenceMessenger.Default.Reset();
         _gcalEventRepositoryMock
             .Setup(repo => repo.GetByGcalEventIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string id, CancellationToken _) => new GcalEvent
+            .ReturnsAsync((string id, CancellationToken _) => new Event
             {
+                EventId = id,
                 GcalEventId = id,
                 CalendarId = "primary",
+                Lifecycle = "approved",
+                Publish = "published",
                 Summary = "Stored title",
                 Description = "Stored description",
                 StartDatetime = UtcBase,

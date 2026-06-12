@@ -62,17 +62,18 @@ public sealed class TogglTransitDrilldownViewModelTests
             endUtc: new DateTime(2026, 06, 04, 13, 10, 0, DateTimeKind.Utc));
         var repository = new StubTogglTransitRepository { Entries = [entry] };
         var pendingEventRepo = new StubPendingEventRepository();
+        var draftService = new StubPendingEventDraftService();
         var selectionService = new StubCalendarSelectionService();
-        var viewModel = CreateViewModel(repository, pendingEventRepo, selectionService);
+        var viewModel = CreateViewModel(repository, pendingEventRepo, selectionService, draftService);
 
         await viewModel.LoadAsync(new DateOnly(2026, 06, 04));
         await viewModel.CreateCandidateEventsCommand.ExecuteAsync(null);
 
         // 10-min trip = 1 block (single block, last block always kept)
-        pendingEventRepo.Upserted.Should().HaveCount(1);
-        pendingEventRepo.Upserted[0].Summary.Should().Be("Driving");
-        pendingEventRepo.Upserted[0].ColorId.Should().Be("lavender");
-        selectionService.LastSelectedId.Should().Be(pendingEventRepo.Upserted[0].PendingEventId);
+        draftService.Created.Should().HaveCount(1);
+        draftService.Created[0].Summary.Should().Be("Driving");
+        draftService.Created[0].ColorId.Should().Be("lavender");
+        selectionService.LastSelectedId.Should().Be(draftService.Created[0].EventId);
     }
 
     [Fact]
@@ -89,14 +90,15 @@ public sealed class TogglTransitDrilldownViewModelTests
         };
         var repository = new StubTogglTransitRepository { Entries = entries };
         var pendingEventRepo = new StubPendingEventRepository();
-        var viewModel = CreateViewModel(repository, pendingEventRepo);
+        var draftService = new StubPendingEventDraftService();
+        var viewModel = CreateViewModel(repository, pendingEventRepo, draftService: draftService);
 
         await viewModel.LoadAsync(new DateOnly(2026, 06, 04));
         await viewModel.CreateCandidateEventsCommand.ExecuteAsync(null);
 
         // Each 20-min trip → 2 blocks each → 4 total
-        pendingEventRepo.Upserted.Should().HaveCount(4);
-        pendingEventRepo.Upserted.Should().AllSatisfy(e =>
+        draftService.Created.Should().HaveCount(4);
+        draftService.Created.Should().AllSatisfy(e =>
         {
             e.Summary.Should().Be("Driving");
             e.ColorId.Should().Be("lavender");
@@ -120,9 +122,10 @@ public sealed class TogglTransitDrilldownViewModelTests
     private static TogglTransitDrilldownViewModel CreateViewModel(
         ITogglTransitRepository repository,
         StubPendingEventRepository? pendingEventRepo = null,
-        StubCalendarSelectionService? selectionService = null)
+        StubCalendarSelectionService? selectionService = null,
+        StubPendingEventDraftService? draftService = null)
     {
-        var draftService = new StubPendingEventDraftService();
+        draftService ??= new StubPendingEventDraftService();
         pendingEventRepo ??= new StubPendingEventRepository();
         selectionService ??= new StubCalendarSelectionService();
         var eightFifteen = new EightFifteenRuleService();
@@ -157,15 +160,18 @@ public sealed class TogglTransitDrilldownViewModelTests
 
     private sealed class StubPendingEventDraftService : IPendingEventDraftService
     {
-        public Task<PendingEvent> CreateDraftAsync(DateTime startLocal, DateTime endLocal, string? summary = null, CancellationToken ct = default)
+        public List<Event> Created { get; } = [];
+
+        public Task<Event> CreateDraftAsync(DateTime startLocal, DateTime endLocal, string? summary = null, CancellationToken ct = default)
         {
-            var draft = new PendingEvent
+            var draft = new Event
             {
-                PendingEventId = Guid.NewGuid().ToString(),
+                EventId = Guid.NewGuid().ToString(),
                 StartDatetime = startLocal,
                 EndDatetime = endLocal,
                 Summary = summary
             };
+            Created.Add(draft);
             return Task.FromResult(draft);
         }
     }

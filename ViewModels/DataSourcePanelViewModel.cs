@@ -12,10 +12,18 @@ using Microsoft.UI.Xaml;
 
 namespace GoogleCalendarManagement.ViewModels;
 
+public enum PanelKind
+{
+    Sources,
+    DayDetail,
+    Linking
+}
+
 public sealed class DataSourcePanelViewModel : ObservableObject
 {
     private const string MinimizedStateKey = "DataSourcePanelMinimized";
     private const string PanelWidthStateKey = "DataSourcePanelWidth";
+    private const string ActivePanelStateKey = "DataSourcePanelActivePanel";
     public const double DefaultPanelWidth = 240.0;
 
     private readonly ISystemStateRepository _systemStateRepository;
@@ -26,13 +34,13 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     private readonly DataSourceCardProviderRegistry _cardProviderRegistry;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly IPendingEventDraftService _pendingEventDraftService;
-    private readonly IGcalEventRepository _gcalEventRepository;
+    private readonly IEventRepository _eventRepository;
     private readonly IPendingEventRepository _pendingEventRepository;
     private readonly ICalendarViewRangeProvider _viewRangeProvider;
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _isMinimized;
     private bool _isLoadingGlobal;
-    private bool _isGlobalMode = true;
+    private PanelKind _activePanel = PanelKind.Sources;
     private bool _sourceDataInViewIsExpanded = true;
     private bool _otherSourcesIsExpanded = true;
     private double _panelWidth = double.NaN;
@@ -51,9 +59,9 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         DataSourceCardProviderRegistry cardProviderRegistry,
         ICalendarSelectionService calendarSelectionService,
         IPendingEventDraftService pendingEventDraftService,
-        IGcalEventRepository gcalEventRepository,
         IPendingEventRepository pendingEventRepository,
-        ICalendarViewRangeProvider viewRangeProvider)
+        ICalendarViewRangeProvider viewRangeProvider,
+        IEventRepository eventRepository)
     {
         _systemStateRepository = systemStateRepository;
         _dataSourceRepository = dataSourceRepository;
@@ -63,14 +71,17 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         _cardProviderRegistry = cardProviderRegistry;
         _calendarSelectionService = calendarSelectionService;
         _pendingEventDraftService = pendingEventDraftService;
-        _gcalEventRepository = gcalEventRepository;
         _pendingEventRepository = pendingEventRepository;
+        _eventRepository = eventRepository;
         _viewRangeProvider = viewRangeProvider;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         OpenDayNameHeaderCommand = new AsyncRelayCommand(OpenSelectedDayNameEventAsync, () => CurrentDay.HasValue);
         BackFromDrilldownCommand = new RelayCommand(() => DrilldownCard = null);
         ToggleSourceDataInViewCommand = new RelayCommand(() => SourceDataInViewIsExpanded = !SourceDataInViewIsExpanded);
         ToggleOtherSourcesCommand = new RelayCommand(() => OtherSourcesIsExpanded = !OtherSourcesIsExpanded);
+        SelectSourcesPanelCommand = new RelayCommand(() => ActivePanel = PanelKind.Sources);
+        SelectDayDetailPanelCommand = new RelayCommand(() => ActivePanel = PanelKind.DayDetail);
+        SelectLinkingPanelCommand = new RelayCommand(() => ActivePanel = PanelKind.Linking);
 
         WeakReferenceMessenger.Default.Register<DataSourcePanelViewModel, DataSourceImportCompletedMessage>(
             this,
@@ -111,6 +122,12 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     public IRelayCommand ToggleSourceDataInViewCommand { get; }
 
     public IRelayCommand ToggleOtherSourcesCommand { get; }
+
+    public IRelayCommand SelectSourcesPanelCommand { get; }
+
+    public IRelayCommand SelectDayDetailPanelCommand { get; }
+
+    public IRelayCommand SelectLinkingPanelCommand { get; }
 
     public bool IsMinimized
     {
@@ -160,40 +177,88 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         }
     }
 
-    public bool IsGlobalMode
+    public PanelKind ActivePanel
     {
-        get => _isGlobalMode;
-        private set
+        get => _activePanel;
+        set
         {
-            if (SetProperty(ref _isGlobalMode, value))
+            if (SetProperty(ref _activePanel, value))
             {
-                OnPropertyChanged(nameof(GlobalModeVisibility));
-                OnPropertyChanged(nameof(DayModePlaceholderVisibility));
-                OnPropertyChanged(nameof(DayModeVisibility));
-                OnPropertyChanged(nameof(DayModeSourceListVisibility));
-                OnPropertyChanged(nameof(DayModeDrilldownVisibility));
-                OnPropertyChanged(nameof(LoadingGlobalVisibility));
-                OnPropertyChanged(nameof(EmptyGlobalStateVisibility));
-                OnPropertyChanged(nameof(SourceListVisibility));
-                OnPropertyChanged(nameof(SourceDataInViewVisibility));
-                OnPropertyChanged(nameof(SourceDataInViewListVisibility));
-                OnPropertyChanged(nameof(OtherSourcesVisibility));
-                OnPropertyChanged(nameof(OtherSourcesListVisibility));
+                OnActivePanelChanged(value);
             }
         }
     }
 
-    public Visibility GlobalModeVisibility => IsGlobalMode ? Visibility.Visible : Visibility.Collapsed;
+    public bool IsSourcesActive
+    {
+        get => ActivePanel == PanelKind.Sources;
+        set
+        {
+            if (value)
+            {
+                ActivePanel = PanelKind.Sources;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
 
-    public Visibility DayModePlaceholderVisibility => Visibility.Collapsed;
+    public bool IsDayDetailActive
+    {
+        get => ActivePanel == PanelKind.DayDetail;
+        set
+        {
+            if (value)
+            {
+                ActivePanel = PanelKind.DayDetail;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
 
-    public Visibility DayModeVisibility => IsGlobalMode ? Visibility.Collapsed : Visibility.Visible;
+    public bool IsLinkingActive
+    {
+        get => ActivePanel == PanelKind.Linking;
+        set
+        {
+            if (value)
+            {
+                ActivePanel = PanelKind.Linking;
+            }
+            else
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsGlobalMode => ActivePanel == PanelKind.Sources;
+
+    public Visibility SourcesPanelVisibility => ActivePanel == PanelKind.Sources ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility DayDetailPanelVisibility => ActivePanel == PanelKind.DayDetail ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility LinkingPanelVisibility => ActivePanel == PanelKind.Linking ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility DayDetailPlaceholderVisibility =>
+        ActivePanel == PanelKind.DayDetail && CurrentDay is null ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility GlobalModeVisibility => SourcesPanelVisibility;
+
+    public Visibility DayModePlaceholderVisibility => DayDetailPlaceholderVisibility;
+
+    public Visibility DayModeVisibility => DayDetailPanelVisibility;
 
     public Visibility DayModeSourceListVisibility =>
-        !IsGlobalMode && DrilldownCard is null ? Visibility.Visible : Visibility.Collapsed;
+        ActivePanel == PanelKind.DayDetail && CurrentDay is not null && DrilldownCard is null ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility DayModeDrilldownVisibility =>
-        !IsGlobalMode && DrilldownCard is not null ? Visibility.Visible : Visibility.Collapsed;
+        ActivePanel == PanelKind.DayDetail && CurrentDay is not null && DrilldownCard is not null ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility LoadingGlobalVisibility => IsGlobalMode && IsLoadingGlobal ? Visibility.Visible : Visibility.Collapsed;
 
@@ -257,6 +322,10 @@ public sealed class DataSourcePanelViewModel : ObservableObject
             if (SetProperty(ref _currentDay, value))
             {
                 OpenDayNameHeaderCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(DayDetailPlaceholderVisibility));
+                OnPropertyChanged(nameof(DayModePlaceholderVisibility));
+                OnPropertyChanged(nameof(DayModeSourceListVisibility));
+                OnPropertyChanged(nameof(DayModeDrilldownVisibility));
             }
         }
     }
@@ -315,10 +384,22 @@ public sealed class DataSourcePanelViewModel : ObservableObject
             OnPropertyChanged(nameof(PanelWidth));
         }
 
+        var storedPanel = await _systemStateRepository.GetAsync(ActivePanelStateKey);
+        ActivePanel = storedPanel switch
+        {
+            nameof(PanelKind.DayDetail) => PanelKind.DayDetail,
+            nameof(PanelKind.Linking) => PanelKind.Linking,
+            _ => PanelKind.Sources
+        };
+
         ApplySelectedDay(_daySelectionService.SelectedDay);
-        if (IsGlobalMode)
+        if (ActivePanel == PanelKind.Sources)
         {
             await LoadSourcesAsync();
+        }
+        else if (ActivePanel == PanelKind.DayDetail && CurrentDay is { } date && DayCards.Count == 0)
+        {
+            await LoadDayModeAsync(date);
         }
     }
 
@@ -327,7 +408,6 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         var previousDrilldownSourceKey = _pendingDrilldownSourceKey ?? DrilldownCard?.SourceKey;
         _pendingDrilldownSourceKey = null;
         CurrentDay = date;
-        IsGlobalMode = false;
         DrilldownCard = null;
         DayLabel = date.ToDateTime(TimeOnly.MinValue).ToString("dddd, MMMM d", CultureInfo.CurrentCulture);
 
@@ -398,9 +478,9 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         draft.StartDatetime = dayStartLocal.ToUniversalTime();
         draft.EndDatetime = dayStartLocal.ToUniversalTime();
         draft.UpdatedAt = _timeProvider.GetUtcNow().UtcDateTime;
-        await _pendingEventRepository.UpsertAsync(draft, ct);
+        await _eventRepository.UpsertAsync(draft, ct);
         DayName = draft.Summary;
-        _calendarSelectionService.Select(draft.PendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        _calendarSelectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
     }
 
     public async Task LoadSourcesAsync(CancellationToken ct = default)
@@ -526,18 +606,21 @@ public sealed class DataSourcePanelViewModel : ObservableObject
 
     private async Task ReloadSourcesAsync()
     {
-        if (!IsGlobalMode && CurrentDay is { } date)
+        if (ActivePanel == PanelKind.DayDetail && CurrentDay is { } date)
         {
             await LoadDayModeAsync(date);
             return;
         }
 
-        await LoadSourcesAsync();
+        if (ActivePanel == PanelKind.Sources)
+        {
+            await LoadSourcesAsync();
+        }
     }
 
     private void ReloadSourcesForCurrentViewOnUiThread()
     {
-        if (!IsGlobalMode)
+        if (ActivePanel != PanelKind.Sources)
         {
             return;
         }
@@ -547,7 +630,6 @@ public sealed class DataSourcePanelViewModel : ObservableObject
 
     private void ApplySelectedDay(DateOnly? selectedDay)
     {
-        var wasGlobalMode = IsGlobalMode;
         if (selectedDay is null)
         {
             CurrentDay = null;
@@ -555,13 +637,6 @@ public sealed class DataSourcePanelViewModel : ObservableObject
             DayName = null;
             DayCards.Clear();
             DrilldownCard = null;
-            IsGlobalMode = true;
-
-            if (!wasGlobalMode)
-            {
-                ReloadSourcesOnUiThread();
-            }
-
             return;
         }
 
@@ -578,10 +653,61 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     {
         _pendingDrilldownSourceKey = message.SourceKey;
 
-        if (CurrentDay == message.Date && !IsGlobalMode)
+        if (CurrentDay == message.Date && ActivePanel == PanelKind.DayDetail)
         {
             DrilldownCard = DayCards.FirstOrDefault(c => SourceKeysMatch(c.SourceKey, message.SourceKey));
         }
+    }
+
+    private void OnActivePanelChanged(PanelKind value)
+    {
+        OnPanelVisibilityChanged();
+        _ = _systemStateRepository.SetAsync(ActivePanelStateKey, value.ToString());
+
+        if (value == PanelKind.Sources)
+        {
+            if (Sources.Count == 0 && !IsLoadingGlobal)
+            {
+                ReloadSourcesOnUiThread();
+            }
+
+            return;
+        }
+
+        if (value == PanelKind.DayDetail && CurrentDay is { } date && DayCards.Count == 0)
+        {
+            if (_dispatcherQueue is null || _dispatcherQueue.HasThreadAccess)
+            {
+                _ = LoadDayModeAsync(date);
+                return;
+            }
+
+            _dispatcherQueue.TryEnqueue(() => _ = LoadDayModeAsync(date));
+        }
+    }
+
+    private void OnPanelVisibilityChanged()
+    {
+        OnPropertyChanged(nameof(IsGlobalMode));
+        OnPropertyChanged(nameof(IsSourcesActive));
+        OnPropertyChanged(nameof(IsDayDetailActive));
+        OnPropertyChanged(nameof(IsLinkingActive));
+        OnPropertyChanged(nameof(SourcesPanelVisibility));
+        OnPropertyChanged(nameof(DayDetailPanelVisibility));
+        OnPropertyChanged(nameof(LinkingPanelVisibility));
+        OnPropertyChanged(nameof(DayDetailPlaceholderVisibility));
+        OnPropertyChanged(nameof(GlobalModeVisibility));
+        OnPropertyChanged(nameof(DayModePlaceholderVisibility));
+        OnPropertyChanged(nameof(DayModeVisibility));
+        OnPropertyChanged(nameof(DayModeSourceListVisibility));
+        OnPropertyChanged(nameof(DayModeDrilldownVisibility));
+        OnPropertyChanged(nameof(LoadingGlobalVisibility));
+        OnPropertyChanged(nameof(EmptyGlobalStateVisibility));
+        OnPropertyChanged(nameof(SourceListVisibility));
+        OnPropertyChanged(nameof(SourceDataInViewVisibility));
+        OnPropertyChanged(nameof(SourceDataInViewListVisibility));
+        OnPropertyChanged(nameof(OtherSourcesVisibility));
+        OnPropertyChanged(nameof(OtherSourcesListVisibility));
     }
 
     private static bool SourceKeysMatch(string left, string right)
@@ -627,15 +753,15 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                 pendingEvent.Summary);
         }
 
-        var gcalEvents = await _gcalEventRepository.GetByDateRangeAsync(date, date, ct);
-        var gcalEvent = gcalEvents
+        var rangeEvents = await _eventRepository.GetByDateRangeAsync(date, date, ct);
+        var dayNameEvent = rangeEvents
             .Where(e => e.IsAllDay == true && string.Equals(e.SourceSystem, "day_name", StringComparison.Ordinal))
             .OrderByDescending(e => e.UpdatedAt)
             .FirstOrDefault();
 
-        return gcalEvent is null
+        return dayNameEvent is null
             ? null
-            : new DayNameEventReference(gcalEvent.GcalEventId, CalendarEventSourceKind.Google, gcalEvent.Summary);
+            : new DayNameEventReference(dayNameEvent.GcalEventId ?? dayNameEvent.EventId, CalendarEventSourceKind.Google, dayNameEvent.Summary);
     }
 
     private sealed record DayNameEventReference(string EventId, CalendarEventSourceKind SourceKind, string? Summary);

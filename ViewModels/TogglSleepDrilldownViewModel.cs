@@ -17,7 +17,7 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
     private readonly ITogglSleepQualityRepository _qualityRepository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IPendingEventRepository _pendingEventRepository;
-    private readonly IGcalEventRepository _gcalEventRepository;
+    private readonly IEventRepository _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly List<TogglEntry> _entries = [];
     private bool _hasEntries;
@@ -29,14 +29,14 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
         ITogglSleepQualityRepository qualityRepository,
         IPendingEventDraftService pendingEventDraftService,
         IPendingEventRepository pendingEventRepository,
-        IGcalEventRepository gcalEventRepository,
-        ICalendarSelectionService calendarSelectionService)
+        ICalendarSelectionService calendarSelectionService,
+        IEventRepository eventRepository)
     {
         _repository = repository;
         _qualityRepository = qualityRepository;
         _pendingEventDraftService = pendingEventDraftService;
         _pendingEventRepository = pendingEventRepository;
-        _gcalEventRepository = gcalEventRepository;
+        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
         CreateCandidateEventCommand = new AsyncRelayCommand(CreateCandidateEventAsync, () => HasEntries);
     }
@@ -126,7 +126,7 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
             return;
         }
 
-        var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(linkedGcalEventId, ct);
+        var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(linkedGcalEventId, ct);
         if (gcalEvent is null)
         {
             return;
@@ -186,9 +186,9 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
         draft.IsAllDay = false;
         draft.SourceSystem = "toggl";
         draft.ColorId = "grey";
-        await _pendingEventRepository.UpsertAsync(draft);
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
-        _calendarSelectionService.Select(draft.PendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        await _eventRepository.UpsertAsync(draft);
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
+        _calendarSelectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
     }
 
     private async Task AddEntryAsync(TogglEntry entry)
@@ -207,9 +207,9 @@ public sealed partial class TogglSleepDrilldownViewModel : ObservableObject
         draft.IsAllDay = false;
         draft.SourceSystem = "toggl";
         draft.ColorId = "grey";
-        await _pendingEventRepository.UpsertAsync(draft);
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
-        _calendarSelectionService.Select(draft.PendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        await _eventRepository.UpsertAsync(draft);
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
+        _calendarSelectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
     }
 
     private static string BuildSleepTitle(string? currentTitle, int? quality)

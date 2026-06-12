@@ -146,10 +146,60 @@
             Visibility="{x:Bind ViewModel.PanelBodyVisibility, Mode=OneWay}">
 
             <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="48" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border
+                    Grid.Column="0"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,1,0">
+                    <StackPanel
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Center"
+                        Spacing="4">
+                        <ToggleButton
+                            Width="40"
+                            Height="40"
+                            Padding="0"
+                            IsChecked="{x:Bind ViewModel.IsSourcesActive, Mode=TwoWay}"
+                            ToolTipService.ToolTip="Sources">
+                            <FontIcon
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                FontSize="16"
+                                Glyph="&#xE8F1;" />
+                        </ToggleButton>
+                        <ToggleButton
+                            Width="40"
+                            Height="40"
+                            Padding="0"
+                            IsChecked="{x:Bind ViewModel.IsDayDetailActive, Mode=TwoWay}"
+                            ToolTipService.ToolTip="Day Detail">
+                            <FontIcon
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                FontSize="16"
+                                Glyph="&#xE787;" />
+                        </ToggleButton>
+                        <ToggleButton
+                            Width="40"
+                            Height="40"
+                            Padding="0"
+                            IsChecked="{x:Bind ViewModel.IsLinkingActive, Mode=TwoWay}"
+                            ToolTipService.ToolTip="Linking">
+                            <FontIcon
+                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                FontSize="16"
+                                Glyph="&#xE71B;" />
+                        </ToggleButton>
+                    </StackPanel>
+                </Border>
+
+                <Grid Grid.Column="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
 
                 <!-- Header -->
                 <Grid
@@ -214,7 +264,7 @@
                 <!-- Body -->
                 <Grid
                     Grid.Row="1"
-                    Visibility="{x:Bind ViewModel.GlobalModeVisibility, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.SourcesPanelVisibility, Mode=OneWay}">
                     <TextBlock
                         Margin="12,6,12,0"
                         Opacity="0.72"
@@ -301,7 +351,18 @@
 
                 <Grid
                     Grid.Row="1"
-                    Visibility="{x:Bind ViewModel.DayModeVisibility, Mode=OneWay}">
+                    Visibility="{x:Bind ViewModel.DayDetailPanelVisibility, Mode=OneWay}">
+                    <Grid Visibility="{x:Bind ViewModel.DayDetailPlaceholderVisibility, Mode=OneWay}">
+                        <TextBlock
+                            Margin="16"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Opacity="0.68"
+                            Text="Select a day to see its data"
+                            TextAlignment="Center"
+                            TextWrapping="WrapWholeWords" />
+                    </Grid>
+
                     <Grid Visibility="{x:Bind ViewModel.DayModeSourceListVisibility, Mode=OneWay}">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -484,6 +545,19 @@
                     </Grid>
                 </Grid>
 
+                <Grid
+                    Grid.Row="1"
+                    Visibility="{x:Bind ViewModel.LinkingPanelVisibility, Mode=OneWay}">
+                    <TextBlock
+                        Margin="16"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Opacity="0.68"
+                        Text="Linking panel — coming in later stories"
+                        TextAlignment="Center"
+                        TextWrapping="WrapWholeWords" />
+                </Grid>
+
                 <!-- Resize handle — transparent strip at right edge, spans full height -->
                 <Rectangle
                     Grid.RowSpan="2"
@@ -497,6 +571,7 @@
                     PointerMoved="ResizeHandle_PointerMoved"
                     PointerReleased="ResizeHandle_PointerReleased"
                     PointerCaptureLost="ResizeHandle_PointerCaptureLost" />
+                </Grid>
             </Grid>
         </Border>
 

@@ -250,10 +250,13 @@ public sealed class TogglSleepDrilldownViewModelTests
     public async Task SetQualityAsync_WhenLinkedGcalEventExists_CreatesOrUpdatesPendingEventWithTitle()
     {
         var linkedGcalEventId = "gcal_abc123";
-        var gcalEvent = new GcalEvent
+        var gcalEvent = new Event
         {
+            EventId = "evt-sleep-1",
             GcalEventId = linkedGcalEventId,
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "Sleep",
             StartDatetime = new DateTime(2026, 05, 13, 04, 30, 0, DateTimeKind.Utc),
             EndDatetime = new DateTime(2026, 05, 13, 12, 0, 0, DateTimeKind.Utc),
@@ -271,8 +274,8 @@ public sealed class TogglSleepDrilldownViewModelTests
             ]
         };
         var pendingRepository = new StubPendingEventRepository();
-        var gcalRepository = new StubGcalEventRepository { EventById = gcalEvent };
-        var viewModel = CreateViewModel(repository, pendingRepository: pendingRepository, gcalEventRepository: gcalRepository);
+        var gcalRepository = new StubEventRepository { EventById = gcalEvent };
+        var viewModel = CreateViewModel(repository, pendingRepository: pendingRepository, eventRepository: gcalRepository);
 
         await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
         await viewModel.SetQualityAsync(7);
@@ -300,11 +303,11 @@ public sealed class TogglSleepDrilldownViewModelTests
         draftService.CreateCalls.Should().ContainSingle();
         draftService.CreateCalls[0].StartLocal.ToUniversalTime().Should().Be(entry.StartTime);
         draftService.CreateCalls[0].EndLocal.ToUniversalTime().Should().Be(entry.EndTime);
-        pendingRepository.UpsertedDraft.Should().NotBeNull();
-        pendingRepository.UpsertedDraft!.Summary.Should().Be("Sleep");
-        pendingRepository.UpsertedDraft.SourceSystem.Should().Be("toggl");
-        pendingRepository.UpsertedDraft.ColorId.Should().Be("grey");
-        pendingRepository.UpsertedDraft.IsAllDay.Should().BeFalse();
+        draftService.Created.Should().ContainSingle();
+        draftService.Created[0].Summary.Should().Be("Sleep");
+        draftService.Created[0].SourceSystem.Should().Be("toggl");
+        draftService.Created[0].ColorId.Should().Be("grey");
+        draftService.Created[0].IsAllDay.Should().BeFalse();
     }
 
     [Fact]
@@ -324,7 +327,8 @@ public sealed class TogglSleepDrilldownViewModelTests
         await viewModel.LoadAsync(new DateOnly(2026, 05, 13));
         await viewModel.CreateCandidateEventCommand.ExecuteAsync(null);
 
-        pendingRepository.UpsertedDraft!.Summary.Should().Be("Sleep – 8/10");
+        draftService.Created.Should().ContainSingle();
+        draftService.Created[0].Summary.Should().Be("Sleep – 8/10");
     }
 
     [Fact]
@@ -426,7 +430,7 @@ public sealed class TogglSleepDrilldownViewModelTests
         ITogglSleepQualityRepository? qualityRepository = null,
         IPendingEventDraftService? draftService = null,
         IPendingEventRepository? pendingRepository = null,
-        IGcalEventRepository? gcalEventRepository = null,
+        IEventRepository? eventRepository = null,
         ICalendarSelectionService? selectionService = null)
     {
         return new TogglSleepDrilldownViewModel(
@@ -434,8 +438,8 @@ public sealed class TogglSleepDrilldownViewModelTests
             qualityRepository ?? new StubTogglSleepQualityRepository(),
             draftService ?? new StubPendingEventDraftService(),
             pendingRepository ?? new StubPendingEventRepository(),
-            gcalEventRepository ?? new StubGcalEventRepository(),
-            selectionService ?? new StubCalendarSelectionService());
+            selectionService ?? new StubCalendarSelectionService(),
+            eventRepository ?? new StubEventRepository());
     }
 
     private static TogglEntry CreateEntry(
@@ -489,17 +493,20 @@ public sealed class TogglSleepDrilldownViewModelTests
     private sealed class StubPendingEventDraftService : IPendingEventDraftService
     {
         public List<(DateTime StartLocal, DateTime EndLocal, string? Summary)> CreateCalls { get; } = [];
+        public List<Event> Created { get; } = [];
 
-        public Task<PendingEvent> CreateDraftAsync(DateTime startLocal, DateTime endLocal, string? summary = null, CancellationToken ct = default)
+        public Task<Event> CreateDraftAsync(DateTime startLocal, DateTime endLocal, string? summary = null, CancellationToken ct = default)
         {
             CreateCalls.Add((startLocal, endLocal, summary));
-            return Task.FromResult(new PendingEvent
+            var draft = new Event
             {
-                PendingEventId = "pending_sleep",
+                EventId = "pending_sleep",
                 StartDatetime = startLocal.ToUniversalTime(),
                 EndDatetime = endLocal.ToUniversalTime(),
                 Summary = summary
-            });
+            };
+            Created.Add(draft);
+            return Task.FromResult(draft);
         }
     }
 
@@ -533,18 +540,31 @@ public sealed class TogglSleepDrilldownViewModelTests
             => Task.CompletedTask;
     }
 
-    private sealed class StubGcalEventRepository : IGcalEventRepository
+    private sealed class StubEventRepository : IEventRepository
     {
-        public GcalEvent? EventById { get; init; }
+        public Event? EventById { get; init; }
 
-        public Task<IList<GcalEvent>> GetByDateRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
-            => Task.FromResult<IList<GcalEvent>>([]);
+        public Task<Event?> GetByEventIdAsync(string eventId, CancellationToken ct = default)
+            => Task.FromResult(EventById?.EventId == eventId ? EventById : null);
 
-        public Task<GcalEvent?> GetByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
+        public Task<Event?> GetByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
             => Task.FromResult(EventById?.GcalEventId == gcalEventId ? EventById : null);
+
+        public Task<IList<Event>> GetByDateRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
+            => Task.FromResult<IList<Event>>([]);
 
         public Task<(DateOnly From, DateOnly To)?> GetStoredDateRangeAsync(CancellationToken ct = default)
             => Task.FromResult<(DateOnly, DateOnly)?>(null);
+
+        public Task UpsertAsync(Event ev, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task DeleteByEventIdAsync(string eventId, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<Event?> GetDayNameEventAsync(DateOnly date, CancellationToken ct = default)
+            => Task.FromResult<Event?>(null);
+
+        public Task<Event?> GetSleepEventForDateAsync(DateOnly date, CancellationToken ct = default)
+            => Task.FromResult<Event?>(null);
     }
 
     private sealed class StubCalendarSelectionService : ICalendarSelectionService

@@ -34,7 +34,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
     private readonly ICalendarQueryService _queryService;
     private readonly ICalendarSelectionService _selectionService;
     private readonly IColorMappingService _colorMappingService;
-    private readonly IGcalEventRepository _gcalEventRepository;
+    private readonly IEventRepository _eventRepository;
     private readonly IPendingEventRepository _pendingEventRepository;
     private readonly IContentDialogService? _contentDialogService;
     private readonly DispatcherQueue? _dispatcherQueue;
@@ -80,7 +80,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         ICalendarQueryService queryService,
         ICalendarSelectionService selectionService,
         IColorMappingService colorMappingService,
-        IGcalEventRepository gcalEventRepository,
+        IEventRepository eventRepository,
         IPendingEventRepository pendingEventRepository,
         TimeProvider? timeProvider = null,
         IContentDialogService? contentDialogService = null)
@@ -88,7 +88,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
         _queryService = queryService;
         _selectionService = selectionService;
         _colorMappingService = colorMappingService;
-        _gcalEventRepository = gcalEventRepository;
+        _eventRepository = eventRepository;
         _pendingEventRepository = pendingEventRepository;
         _contentDialogService = contentDialogService;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
@@ -530,7 +530,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
             }
             else
             {
-                var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
+                var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
                 if (gcalEvent is null)
                 {
                     SaveStatusText = string.Empty;
@@ -739,7 +739,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
             case CalendarEventSourceKind.Google:
             {
-                var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(eventId, ct);
+                var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(eventId, ct);
                 if (gcalEvent is null)
                 {
                     return;
@@ -963,7 +963,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
             case CalendarEventSourceKind.Google:
             {
-                var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(eventId, ct);
+                var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(eventId, ct);
                 if (gcalEvent is null || gcalEvent.IsAllDay == true)
                 {
                     return false;
@@ -1741,7 +1741,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
 
         if (pendingEvent is null)
         {
-            var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
+            var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(_currentEventId, ct);
             if (gcalEvent is null)
             {
                 return;
@@ -1856,7 +1856,7 @@ public sealed class EventDetailsPanelViewModel : ObservableObject
                 return;
             }
 
-            var gcalEvent = await _gcalEventRepository.GetByGcalEventIdAsync(eventId, ct);
+            var gcalEvent = await _eventRepository.GetByGcalEventIdAsync(eventId, ct);
             if (gcalEvent is null)
             {
                 return;

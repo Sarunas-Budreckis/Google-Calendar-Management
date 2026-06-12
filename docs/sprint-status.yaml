@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
 generated: 2026-01-30
-last_updated: 2026-06-12T00:00:00-05:00
+last_updated: 2026-06-12T11:23:44-05:00
 project: Google Calendar Management
 project_key: Google Calendar Management
 tracking_system: file-system
@@ -127,8 +127,8 @@ development_status:
   # Each story tagged agent (Opus/Sonnet/Codex) + effort (high/medium/low) in the epic overview.
   8-1-terminology-doc-sweep: review                               # Codex, low
   8-2-unified-event-table-and-migration: review                   # Opus, high
-  8-3-event-repository-and-identity-service: drafted              # Opus, medium
-  8-4-migrate-sync-reconciler-to-unified-event-table: drafted     # Opus, high
+  8-3-event-repository-and-identity-service: done                 # Opus, medium
+  8-4-migrate-sync-reconciler-to-unified-event-table: done         # Opus, high
   8-5-rendering-and-drilldowns-mint-candidates: ready-for-dev     # Sonnet, medium
   8-6-repoint-history-deleted-recurring-remove-dead-pending: ready-for-dev  # Opus, medium
   8-7-data-point-registry-table-and-source-pointer: ready-for-dev # Sonnet, medium
@@ -144,7 +144,7 @@ development_status:
   epic-8-retrospective: optional
 
   epic-9: in-progress  # Linking Panel & Workflows — scope at docs/epic-9-linking-panel/epic-overview.md
-  9-1-left-icon-strip-and-three-panels: ready-for-dev              # Sonnet, medium
+  9-1-left-icon-strip-and-three-panels: review                     # Sonnet, medium
   9-2-sources-panel-coverage-rollup-and-ordering: ready-for-dev   # Sonnet, medium
   9-3-linking-panel-by-source-lens: ready-for-dev                  # Sonnet, high
   9-4-linking-panel-by-event-lens: ready-for-dev                  # Sonnet, medium

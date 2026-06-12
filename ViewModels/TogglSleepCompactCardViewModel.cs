@@ -15,6 +15,7 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
     private readonly ITogglSleepQualityRepository _qualityRepository;
     private readonly IPendingEventDraftService? _pendingEventDraftService;
     private readonly IPendingEventRepository? _pendingEventRepository;
+    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService? _calendarSelectionService;
     private string _startLabel = "";
     private string _endLabel = "";
@@ -30,12 +31,14 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
         ITogglSleepQualityRepository qualityRepository,
         IPendingEventDraftService? pendingEventDraftService = null,
         IPendingEventRepository? pendingEventRepository = null,
-        ICalendarSelectionService? calendarSelectionService = null)
+        ICalendarSelectionService? calendarSelectionService = null,
+        IEventRepository? eventRepository = null)
     {
         _repository = repository;
         _qualityRepository = qualityRepository;
         _pendingEventDraftService = pendingEventDraftService;
         _pendingEventRepository = pendingEventRepository;
+        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
     }
 
@@ -191,9 +194,12 @@ public sealed class TogglSleepCompactCardViewModel : ObservableObject
         draft.IsAllDay = false;
         draft.SourceSystem = "toggl";
         draft.ColorId = "grey";
-        await _pendingEventRepository.UpsertAsync(draft);
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
-        _calendarSelectionService.Select(draft.PendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        if (_eventRepository is not null)
+        {
+            await _eventRepository.UpsertAsync(draft);
+        }
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
+        _calendarSelectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
     }
 
     private static DateTime NormalizeUtc(DateTime value)

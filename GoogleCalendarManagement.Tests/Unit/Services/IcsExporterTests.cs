@@ -9,7 +9,7 @@ public sealed class IcsExporterTests
     [Fact]
     public void GenerateIcs_TimedEvent_WritesUtcDateTimeFields()
     {
-        var calendarEvent = new GcalEvent
+        var calendarEvent = new Event
         {
             GcalEventId = "evt-1",
             Summary = "Planning Session",
@@ -39,7 +39,7 @@ public sealed class IcsExporterTests
     [Fact]
     public void GenerateIcs_AllDayEvent_UsesDateFormat_AndOmitsEmptyDescription()
     {
-        var calendarEvent = new GcalEvent
+        var calendarEvent = new Event
         {
             GcalEventId = "all-day",
             Summary = "Holiday",
@@ -63,7 +63,7 @@ public sealed class IcsExporterTests
     [Fact]
     public void GenerateIcs_EscapesSpecialCharacters_AndNormalizesNewLines()
     {
-        var calendarEvent = new GcalEvent
+        var calendarEvent = new Event
         {
             GcalEventId = @"evt\,semi;slash",
             Summary = @"Comma, Semi; Slash\",

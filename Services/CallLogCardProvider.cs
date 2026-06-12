@@ -14,6 +14,7 @@ public sealed class CallLogCardProvider : IDataSourceCardProvider, IDataSourceCa
     private readonly ICallLogRepository _repository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IPendingEventRepository _pendingEventRepository;
+    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly ConcurrentDictionary<DateOnly, bool> _hasDataByDate = [];
 
@@ -22,12 +23,14 @@ public sealed class CallLogCardProvider : IDataSourceCardProvider, IDataSourceCa
         ICallLogRepository repository,
         IPendingEventDraftService pendingEventDraftService,
         IPendingEventRepository pendingEventRepository,
-        ICalendarSelectionService calendarSelectionService)
+        ICalendarSelectionService calendarSelectionService,
+        IEventRepository? eventRepository = null)
     {
         _serviceProvider = serviceProvider;
         _repository = repository;
         _pendingEventDraftService = pendingEventDraftService;
         _pendingEventRepository = pendingEventRepository;
+        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
     }
 
@@ -90,9 +93,12 @@ public sealed class CallLogCardProvider : IDataSourceCardProvider, IDataSourceCa
             draft.IsAllDay = false;
             draft.SourceSystem = "call_log";
             draft.ColorId = "azure";
-            await _pendingEventRepository.UpsertAsync(draft, ct);
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
-            lastPendingEventId = draft.PendingEventId;
+            if (_eventRepository is not null)
+            {
+                await _eventRepository.UpsertAsync(draft, ct);
+            }
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
+            lastPendingEventId = draft.EventId;
         }
 
         if (lastPendingEventId is not null)

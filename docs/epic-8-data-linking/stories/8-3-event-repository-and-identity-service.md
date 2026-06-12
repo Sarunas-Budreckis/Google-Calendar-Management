@@ -1,7 +1,7 @@
 # Story 8.3: Event Repository + Identity Service
 
 **Epic:** 8 — Event Model & Raw Data Linking Engine
-**Status:** ready-for-dev
+**Status:** done
 **Agent:** Opus · **Effort:** medium
 **Dependencies:** 8.2 (blocking — unified `event` table + `Event` entity must exist)
 
@@ -49,57 +49,61 @@ so that all event creation, lookup, editing, deletion, and publishing uses a sta
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create `IEventRepository` interface (AC: #1)
-  - [ ] 1.1 Create `Services/IEventRepository.cs` — all method signatures from AC #1
-  - [ ] 1.2 Return type is `GoogleCalendarManagement.Data.Entities.Event` (the entity from 8.2)
+- [x] Task 1: Create `IEventRepository` interface (AC: #1)
+  - [x] 1.1 Create `Services/IEventRepository.cs` — all method signatures from AC #1
+  - [x] 1.2 Return type is `GoogleCalendarManagement.Data.Entities.Event` (the entity from 8.2)
 
-- [ ] Task 2: Implement `EventRepository` (AC: #2)
-  - [ ] 2.1 Create `Services/EventRepository.cs` — `sealed class EventRepository : IEventRepository`
-  - [ ] 2.2 Constructor: `IDbContextFactory<CalendarDbContext>` (same pattern as `GcalEventRepository`)
-  - [ ] 2.3 `GetByDateRangeAsync`: query `context.Events` where lifecycle != 'candidate' AND date range overlaps (use same `ToLocalDayBoundaryUtc` helper or equivalent UTC boundary calculation as existing `CalendarQueryService`)
-  - [ ] 2.4 `GetByEventIdAsync`: `SingleOrDefaultAsync` on `event_id`
-  - [ ] 2.5 `GetByGcalEventIdAsync`: `SingleOrDefaultAsync` on `gcal_event_id`
-  - [ ] 2.6 `UpsertAsync`: find existing by `event_id`; if null insert; else update all mutable fields; always call `SaveChangesAsync`
-  - [ ] 2.7 `DeleteByEventIdAsync`: `SingleOrDefaultAsync` + `context.Events.Remove` + `SaveChangesAsync`
-  - [ ] 2.8 `GetDayNameEventAsync` / `GetSleepEventForDateAsync`: mirror the logic from the stubbed `PendingEventRepository` methods, querying `context.Events` instead
+- [x] Task 2: Implement `EventRepository` (AC: #2)
+  - [x] 2.1 Create `Services/EventRepository.cs` — `sealed class EventRepository : IEventRepository`
+  - [x] 2.2 Constructor: `IDbContextFactory<CalendarDbContext>` (same pattern as `GcalEventRepository`)
+  - [x] 2.3 `GetByDateRangeAsync`: query `context.Events` where lifecycle != 'candidate' AND date range overlaps (use same `ToLocalDayBoundaryUtc` helper or equivalent UTC boundary calculation as existing `CalendarQueryService`)
+  - [x] 2.4 `GetByEventIdAsync`: `SingleOrDefaultAsync` on `event_id`
+  - [x] 2.5 `GetByGcalEventIdAsync`: `SingleOrDefaultAsync` on `gcal_event_id`
+  - [x] 2.6 `UpsertAsync`: find existing by `event_id`; if null insert; else update all mutable fields; always call `SaveChangesAsync`
+  - [x] 2.7 `DeleteByEventIdAsync`: `SingleOrDefaultAsync` + `context.Events.Remove` + `SaveChangesAsync`
+  - [x] 2.8 `GetDayNameEventAsync` / `GetSleepEventForDateAsync`: mirror the logic from the stubbed `PendingEventRepository` methods, querying `context.Events` instead
 
-- [ ] Task 3: Create `IEventIdentityService` + `EventIdentityService` (AC: #3, #4)
-  - [ ] 3.1 Create `Services/IEventIdentityService.cs`
-  - [ ] 3.2 Create `Services/EventIdentityService.cs` — depends on `IEventRepository` (injected)
-  - [ ] 3.3 `MintEventId()`: `return Guid.NewGuid().ToString("N");` — 32-char lowercase hex (matches the `pending_{Guid.NewGuid():N}` shape but without prefix)
-  - [ ] 3.4 `ResolveEventIdAsync`: try `IEventRepository.GetByEventIdAsync(eventId)` first; if null and `gcalEventId` provided, try `GetByGcalEventIdAsync(gcalEventId)`; return `event_id` if found, else null
+- [x] Task 3: Create `IEventIdentityService` + `EventIdentityService` (AC: #3, #4)
+  - [x] 3.1 Create `Services/IEventIdentityService.cs`
+  - [x] 3.2 Create `Services/EventIdentityService.cs` — depends on `IEventRepository` (injected)
+  - [x] 3.3 `MintEventId()`: `return Guid.NewGuid().ToString("N");` — 32-char lowercase hex (matches the `pending_{Guid.NewGuid():N}` shape but without prefix)
+  - [x] 3.4 `ResolveEventIdAsync`: try `IEventRepository.GetByEventIdAsync(eventId)` first; if null and `gcalEventId` provided, try `GetByGcalEventIdAsync(gcalEventId)`; return `event_id` if found, else null
 
-- [ ] Task 4: Rewrite `PendingEventDraftService` (AC: #5)
-  - [ ] 4.1 Replace `IPendingEventRepository` dependency with `IEventRepository` + `IEventIdentityService`
-  - [ ] 4.2 `CreateDraftAsync` now: calls `MintEventId()`, creates `Event` entity with `lifecycle='approved'`, `publish='local_only'`, `has_unpublished_changes=false`, `source_system='manual'`, `calendar_id='primary'`, `color_id='azure'`
-  - [ ] 4.3 Update `IPendingEventDraftService` interface return type: change `Task<PendingEvent>` → `Task<Event>` (the `Event` entity)
-  - [ ] 4.4 Update all callers of `IPendingEventDraftService.CreateDraftAsync` to use `Event` return type. Search for callers: `ViewModels/` and `Services/`. Key callers likely include drag-to-create ViewModel and event creation ViewModel.
-  - [ ] 4.5 The `WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(...))` call stays — send with `ev.EventId`
+- [x] Task 4: Rewrite `PendingEventDraftService` (AC: #5)
+  - [x] 4.1 Replace `IPendingEventRepository` dependency with `IEventRepository` + `IEventIdentityService`
+  - [x] 4.2 `CreateDraftAsync` now: calls `MintEventId()`, creates `Event` entity with `lifecycle='approved'`, `publish='local_only'`, `has_unpublished_changes=false`, `source_system='manual'`, `calendar_id='primary'`, `color_id='azure'`
+  - [x] 4.3 Update `IPendingEventDraftService` interface return type: change `Task<PendingEvent>` → `Task<Event>` (the `Event` entity)
+  - [x] 4.4 Update all callers of `IPendingEventDraftService.CreateDraftAsync` to use `Event` return type. Search for callers: `ViewModels/` and `Services/`. Key callers likely include drag-to-create ViewModel and event creation ViewModel.
+  - [x] 4.5 The `WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(...))` call stays — send with `ev.EventId`
 
-- [ ] Task 5: Rewrite `PendingEventPublishService` (AC: #6, #7)
-  - [ ] 5.1 Replace all `context.PendingEvents` queries with `context.Events`
-  - [ ] 5.2 `GetPendingItemsAsync`: query `context.Events` where `HasUnpublishedChanges = true OR Publish = 'local_only'`; derive `SourceLabel` from `lifecycle` + `publish` fields
-  - [ ] 5.3 `PublishAsync`: on GCal API success, update event row: set `GcalEventId`, set `Publish = 'published'`, clear `HasUnpublishedChanges = false`; **never change `EventId`**
-  - [ ] 5.4 `RevertAsync`: for `local_only` events → `DeleteByEventIdAsync`; for overlay edits (`published` with `has_unpublished_changes`) → reset to GCal state (re-fetch from GCal or set `HasUnpublishedChanges = false`)
-  - [ ] 5.5 `UpdateColorAsync`: fetch by `event_id`, update `ColorId`, set `HasUnpublishedChanges = true` if event is published
+- [x] Task 5: Rewrite `PendingEventPublishService` (AC: #6, #7)
+  - [x] 5.1 Replace all `context.PendingEvents` queries with `context.Events`
+  - [x] 5.2 `GetPendingItemsAsync`: query `context.Events` where `HasUnpublishedChanges = true OR Publish = 'local_only'`; derive `SourceLabel` from `lifecycle` + `publish` fields
+  - [x] 5.3 `PublishAsync`: on GCal API success, update event row: set `GcalEventId`, set `Publish = 'published'`, clear `HasUnpublishedChanges = false`; **never change `EventId`**
+  - [x] 5.4 `RevertAsync`: for `local_only` events → `DeleteByEventIdAsync`; for overlay edits (`published` with `has_unpublished_changes`) → reset to GCal state (re-fetch from GCal or set `HasUnpublishedChanges = false`)
+  - [x] 5.5 `UpdateColorAsync`: fetch by `event_id`, update `ColorId`, set `HasUnpublishedChanges = true` if event is published
 
-- [ ] Task 6: Rewrite `CalendarQueryService` (AC: #8, #9)
-  - [ ] 6.1 Replace the `// TODO 8.3+` stub in `GetEventsForRangeAsync` with a real query against `context.Events`
-  - [ ] 6.2 Single query: `context.Events` filtered by date range; no JOIN needed (no more split `gcal_event` + `pending_event`)
-  - [ ] 6.3 Derive `CalendarEventSourceKind`: `publish='published'` → `Google`; `publish='local_only'` → `Pending`; `lifecycle='candidate'` → `Pending` with `Opacity=0.5`
-  - [ ] 6.4 Keep the existing Outlook events query path (separate `context.OutlookEvents` query) unchanged
-  - [ ] 6.5 `GetEventByIdAsync`: query `context.Events.SingleOrDefaultAsync(e => e.EventId == eventId)`, map to `CalendarEventDisplayModel`
-  - [ ] 6.6 Do NOT change `CalendarEventSourceKind` enum values or `CalendarEventDisplayModel` shape — that is Story 8.5
+- [x] Task 6: Rewrite `CalendarQueryService` (AC: #8, #9)
+  - [x] 6.1 Replace the `// TODO 8.3+` stub in `GetEventsForRangeAsync` with a real query against `context.Events`
+  - [x] 6.2 Single query: `context.Events` filtered by date range; no JOIN needed (no more split `gcal_event` + `pending_event`)
+  - [x] 6.3 Derive `CalendarEventSourceKind`: `publish='published'` → `Google`; `publish='local_only'` → `Pending`; `lifecycle='candidate'` → `Pending` with `Opacity=0.5`
+  - [x] 6.4 Keep the existing Outlook events query path (separate `context.OutlookEvents` query) unchanged
+  - [x] 6.5 `GetEventByIdAsync`: query `context.Events.SingleOrDefaultAsync(e => e.EventId == eventId)`, map to `CalendarEventDisplayModel`
+  - [x] 6.6 Do NOT change `CalendarEventSourceKind` enum values or `CalendarEventDisplayModel` shape — that is Story 8.5
 
-- [ ] Task 7: DI registration (AC: #10)
-  - [ ] 7.1 In `App.xaml.cs`, add `services.AddSingleton<IEventRepository, EventRepository>()`
-  - [ ] 7.2 Add `services.AddSingleton<IEventIdentityService, EventIdentityService>()`
-  - [ ] 7.3 Ensure `IPendingEventDraftService` and `IPendingEventPublishService` registrations still point to their updated implementations
+- [x] Task 7: DI registration (AC: #10)
+  - [x] 7.1 In `App.xaml.cs`, add `services.AddSingleton<IEventRepository, EventRepository>()`
+  - [x] 7.2 Add `services.AddSingleton<IEventIdentityService, EventIdentityService>()`
+  - [x] 7.3 Ensure `IPendingEventDraftService` and `IPendingEventPublishService` registrations still point to their updated implementations
 
-- [ ] Task 8: Integration tests (AC: #12)
-  - [ ] 8.1 Create `GoogleCalendarManagement.Tests/Integration/EventRepositoryTests.cs`
-  - [ ] 8.2 Use `SqliteConnection("Data Source=:memory:")` + `context.Database.EnsureCreated()` pattern (same as `PendingEventRepositoryTests.cs`)
-  - [ ] 8.3 Write tests per AC #12 bullet list
+- [x] Task 8: Integration tests (AC: #12)
+  - [x] 8.1 Create `GoogleCalendarManagement.Tests/Integration/EventRepositoryTests.cs`
+  - [x] 8.2 Use `SqliteConnection("Data Source=:memory:")` + `context.Database.EnsureCreated()` pattern (same as `PendingEventRepositoryTests.cs`)
+  - [x] 8.3 Write tests per AC #12 bullet list
+
+### Review Findings
+
+- [x] [Review][Patch] `GetByDateRangeAsync` returns soft-deleted events [Services/EventRepository.cs:40]
 
 ---
 
@@ -231,10 +235,52 @@ Use `TestDbContextFactory` (already defined in test project). Implement `IDispos
 
 ### Agent Model Used
 
-Opus
+GPT-5 Codex
 
 ### Debug Log References
 
+- `dotnet build -p:Platform=x64 -p:WarningsNotAsErrors=NU1900`
+- `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64 --filter FullyQualifiedName~EventRepositoryTests`
+- `dotnet test GoogleCalendarManagement.Tests/ -p:Platform=x64`
+
 ### Completion Notes List
 
+- Implemented `IEventRepository` / `EventRepository` and `IEventIdentityService` / `EventIdentityService` over the unified `event` table.
+- Reworked draft, publish, and calendar query paths to use stable `event_id` rows, including local-only publish semantics and candidate opacity mapping.
+- Updated create-draft callers to use `Event.EventId`; data-source callers persist post-create source/color/title mutations through `IEventRepository` when DI provides it.
+- Added in-memory SQLite integration coverage for repository CRUD, range overlap, identity minting, and identity resolution.
+
 ### File List
+
+- App.xaml.cs
+- GoogleCalendarManagement.Tests/Integration/EventRepositoryTests.cs
+- GoogleCalendarManagement.Tests/Unit/Services/PendingEventDraftServiceTests.cs
+- GoogleCalendarManagement.Tests/Unit/ViewModels/DataSourcePanelViewModelTests.cs
+- GoogleCalendarManagement.Tests/Unit/ViewModels/TogglSleepDrilldownViewModelTests.cs
+- GoogleCalendarManagement.Tests/Unit/ViewModels/TogglTransitDrilldownViewModelTests.cs
+- Services/CalendarQueryService.cs
+- Services/CallLogCardProvider.cs
+- Services/EventIdentityService.cs
+- Services/EventRepository.cs
+- Services/IEventIdentityService.cs
+- Services/IEventRepository.cs
+- Services/IGcalEventRepository.cs
+- Services/IPendingEventDraftService.cs
+- Services/PendingEventDraftService.cs
+- Services/PendingEventPublishService.cs
+- Services/TogglSleepCardProvider.cs
+- Services/TogglTransitCardProvider.cs
+- ViewModels/Civ5DrilldownViewModel.cs
+- ViewModels/ComfyUIDrilldownViewModel.cs
+- ViewModels/DataSourcePanelViewModel.cs
+- ViewModels/TogglPhoneDrilldownViewModel.cs
+- ViewModels/TogglSleepCompactCardViewModel.cs
+- ViewModels/TogglSleepDrilldownViewModel.cs
+- ViewModels/TogglTransitDrilldownViewModel.cs
+- Views/DayViewControl.xaml.cs
+- Views/MainPage.xaml.cs
+- Views/WeekViewControl.xaml.cs
+
+### Change Log
+
+- 2026-06-12: Implemented Story 8.3 event repository, identity service, unified draft/publish/query paths, DI registration, and tests.

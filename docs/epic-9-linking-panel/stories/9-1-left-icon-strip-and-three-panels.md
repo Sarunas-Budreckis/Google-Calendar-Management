@@ -1,6 +1,6 @@
 # Story 9.1: Left Icon Strip + 3 Selectable Panels
 
-**Status:** ready-for-dev
+**Status:** review
 **Agent:** Sonnet · **Effort:** medium
 **Epic:** 9 — Linking Panel & Workflows
 **Prereqs:** Epic 5 panels (all done), Epic 9 overview
@@ -312,3 +312,31 @@ The `IsGlobalMode` field currently drives global vs day content visibility. This
 - Any Epic 8 engine integration
 - Badge/notification dots on icon strip icons (deferred)
 - Keyboard shortcuts for switching panels (deferred)
+
+---
+
+## Dev Agent Record
+
+### Debug Log
+- 2026-06-12: Implemented `ActivePanel` switching and persistence in `DataSourcePanelViewModel`.
+- 2026-06-12: Added the internal 48px icon strip and Sources / Day Detail / Linking panel body visibility in `DataSourcePanelControl.xaml`.
+- 2026-06-12: Updated view model tests for decoupled day selection, active panel switching, placeholder visibility, and persisted restore.
+- 2026-06-12: Validation passed: `dotnet test GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj -p:Platform=x64` (455 passed).
+
+### Completion Notes
+- Added `PanelKind` and `ActivePanel` with system-state key `DataSourcePanelActivePanel`, defaulting to Sources and restoring `"Sources"`, `"DayDetail"`, or `"Linking"`.
+- Removed day-selection auto-switching from `ApplySelectedDay`; selected days still load day detail data in the background.
+- Rewired panel body visibility to `ActivePanel`, including the no-day Day Detail placeholder and Linking placeholder.
+- Preserved minimize/restore, resize handle, source import UI, day-name header behavior, and day-card drilldown/reorder paths.
+
+## File List
+
+- `ViewModels/DataSourcePanelViewModel.cs`
+- `Views/DataSourcePanelControl.xaml`
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/DataSourcePanelViewModelTests.cs`
+- `docs/epic-9-linking-panel/stories/9-1-left-icon-strip-and-three-panels.md`
+- `docs/sprint-status.yaml`
+
+## Change Log
+
+- 2026-06-12: Implemented Story 9.1 left icon strip and selectable Sources / Day Detail / Linking panel model.

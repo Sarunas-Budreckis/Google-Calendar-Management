@@ -128,7 +128,7 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task DaySelectedMessage_WithSelectedDay_HidesGlobalSourceList()
+    public async Task DaySelectedMessage_WithSelectedDay_KeepsSourcesPanelActive()
     {
         var repository = new StubDataSourceRepository
         {
@@ -140,13 +140,16 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         await viewModel.InitializeAsync();
         WeakReferenceMessenger.Default.Send(new DaySelectedMessage(new DateOnly(2026, 05, 13)));
 
-        viewModel.IsGlobalMode.Should().BeFalse();
-        viewModel.GlobalModeVisibility.Should().Be(Visibility.Collapsed);
-        viewModel.DayModeSourceListVisibility.Should().Be(Visibility.Visible);
+        viewModel.ActivePanel.Should().Be(PanelKind.Sources);
+        viewModel.CurrentDay.Should().Be(new DateOnly(2026, 05, 13));
+        viewModel.SourcesPanelVisibility.Should().Be(Visibility.Visible);
+        viewModel.DayDetailPanelVisibility.Should().Be(Visibility.Collapsed);
+        viewModel.DayModeSourceListVisibility.Should().Be(Visibility.Collapsed);
+        viewModel.DayCards.Should().ContainSingle(card => card.DisplayName == "Toggl");
     }
 
     [Fact]
-    public async Task OnDaySelected_SwitchesToDayMode()
+    public async Task SelectDayDetailPanelCommand_ShowsLoadedSelectedDay()
     {
         var repository = new StubDataSourceRepository
         {
@@ -156,12 +159,70 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
 
         await viewModel.InitializeAsync();
         WeakReferenceMessenger.Default.Send(new DaySelectedMessage(new DateOnly(2026, 05, 13)));
+        viewModel.SelectDayDetailPanelCommand.Execute(null);
 
-        viewModel.IsGlobalMode.Should().BeFalse();
+        viewModel.ActivePanel.Should().Be(PanelKind.DayDetail);
         viewModel.CurrentDay.Should().Be(new DateOnly(2026, 05, 13));
         viewModel.DayLabel.Should().Be("Wednesday, May 13");
         viewModel.DayModeSourceListVisibility.Should().Be(Visibility.Visible);
         viewModel.DayCards.Should().ContainSingle(card => card.DisplayName == "Toggl");
+    }
+
+    [Fact]
+    public void SelectDayDetailPanelCommand_WhenNoDaySelected_ShowsPlaceholder()
+    {
+        var viewModel = CreateViewModel(new StubDataSourceRepository());
+
+        viewModel.SelectDayDetailPanelCommand.Execute(null);
+
+        viewModel.ActivePanel.Should().Be(PanelKind.DayDetail);
+        viewModel.DayDetailPlaceholderVisibility.Should().Be(Visibility.Visible);
+        viewModel.DayModeSourceListVisibility.Should().Be(Visibility.Collapsed);
+        viewModel.DayModeDrilldownVisibility.Should().Be(Visibility.Collapsed);
+    }
+
+    [Fact]
+    public void SelectLinkingPanelCommand_ShowsLinkingPanel()
+    {
+        var viewModel = CreateViewModel(new StubDataSourceRepository());
+
+        viewModel.SelectLinkingPanelCommand.Execute(null);
+
+        viewModel.ActivePanel.Should().Be(PanelKind.Linking);
+        viewModel.LinkingPanelVisibility.Should().Be(Visibility.Visible);
+        viewModel.SourcesPanelVisibility.Should().Be(Visibility.Collapsed);
+        viewModel.DayDetailPanelVisibility.Should().Be(Visibility.Collapsed);
+    }
+
+    [Fact]
+    public async Task ActivePanel_WhenChanged_PersistsToSystemState()
+    {
+        var systemStateRepository = new StubSystemStateRepository();
+        var viewModel = CreateViewModel(
+            new StubDataSourceRepository(),
+            systemStateRepository: systemStateRepository);
+
+        viewModel.SelectDayDetailPanelCommand.Execute(null);
+
+        (await systemStateRepository.GetAsync("DataSourcePanelActivePanel")).Should().Be("DayDetail");
+    }
+
+    [Fact]
+    public async Task InitializeAsync_WhenActivePanelStored_RestoresPanel()
+    {
+        var systemStateRepository = new StubSystemStateRepository
+        {
+            Values = { ["DataSourcePanelActivePanel"] = "Linking" }
+        };
+        var viewModel = CreateViewModel(
+            new StubDataSourceRepository(),
+            systemStateRepository: systemStateRepository);
+
+        await viewModel.InitializeAsync();
+
+        viewModel.ActivePanel.Should().Be(PanelKind.Linking);
+        viewModel.LinkingPanelVisibility.Should().Be(Visibility.Visible);
+        viewModel.SourcesPanelVisibility.Should().Be(Visibility.Collapsed);
     }
 
     [Fact]
@@ -188,7 +249,7 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task OnDayDeselected_ReturnsTaGlobalMode()
+    public async Task OnDayDeselected_DoesNotChangeActivePanel()
     {
         var repository = new StubDataSourceRepository
         {
@@ -197,13 +258,15 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         var viewModel = CreateViewModel(repository);
 
         await viewModel.InitializeAsync();
+        viewModel.SelectDayDetailPanelCommand.Execute(null);
         WeakReferenceMessenger.Default.Send(new DaySelectedMessage(new DateOnly(2026, 05, 13)));
         WeakReferenceMessenger.Default.Send(new DaySelectedMessage(null));
 
-        viewModel.IsGlobalMode.Should().BeTrue();
+        viewModel.ActivePanel.Should().Be(PanelKind.DayDetail);
         viewModel.CurrentDay.Should().BeNull();
         viewModel.DayCards.Should().BeEmpty();
         viewModel.DrilldownCard.Should().BeNull();
+        viewModel.DayDetailPlaceholderVisibility.Should().Be(Visibility.Visible);
     }
 
     [Fact]
@@ -402,6 +465,7 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         var viewModel = CreateViewModel(repository);
 
         await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+        viewModel.SelectDayDetailPanelCommand.Execute(null);
         var card = viewModel.DayCards.Single();
         card.ExpandCommand.Execute(null);
 
@@ -420,6 +484,7 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         var viewModel = CreateViewModel(repository);
 
         await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+        viewModel.SelectDayDetailPanelCommand.Execute(null);
         viewModel.DayCards.Single().ExpandCommand.Execute(null);
         viewModel.BackFromDrilldownCommand.Execute(null);
 
@@ -438,6 +503,7 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         var viewModel = CreateViewModel(repository);
 
         await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+        viewModel.SelectDayDetailPanelCommand.Execute(null);
         viewModel.DayCards.Single().ExpandCommand.Execute(null);
         viewModel.DrilldownCard.Should().NotBeNull();
 
@@ -459,6 +525,7 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         var viewModel = CreateViewModel(repository);
 
         await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
+        viewModel.SelectDayDetailPanelCommand.Execute(null);
         await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 14));
 
         viewModel.DrilldownCard.Should().BeNull();
@@ -597,12 +664,13 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         DataSourceCardProviderRegistry? cardProviderRegistry = null,
         ICalendarSelectionService? calendarSelectionService = null,
         IPendingEventDraftService? pendingEventDraftService = null,
-        IGcalEventRepository? gcalEventRepository = null,
+        IEventRepository? eventRepository = null,
         IPendingEventRepository? pendingEventRepository = null,
-        ICalendarViewRangeProvider? viewRangeProvider = null)
+        ICalendarViewRangeProvider? viewRangeProvider = null,
+        StubSystemStateRepository? systemStateRepository = null)
     {
         return new DataSourcePanelViewModel(
-            new StubSystemStateRepository(),
+            systemStateRepository ?? new StubSystemStateRepository(),
             repository,
             registry ?? new DataSourceImportHandlerRegistry(),
             daySelectionService ?? new StubCalendarDaySelectionService(),
@@ -610,24 +678,24 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
             cardProviderRegistry ?? new DataSourceCardProviderRegistry(),
             calendarSelectionService ?? new StubCalendarSelectionService(),
             pendingEventDraftService ?? new StubPendingEventDraftService(),
-            gcalEventRepository ?? new StubGcalEventRepository(),
             pendingEventRepository ?? new StubPendingEventRepository(),
-            viewRangeProvider ?? new StubCalendarViewRangeProvider());
+            viewRangeProvider ?? new StubCalendarViewRangeProvider(),
+            eventRepository ?? new StubEventRepository());
     }
 
     private sealed class StubSystemStateRepository : ISystemStateRepository
     {
-        private readonly Dictionary<string, string> _values = [];
+        public Dictionary<string, string> Values { get; } = [];
 
         public Task<string?> GetAsync(string key, CancellationToken ct = default)
         {
-            _values.TryGetValue(key, out var value);
+            Values.TryGetValue(key, out var value);
             return Task.FromResult<string?>(value);
         }
 
         public Task SetAsync(string key, string value, CancellationToken ct = default)
         {
-            _values[key] = value;
+            Values[key] = value;
             return Task.CompletedTask;
         }
 
@@ -635,7 +703,7 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         {
             foreach (var pair in pairs)
             {
-                _values[pair.Key] = pair.Value;
+                Values[pair.Key] = pair.Value;
             }
 
             return Task.CompletedTask;
@@ -814,28 +882,46 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
 
     private sealed class StubPendingEventDraftService : IPendingEventDraftService
     {
-        public Task<PendingEvent> CreateDraftAsync(DateTime startLocal, DateTime endLocal, string? summary = null, CancellationToken ct = default)
-            => Task.FromResult(new PendingEvent
+        public Task<Event> CreateDraftAsync(DateTime startLocal, DateTime endLocal, string? summary = null, CancellationToken ct = default)
+            => Task.FromResult(new Event
             {
-                PendingEventId = "pending_new",
+                EventId = "pending_new",
                 Summary = summary,
                 StartDatetime = startLocal,
                 EndDatetime = endLocal
             });
     }
 
-    private sealed class StubGcalEventRepository : IGcalEventRepository
+    private sealed class StubEventRepository : IEventRepository
     {
-        public IList<GcalEvent> Events { get; set; } = [];
+        public IList<Event> Events { get; set; } = [];
 
-        public Task<IList<GcalEvent>> GetByDateRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
+        public Task<Event?> GetByEventIdAsync(string eventId, CancellationToken ct = default)
+            => Task.FromResult(Events.SingleOrDefault(e => e.EventId == eventId));
+
+        public Task<Event?> GetByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
+            => Task.FromResult(Events.SingleOrDefault(e => e.GcalEventId == gcalEventId));
+
+        public Task<IList<Event>> GetByDateRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default)
             => Task.FromResult(Events);
-
-        public Task<GcalEvent?> GetByGcalEventIdAsync(string gcalEventId, CancellationToken ct = default)
-            => Task.FromResult(Events.SingleOrDefault(gcalEvent => gcalEvent.GcalEventId == gcalEventId));
 
         public Task<(DateOnly From, DateOnly To)?> GetStoredDateRangeAsync(CancellationToken ct = default)
             => Task.FromResult<(DateOnly From, DateOnly To)?>(null);
+
+        public Task UpsertAsync(Event ev, CancellationToken ct = default)
+        {
+            Events = Events.Where(e => e.EventId != ev.EventId).Append(ev).ToList();
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteByEventIdAsync(string eventId, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task<Event?> GetDayNameEventAsync(DateOnly date, CancellationToken ct = default)
+            => Task.FromResult<Event?>(null);
+
+        public Task<Event?> GetSleepEventForDateAsync(DateOnly date, CancellationToken ct = default)
+            => Task.FromResult<Event?>(null);
     }
 
     private sealed class StubPendingEventRepository : IPendingEventRepository

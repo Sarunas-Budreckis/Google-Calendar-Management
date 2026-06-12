@@ -38,7 +38,6 @@
   <ItemGroup>
     <Compile Remove="Integration\CalendarQueryServiceTests.cs" />
     <Compile Remove="Integration\DataSourceRepositoryTests.cs" />
-    <Compile Remove="Integration\GoogleCalendarSyncTests.cs" />
     <Compile Remove="Integration\IcsExportServiceTests.cs" />
     <Compile Remove="Integration\IcsImportServiceTests.cs" />
     <Compile Remove="Integration\PendingEventPublishServiceTests.cs" />

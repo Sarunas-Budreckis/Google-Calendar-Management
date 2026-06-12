@@ -15,6 +15,7 @@ public sealed class TogglTransitDrilldownViewModel : ObservableObject
     private readonly ITogglTransitRepository _repository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IPendingEventRepository _pendingEventRepository;
+    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly EightFifteenRuleService _eightFifteenRule;
     private readonly List<TogglEntry> _entries = [];
@@ -25,11 +26,13 @@ public sealed class TogglTransitDrilldownViewModel : ObservableObject
         IPendingEventDraftService pendingEventDraftService,
         IPendingEventRepository pendingEventRepository,
         ICalendarSelectionService calendarSelectionService,
-        EightFifteenRuleService eightFifteenRule)
+        EightFifteenRuleService eightFifteenRule,
+        IEventRepository? eventRepository = null)
     {
         _repository = repository;
         _pendingEventDraftService = pendingEventDraftService;
         _pendingEventRepository = pendingEventRepository;
+        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
         _eightFifteenRule = eightFifteenRule;
         CreateCandidateEventsCommand = new AsyncRelayCommand(CreateCandidateEventsAsync, () => HasEntries);
@@ -78,7 +81,7 @@ public sealed class TogglTransitDrilldownViewModel : ObservableObject
             return;
         }
 
-        var createdEvents = new List<PendingEvent>();
+        var createdEvents = new List<Event>();
 
         foreach (var entry in _entries)
         {
@@ -95,8 +98,11 @@ public sealed class TogglTransitDrilldownViewModel : ObservableObject
                 draft.IsAllDay = false;
                 draft.SourceSystem = "toggl";
                 draft.ColorId = "lavender";
-                await _pendingEventRepository.UpsertAsync(draft);
-                WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
+                if (_eventRepository is not null)
+                {
+                    await _eventRepository.UpsertAsync(draft);
+                }
+                WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
                 createdEvents.Add(draft);
             }
         }
@@ -106,7 +112,7 @@ public sealed class TogglTransitDrilldownViewModel : ObservableObject
             return;
         }
 
-        var selectId = createdEvents[0].PendingEventId;
+        var selectId = createdEvents[0].EventId;
         _calendarSelectionService.Select(selectId, CalendarEventSourceKind.Pending, openInEditMode: true);
     }
 

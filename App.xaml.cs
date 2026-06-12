@@ -265,7 +265,8 @@ namespace GoogleCalendarManagement
             services.AddSingleton<IGoogleCalendarService, GoogleCalendarService>();
             services.AddSingleton<ISyncManager, SyncManager>();
             services.AddSingleton(TimeProvider.System);
-            services.AddSingleton<IGcalEventRepository, GcalEventRepository>();
+            services.AddSingleton<IEventRepository, EventRepository>();
+            services.AddSingleton<IEventIdentityService, EventIdentityService>();
             services.AddSingleton<IPendingEventRepository, PendingEventRepository>();
             services.AddSingleton<IConfigRepository, ConfigRepository>();
             services.AddSingleton<IDataSourceRepository, DataSourceRepository>();

@@ -1005,6 +1005,6 @@ public sealed partial class MainPage : Page
         var startLocal = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.FromTimeSpan(startTimePicker.Time)), DateTimeKind.Local);
         var endLocal = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.FromTimeSpan(endTimePicker.Time)), DateTimeKind.Local);
         var draft = await _pendingEventDraftService.CreateDraftAsync(startLocal, endLocal);
-        _selectionService.Select(draft.PendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        _selectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
     }
 }

@@ -7,12 +7,12 @@ public static class IcsExporter
 {
     private const string CrLf = "\r\n";
 
-    public static string GenerateIcs(IEnumerable<GcalEvent> events)
+    public static string GenerateIcs(IEnumerable<Event> events)
     {
         return GenerateIcs(events, DateTime.UtcNow);
     }
 
-    public static string GenerateIcs(IEnumerable<GcalEvent> events, DateTime dtStampUtc)
+    public static string GenerateIcs(IEnumerable<Event> events, DateTime dtStampUtc)
     {
         ArgumentNullException.ThrowIfNull(events);
 
@@ -33,7 +33,7 @@ public static class IcsExporter
         return builder.ToString();
     }
 
-    private static void AppendEvent(StringBuilder builder, GcalEvent calendarEvent, DateTime dtStampUtc)
+    private static void AppendEvent(StringBuilder builder, Event calendarEvent, DateTime dtStampUtc)
     {
         ArgumentNullException.ThrowIfNull(calendarEvent);
 

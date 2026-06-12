@@ -1002,7 +1002,7 @@ public sealed partial class DayViewControl : Page
         if (!shouldCancel)
         {
             var draft = await _pendingEventDraftService.CreateDraftAsync(draftRange.StartLocal, draftRange.EndLocal);
-            _selectionService.Select(draft.PendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+            _selectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
         }
 
         e.Handled = true;

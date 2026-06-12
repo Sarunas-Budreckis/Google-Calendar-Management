@@ -49,10 +49,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
                 },
                 "sync-token-123")));
 
-        var syncManager = new SyncManager(
-            googleCalendarService.Object,
-            _contextFactory,
-            NullLogger<SyncManager>.Instance);
+        var syncManager = CreateSyncManager(googleCalendarService);
 
         var result = await syncManager.SyncAsync("primary");
 
@@ -62,9 +59,11 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.NewSyncToken.Should().Be("sync-token-123");
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var events = await context.GcalEvents.OrderBy(evt => evt.GcalEventId).ToListAsync();
+        var events = await context.Events.OrderBy(evt => evt.GcalEventId).ToListAsync();
         events.Should().HaveCount(2);
         events.Should().OnlyContain(evt => evt.LastSyncedAt.HasValue);
+        events.Should().OnlyContain(evt => evt.EventId != "");
+        events.Should().OnlyContain(evt => evt.Lifecycle == "approved" && evt.Publish == "published");
 
         var refresh = await context.DataSourceRefreshes.SingleAsync();
         refresh.SourceName.Should().Be("gcal");
@@ -81,31 +80,9 @@ public sealed class GoogleCalendarSyncTests : IDisposable
     {
         var originalTimestamp = new DateTime(2026, 01, 01, 8, 0, 0, DateTimeKind.Utc);
 
-        await using (var seedContext = await _contextFactory.CreateDbContextAsync())
-        {
-            seedContext.GcalEvents.AddRange(
-                new GcalEvent
-                {
-                    GcalEventId = "event-1",
-                    CalendarId = "primary",
-                    Summary = "Original summary",
-                    StartDatetime = originalTimestamp,
-                    EndDatetime = originalTimestamp.AddHours(1),
-                    CreatedAt = originalTimestamp,
-                    UpdatedAt = originalTimestamp
-                },
-                new GcalEvent
-                {
-                    GcalEventId = "event-2",
-                    CalendarId = "primary",
-                    Summary = "Will be cancelled",
-                    StartDatetime = originalTimestamp.AddDays(1),
-                    EndDatetime = originalTimestamp.AddDays(1).AddHours(1),
-                    CreatedAt = originalTimestamp,
-                    UpdatedAt = originalTimestamp
-                });
-            await seedContext.SaveChangesAsync();
-        }
+        await SeedEventAsync(
+            NewEvent("evt-1", "event-1", "Original summary", originalTimestamp, originalTimestamp.AddHours(1)),
+            NewEvent("evt-2", "event-2", "Will be cancelled", originalTimestamp.AddDays(1), originalTimestamp.AddDays(1).AddHours(1)));
 
         var googleCalendarService = new Mock<IGoogleCalendarService>();
         googleCalendarService
@@ -123,10 +100,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
                 },
                 "sync-token-456")));
 
-        var syncManager = new SyncManager(
-            googleCalendarService.Object,
-            _contextFactory,
-            NullLogger<SyncManager>.Instance);
+        var syncManager = CreateSyncManager(googleCalendarService);
 
         var result = await syncManager.SyncAsync("primary");
 
@@ -136,7 +110,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.EventsDeleted.Should().Be(1);
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var events = await context.GcalEvents.OrderBy(evt => evt.GcalEventId).ToListAsync();
+        var events = await context.Events.OrderBy(evt => evt.GcalEventId).ToListAsync();
         events.Should().HaveCount(2);
         events.Single(evt => evt.GcalEventId == "event-1").Summary.Should().Be("Updated summary");
         events.Single(evt => evt.GcalEventId == "event-2").IsDeleted.Should().BeTrue();
@@ -147,10 +121,13 @@ public sealed class GoogleCalendarSyncTests : IDisposable
     {
         var seedTimestamp = new DateTime(2026, 01, 10, 8, 0, 0, DateTimeKind.Utc);
 
-        await SeedEventAsync(new GcalEvent
+        await SeedEventAsync(new Event
         {
+            EventId = "evt-update-1",
             GcalEventId = "event-1",
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "Original summary",
             Description = "Original description",
             StartDatetime = seedTimestamp,
@@ -182,14 +159,14 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.EventsUpdated.Should().Be(1);
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-1");
+        var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-1");
         var versions = await context.GcalEventVersions
             .OrderByDescending(version => version.CreatedAt)
             .ThenByDescending(version => version.VersionId)
             .ToListAsync();
 
         versions.Should().ContainSingle();
-        versions[0].GcalEventId.Should().Be("event-1");
+        versions[0].EventId.Should().Be("evt-update-1");
         versions[0].Summary.Should().Be("Original summary");
         versions[0].Description.Should().Be("Original description");
         versions[0].StartDatetime.Should().Be(seedTimestamp);
@@ -213,10 +190,13 @@ public sealed class GoogleCalendarSyncTests : IDisposable
     {
         var seedTimestamp = new DateTime(2026, 01, 11, 8, 0, 0, DateTimeKind.Utc);
 
-        await SeedEventAsync(new GcalEvent
+        await SeedEventAsync(new Event
         {
+            EventId = "evt-delete-1",
             GcalEventId = "event-1",
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "Existing summary",
             Description = "Existing description",
             StartDatetime = seedTimestamp,
@@ -249,8 +229,8 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.EventsDeleted.Should().Be(1);
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-1");
-        var version = await context.GcalEventVersions.SingleAsync(evt => evt.GcalEventId == "event-1");
+        var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-1");
+        var version = await context.GcalEventVersions.SingleAsync(evt => evt.EventId == "evt-delete-1");
 
         version.Summary.Should().Be("Existing summary");
         version.Description.Should().Be("Existing description");
@@ -278,7 +258,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.EventsAdded.Should().Be(1);
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        (await context.GcalEvents.CountAsync()).Should().Be(1);
+        (await context.Events.CountAsync()).Should().Be(1);
         (await context.GcalEventVersions.CountAsync()).Should().Be(0);
     }
 
@@ -287,10 +267,13 @@ public sealed class GoogleCalendarSyncTests : IDisposable
     {
         var eventTimestamp = new DateTime(2026, 01, 12, 9, 0, 0, DateTimeKind.Utc);
 
-        await SeedEventAsync(new GcalEvent
+        await SeedEventAsync(new Event
         {
+            EventId = "evt-unchanged-1",
             GcalEventId = "event-1",
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "Same summary",
             Description = "Same description",
             StartDatetime = eventTimestamp,
@@ -320,7 +303,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.EventsUpdated.Should().Be(0);
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-1");
+        var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-1");
 
         (await context.GcalEventVersions.CountAsync()).Should().Be(0);
         liveEvent.LastSyncedAt.Should().NotBeNull();
@@ -331,10 +314,13 @@ public sealed class GoogleCalendarSyncTests : IDisposable
     {
         var seedTimestamp = new DateTime(2026, 01, 13, 9, 0, 0, DateTimeKind.Utc);
 
-        await SeedEventAsync(new GcalEvent
+        await SeedEventAsync(new Event
         {
+            EventId = "evt-history-1",
             GcalEventId = "event-1",
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "Version A",
             Description = "Description A",
             StartDatetime = seedTimestamp,
@@ -387,7 +373,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         await secondSyncManager.SyncAsync("primary");
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-1");
+        var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-1");
         var versions = await context.GcalEventVersions
             .OrderByDescending(version => version.CreatedAt)
             .ThenByDescending(version => version.VersionId)
@@ -421,10 +407,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
                 new List<GcalEventDto>(),
                 "empty-sync-token")));
 
-        var syncManager = new SyncManager(
-            googleCalendarService.Object,
-            _contextFactory,
-            NullLogger<SyncManager>.Instance);
+        var syncManager = CreateSyncManager(googleCalendarService);
 
         var result = await syncManager.SyncAsync("primary");
 
@@ -432,7 +415,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.EventsAdded.Should().Be(0);
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        context.GcalEvents.Should().BeEmpty();
+        context.Events.Should().BeEmpty();
 
         var refresh = await context.DataSourceRefreshes.SingleAsync();
         refresh.Success.Should().BeTrue();
@@ -460,10 +443,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
                 },
                 "sync-token-789")));
 
-        var syncManager = new SyncManager(
-            googleCalendarService.Object,
-            _contextFactory,
-            NullLogger<SyncManager>.Instance);
+        var syncManager = CreateSyncManager(googleCalendarService);
 
         using var cts = new CancellationTokenSource();
         var progress = new CallbackProgress<SyncProgress>(value =>
@@ -480,7 +460,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.WasCancelled.Should().BeTrue();
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var storedEvents = await context.GcalEvents.OrderBy(evt => evt.GcalEventId).ToListAsync();
+        var storedEvents = await context.Events.OrderBy(evt => evt.GcalEventId).ToListAsync();
         storedEvents.Should().ContainSingle(evt => evt.GcalEventId == "event-1");
 
         var refresh = await context.DataSourceRefreshes.SingleAsync();
@@ -510,6 +490,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         var syncManager = new SyncManager(
             googleCalendarService.Object,
             lockingFactory,
+            new EventIdentityService(new EventRepository(_contextFactory)),
             NullLogger<SyncManager>.Instance);
 
         var result = await syncManager.SyncAsync("primary");
@@ -525,10 +506,13 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         var seedTimestamp = new DateTime(2026, 02, 01, 8, 0, 0, DateTimeKind.Utc);
         const string recurringParentId = "recurring-parent-1";
 
-        await SeedEventAsync(new GcalEvent
+        await SeedEventAsync(new Event
         {
+            EventId = "evt-recurring-1",
             GcalEventId = "event-recurring-1",
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "Recurring instance v1",
             GcalEtag = "\"etag-v1\"",
             GcalUpdatedAt = seedTimestamp,
@@ -552,7 +536,7 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         await syncManager.SyncAsync("primary");
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var version = await context.GcalEventVersions.SingleAsync(v => v.GcalEventId == "event-recurring-1");
+        var version = await context.GcalEventVersions.SingleAsync(v => v.EventId == "evt-recurring-1");
 
         version.GcalUpdatedAt.Should().Be(seedTimestamp);
         version.RecurringEventId.Should().Be(recurringParentId);
@@ -565,10 +549,13 @@ public sealed class GoogleCalendarSyncTests : IDisposable
     {
         var seedTimestamp = new DateTime(2026, 02, 01, 8, 0, 0, DateTimeKind.Utc);
 
-        await SeedEventAsync(new GcalEvent
+        await SeedEventAsync(new Event
         {
+            EventId = "evt-recurring-2",
             GcalEventId = "event-recurring-2",
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "Recurring instance v1",
             GcalEtag = "\"etag-stable\"",
             GcalUpdatedAt = seedTimestamp,
@@ -592,8 +579,8 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         await syncManager.SyncAsync("primary");
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var liveEvent = await context.GcalEvents.SingleAsync(v => v.GcalEventId == "event-recurring-2");
-        var version = await context.GcalEventVersions.SingleAsync(v => v.GcalEventId == "event-recurring-2");
+        var liveEvent = await context.Events.SingleAsync(v => v.GcalEventId == "event-recurring-2");
+        var version = await context.GcalEventVersions.SingleAsync(v => v.EventId == "evt-recurring-2");
 
         version.GcalUpdatedAt.Should().Be(seedTimestamp);
         version.RecurringEventId.Should().BeNull();
@@ -609,14 +596,15 @@ public sealed class GoogleCalendarSyncTests : IDisposable
     {
         var seedTimestamp = new DateTime(2026, 02, 02, 8, 0, 0, DateTimeKind.Utc);
 
-        await SeedEventAsync(new GcalEvent
+        await SeedEventAsync(new Event
         {
+            EventId = "evt-owned-1",
             GcalEventId = "event-owned-1",
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "App-owned event",
             GcalEtag = "\"etag-original\"",
-            AppCreated = true,
-            AppPublished = true,
             SourceSystem = "manual",
             CreatedAt = seedTimestamp,
             UpdatedAt = seedTimestamp
@@ -634,11 +622,12 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         await syncManager.SyncAsync("primary");
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-owned-1");
+        var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-owned-1");
 
-        liveEvent.AppCreated.Should().BeTrue();
-        liveEvent.AppPublished.Should().BeTrue();
+        liveEvent.EventId.Should().Be("evt-owned-1");
         liveEvent.SourceSystem.Should().Be("manual");
+        liveEvent.Lifecycle.Should().Be("approved");
+        liveEvent.Publish.Should().Be("published");
     }
 
     [Fact]
@@ -646,14 +635,15 @@ public sealed class GoogleCalendarSyncTests : IDisposable
     {
         var seedTimestamp = new DateTime(2026, 02, 03, 8, 0, 0, DateTimeKind.Utc);
 
-        await SeedEventAsync(new GcalEvent
+        await SeedEventAsync(new Event
         {
+            EventId = "evt-owned-2",
             GcalEventId = "event-owned-2",
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "App-owned event to be deleted",
             GcalEtag = "\"etag-original\"",
-            AppCreated = true,
-            AppPublished = true,
             SourceSystem = "manual",
             CreatedAt = seedTimestamp,
             UpdatedAt = seedTimestamp
@@ -672,11 +662,10 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         await syncManager.SyncAsync("primary");
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-owned-2");
+        var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-owned-2");
 
         liveEvent.IsDeleted.Should().BeTrue();
-        liveEvent.AppCreated.Should().BeTrue();
-        liveEvent.AppPublished.Should().BeTrue();
+        liveEvent.EventId.Should().Be("evt-owned-2");
         liveEvent.SourceSystem.Should().Be("manual");
     }
 
@@ -685,19 +674,19 @@ public sealed class GoogleCalendarSyncTests : IDisposable
     {
         var seedTimestamp = new DateTime(2026, 02, 04, 8, 0, 0, DateTimeKind.Utc);
 
-        await SeedEventAsync(new GcalEvent
+        await SeedEventAsync(new Event
         {
+            EventId = "evt-color-preserve",
             GcalEventId = "event-color-preserve",
             CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
             Summary = "Original summary",
             StartDatetime = seedTimestamp,
             EndDatetime = seedTimestamp.AddHours(1),
             ColorId = "lavender",
             GcalEtag = "\"etag-original\"",
             GcalUpdatedAt = seedTimestamp,
-            AppCreated = true,
-            AppPublished = true,
-            AppPublishedAt = seedTimestamp,
             SourceSystem = "manual",
             CreatedAt = seedTimestamp,
             UpdatedAt = seedTimestamp
@@ -720,8 +709,113 @@ public sealed class GoogleCalendarSyncTests : IDisposable
         result.Success.Should().BeTrue();
 
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var liveEvent = await context.GcalEvents.SingleAsync(evt => evt.GcalEventId == "event-color-preserve");
+        var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-color-preserve");
         liveEvent.ColorId.Should().Be("lavender");
+    }
+
+    [Fact]
+    public async Task SyncAsync_UpdatedEvent_WithLocalUnpublishedEdits_DoesNotClobberLocalFields()
+    {
+        var seedTimestamp = new DateTime(2026, 03, 01, 8, 0, 0, DateTimeKind.Utc);
+
+        await SeedEventAsync(new Event
+        {
+            EventId = "evt-dirty-1",
+            GcalEventId = "event-dirty-1",
+            CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
+            HasUnpublishedChanges = true,
+            Summary = "Local edit",
+            Description = "Local description",
+            StartDatetime = seedTimestamp,
+            EndDatetime = seedTimestamp.AddHours(1),
+            ColorId = "5",
+            GcalEtag = "\"etag-old\"",
+            GcalUpdatedAt = seedTimestamp,
+            CreatedAt = seedTimestamp,
+            UpdatedAt = seedTimestamp
+        });
+
+        var syncManager = CreateSyncManager(new[]
+        {
+            CreateEvent(
+                "event-dirty-1",
+                "GCal update",
+                description: "GCal description",
+                start: seedTimestamp.AddDays(1),
+                end: seedTimestamp.AddDays(1).AddHours(2),
+                colorId: "9",
+                etag: "\"etag-new\"",
+                updatedAt: seedTimestamp.AddDays(1))
+        });
+
+        var result = await syncManager.SyncAsync("primary");
+
+        result.Success.Should().BeTrue();
+        result.EventsUpdated.Should().Be(0);
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-dirty-1");
+
+        // User-facing fields preserved.
+        liveEvent.Summary.Should().Be("Local edit");
+        liveEvent.Description.Should().Be("Local description");
+        liveEvent.StartDatetime.Should().Be(seedTimestamp);
+        liveEvent.EndDatetime.Should().Be(seedTimestamp.AddHours(1));
+        liveEvent.ColorId.Should().Be("5");
+        liveEvent.HasUnpublishedChanges.Should().BeTrue();
+
+        // Sync metadata refreshed.
+        liveEvent.GcalEtag.Should().Be("\"etag-new\"");
+        liveEvent.GcalUpdatedAt.Should().Be(seedTimestamp.AddDays(1));
+        liveEvent.LastSyncedAt.Should().NotBeNull();
+
+        // No snapshot written because nothing was overwritten.
+        (await context.GcalEventVersions.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SyncAsync_DeletedEvent_WithLocalUnpublishedEdits_AppliesDelete()
+    {
+        var seedTimestamp = new DateTime(2026, 03, 02, 8, 0, 0, DateTimeKind.Utc);
+
+        await SeedEventAsync(new Event
+        {
+            EventId = "evt-dirty-delete",
+            GcalEventId = "event-dirty-delete",
+            CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
+            HasUnpublishedChanges = true,
+            Summary = "Local edit pending",
+            GcalEtag = "\"etag-old\"",
+            GcalUpdatedAt = seedTimestamp,
+            CreatedAt = seedTimestamp,
+            UpdatedAt = seedTimestamp
+        });
+
+        var syncManager = CreateSyncManager(new[]
+        {
+            CreateEvent(
+                "event-dirty-delete",
+                "Local edit pending",
+                etag: "\"etag-deleted\"",
+                updatedAt: seedTimestamp.AddDays(1),
+                isDeleted: true)
+        });
+
+        var result = await syncManager.SyncAsync("primary");
+
+        result.Success.Should().BeTrue();
+        result.EventsDeleted.Should().Be(1);
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var liveEvent = await context.Events.SingleAsync(evt => evt.GcalEventId == "event-dirty-delete");
+        var version = await context.GcalEventVersions.SingleAsync(v => v.EventId == "evt-dirty-delete");
+
+        liveEvent.IsDeleted.Should().BeTrue();
+        version.ChangeReason.Should().Be("deleted");
     }
 
     public void Dispose()
@@ -743,17 +837,40 @@ public sealed class GoogleCalendarSyncTests : IDisposable
                 events.ToList(),
                 syncToken)));
 
+        return CreateSyncManager(googleCalendarService);
+    }
+
+    private SyncManager CreateSyncManager(Mock<IGoogleCalendarService> googleCalendarService)
+    {
         return new SyncManager(
             googleCalendarService.Object,
             _contextFactory,
+            new EventIdentityService(new EventRepository(_contextFactory)),
             NullLogger<SyncManager>.Instance);
     }
 
-    private async Task SeedEventAsync(GcalEvent gcalEvent)
+    private async Task SeedEventAsync(params Event[] events)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        context.GcalEvents.Add(gcalEvent);
+        context.Events.AddRange(events);
         await context.SaveChangesAsync();
+    }
+
+    private static Event NewEvent(string eventId, string gcalEventId, string summary, DateTime start, DateTime end)
+    {
+        return new Event
+        {
+            EventId = eventId,
+            GcalEventId = gcalEventId,
+            CalendarId = "primary",
+            Lifecycle = "approved",
+            Publish = "published",
+            Summary = summary,
+            StartDatetime = start,
+            EndDatetime = end,
+            CreatedAt = start,
+            UpdatedAt = start
+        };
     }
 
     private static GcalEventDto CreateEvent(

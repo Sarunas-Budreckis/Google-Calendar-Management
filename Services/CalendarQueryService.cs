@@ -35,10 +35,16 @@ public sealed class CalendarQueryService : ICalendarQueryService
 
         await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
 
-        // TODO 8.3+: rewrite the curated-event query against the unified `event` table.
-        // The gcal_event / pending_event tables were merged into `event` in Story 8.2; the full
-        // read path (lifecycle, has_unpublished_changes, candidate translucency) is rebuilt in
-        // Stories 8.3 (repository) and 8.5 (rendering). Outlook rows are unaffected and kept.
+        var eventRows = await context.Events
+            .AsNoTracking()
+            .Where(e => !e.IsDeleted &&
+                        e.StartDatetime.HasValue &&
+                        e.StartDatetime < rangeEndExclusiveUtc &&
+                        (e.EndDatetime ?? e.StartDatetime.Value) >= rangeStartUtc)
+            .OrderBy(e => e.StartDatetime)
+            .ThenBy(e => e.Summary)
+            .ToListAsync(ct);
+
         var outlookRows = await context.OutlookEvents
             .AsNoTracking()
             .Where(e => !e.IsSuppressed &&
@@ -48,7 +54,16 @@ public sealed class CalendarQueryService : ICalendarQueryService
             .ThenBy(e => e.Subject)
             .ToListAsync(ct);
 
-        var result = new List<CalendarEventDisplayModel>(outlookRows.Count);
+        var result = new List<CalendarEventDisplayModel>(eventRows.Count + outlookRows.Count);
+        foreach (var ev in eventRows)
+        {
+            var model = TryMapEventToDisplayModel(ev);
+            if (model is not null && OverlapsRange(model, from, to))
+            {
+                result.Add(model);
+            }
+        }
+
         foreach (var outlookEvent in outlookRows)
         {
             var model = MapOutlookEventToDisplayModel(outlookEvent);
@@ -84,12 +99,6 @@ public sealed class CalendarQueryService : ICalendarQueryService
 
         await using var context = await _dbContextFactory.CreateDbContextAsync(ct);
 
-        // TODO 8.3+: resolve curated events from the unified `event` table (Stories 8.3/8.5).
-        if (eventId.StartsWith("pending_", StringComparison.Ordinal))
-        {
-            return null;
-        }
-
         if (eventId.StartsWith("outlook_", StringComparison.Ordinal))
         {
             var outlookId = eventId["outlook_".Length..];
@@ -99,8 +108,74 @@ public sealed class CalendarQueryService : ICalendarQueryService
             return outlookEvent is null ? null : MapOutlookEventToDisplayModel(outlookEvent);
         }
 
-        // TODO 8.3+: resolve curated events from the unified `event` table (Stories 8.3/8.5).
-        return null;
+        var ev = await context.Events
+            .AsNoTracking()
+            .SingleOrDefaultAsync(e => e.EventId == eventId && !e.IsDeleted, ct);
+        return ev is null ? null : TryMapEventToDisplayModel(ev);
+    }
+
+    private CalendarEventDisplayModel? TryMapEventToDisplayModel(Event ev)
+    {
+        if (ev.StartDatetime is null)
+        {
+            _logger.LogWarning(
+                "Skipping event {EventId}: StartDatetime is null.",
+                ev.EventId);
+            return null;
+        }
+
+        var startUtc = NormalizeUtc(ev.StartDatetime.Value);
+        var endUtc = NormalizeUtc(ev.EndDatetime ?? ev.StartDatetime.Value);
+        var isAllDay = ev.IsAllDay ?? false;
+        var colorKey = _colorMappingService.NormalizeColorKey(ev.ColorId);
+        var isCandidate = ev.Lifecycle == "candidate";
+        var isPending = ev.Publish == "local_only" || ev.HasUnpublishedChanges || isCandidate;
+        var sourceKind = ev.Publish == "published" && !isCandidate
+            ? CalendarEventSourceKind.Google
+            : CalendarEventSourceKind.Pending;
+
+        DateTime startLocal, endLocal;
+        if (isAllDay)
+        {
+            startLocal = startUtc.Date;
+            endLocal = endUtc.Date;
+        }
+        else
+        {
+            startLocal = startUtc.ToLocalTime();
+            endLocal = endUtc.ToLocalTime();
+        }
+
+        return new CalendarEventDisplayModel(
+            ev.EventId,
+            sourceKind,
+            ev.Summary ?? string.Empty,
+            startUtc,
+            endUtc,
+            startLocal,
+            endLocal,
+            isAllDay,
+            _colorMappingService.GetHexColor(colorKey),
+            _colorMappingService.GetDisplayName(colorKey),
+            ev.IsRecurringInstance,
+            ev.Description,
+            ev.LastSyncedAt,
+            isPending,
+            false,
+            isCandidate ? 0.5 : isPending ? 0.6 : 1.0,
+            isPending ? ev.UpdatedAt : null,
+            BuildEventStatusLabel(ev),
+            colorKey);
+    }
+
+    private static string BuildEventStatusLabel(Event ev)
+    {
+        if (ev.Publish == "local_only")
+        {
+            return DraftStatusLabel;
+        }
+
+        return ev.HasUnpublishedChanges ? PendingOverlayStatusLabel : string.Empty;
     }
 
     private CalendarEventDisplayModel? TryMapGoogleEventToDisplayModel(GcalEvent gcalEvent, PendingEvent? pendingEvent)

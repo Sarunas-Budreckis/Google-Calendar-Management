@@ -4,5 +4,5 @@ namespace GoogleCalendarManagement.Services;
 
 public interface IPendingEventDraftService
 {
-    Task<PendingEvent> CreateDraftAsync(DateTime startLocal, DateTime endLocal, string? summary = null, CancellationToken ct = default);
+    Task<Event> CreateDraftAsync(DateTime startLocal, DateTime endLocal, string? summary = null, CancellationToken ct = default);
 }

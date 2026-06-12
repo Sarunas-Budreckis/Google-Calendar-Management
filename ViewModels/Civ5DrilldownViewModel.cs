@@ -16,6 +16,7 @@ public sealed class Civ5DrilldownViewModel : ObservableObject
     private readonly ICiv5SaveScannerService _scannerService;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IPendingEventRepository _pendingEventRepository;
+    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly List<Civ5SessionPoint> _points = [];
     private DateOnly _currentDate;
@@ -28,12 +29,14 @@ public sealed class Civ5DrilldownViewModel : ObservableObject
         ICiv5SaveScannerService scannerService,
         IPendingEventDraftService pendingEventDraftService,
         IPendingEventRepository pendingEventRepository,
-        ICalendarSelectionService calendarSelectionService)
+        ICalendarSelectionService calendarSelectionService,
+        IEventRepository? eventRepository = null)
     {
         _repository = repository;
         _scannerService = scannerService;
         _pendingEventDraftService = pendingEventDraftService;
         _pendingEventRepository = pendingEventRepository;
+        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
 
         ScanSavesCommand = new AsyncRelayCommand(ScanSavesAsync, () => !IsScanning);
@@ -156,9 +159,12 @@ public sealed class Civ5DrilldownViewModel : ObservableObject
             draft.IsAllDay = false;
             draft.SourceSystem = "civ5";
             draft.ColorId = "yellow";
-            await _pendingEventRepository.UpsertAsync(draft);
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
-            firstDraftId ??= draft.PendingEventId;
+            if (_eventRepository is not null)
+            {
+                await _eventRepository.UpsertAsync(draft);
+            }
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
+            firstDraftId ??= draft.EventId;
         }
 
         if (firstDraftId is not null)

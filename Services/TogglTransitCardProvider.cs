@@ -15,6 +15,7 @@ public sealed class TogglTransitCardProvider : IDataSourceCardProvider, IDataSou
     private readonly ITogglTransitRepository _repository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IPendingEventRepository _pendingEventRepository;
+    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly EightFifteenRuleService _eightFifteenRule;
     private readonly ConcurrentDictionary<DateOnly, bool> _hasDataByDate = [];
@@ -25,12 +26,14 @@ public sealed class TogglTransitCardProvider : IDataSourceCardProvider, IDataSou
         IPendingEventDraftService pendingEventDraftService,
         IPendingEventRepository pendingEventRepository,
         ICalendarSelectionService calendarSelectionService,
-        EightFifteenRuleService eightFifteenRule)
+        EightFifteenRuleService eightFifteenRule,
+        IEventRepository? eventRepository = null)
     {
         _serviceProvider = serviceProvider;
         _repository = repository;
         _pendingEventDraftService = pendingEventDraftService;
         _pendingEventRepository = pendingEventRepository;
+        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
         _eightFifteenRule = eightFifteenRule;
     }
@@ -83,7 +86,7 @@ public sealed class TogglTransitCardProvider : IDataSourceCardProvider, IDataSou
             return;
         }
 
-        var createdEvents = new List<PendingEvent>();
+        var createdEvents = new List<Event>();
 
         foreach (var entry in entries)
         {
@@ -100,8 +103,11 @@ public sealed class TogglTransitCardProvider : IDataSourceCardProvider, IDataSou
                 draft.IsAllDay = false;
                 draft.SourceSystem = "toggl";
                 draft.ColorId = "lavender";
-                await _pendingEventRepository.UpsertAsync(draft, ct);
-                WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
+                if (_eventRepository is not null)
+                {
+                    await _eventRepository.UpsertAsync(draft, ct);
+                }
+                WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
                 createdEvents.Add(draft);
             }
         }
@@ -111,7 +117,7 @@ public sealed class TogglTransitCardProvider : IDataSourceCardProvider, IDataSou
             return;
         }
 
-        var selectId = createdEvents[0].PendingEventId;
+        var selectId = createdEvents[0].EventId;
         _calendarSelectionService.Select(selectId, CalendarEventSourceKind.Pending, openInEditMode: true);
     }
 

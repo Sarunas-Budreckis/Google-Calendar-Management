@@ -17,6 +17,7 @@ public sealed class TogglPhoneDrilldownViewModel : ObservableObject
     private readonly ITogglPhoneRepository _repository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IPendingEventRepository _pendingEventRepository;
+    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly TogglSlidingWindowService _slidingWindowService;
 
@@ -28,11 +29,13 @@ public sealed class TogglPhoneDrilldownViewModel : ObservableObject
         IPendingEventDraftService pendingEventDraftService,
         IPendingEventRepository pendingEventRepository,
         ICalendarSelectionService calendarSelectionService,
-        TogglSlidingWindowService slidingWindowService)
+        TogglSlidingWindowService slidingWindowService,
+        IEventRepository? eventRepository = null)
     {
         _repository = repository;
         _pendingEventDraftService = pendingEventDraftService;
         _pendingEventRepository = pendingEventRepository;
+        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
         _slidingWindowService = slidingWindowService;
 
@@ -115,10 +118,13 @@ public sealed class TogglPhoneDrilldownViewModel : ObservableObject
             draft.IsAllDay = false;
             draft.SourceSystem = "toggl";
             draft.ColorId = "banana";
-            await _pendingEventRepository.UpsertAsync(draft);
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
+            if (_eventRepository is not null)
+            {
+                await _eventRepository.UpsertAsync(draft);
+            }
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
 
-            firstEventId ??= draft.PendingEventId;
+            firstEventId ??= draft.EventId;
         }
 
         if (firstEventId is not null)

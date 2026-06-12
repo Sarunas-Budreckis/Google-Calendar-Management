@@ -19,6 +19,7 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
     private readonly ComfyUIImportHandler _importHandler;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IPendingEventRepository _pendingEventRepository;
+    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly IWindowService _windowService;
     private readonly TimeProvider _timeProvider;
@@ -36,12 +37,14 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
         IPendingEventRepository pendingEventRepository,
         ICalendarSelectionService calendarSelectionService,
         IWindowService windowService,
+        IEventRepository? eventRepository = null,
         TimeProvider? timeProvider = null)
     {
         _repository = repository;
         _importHandler = importHandler;
         _pendingEventDraftService = pendingEventDraftService;
         _pendingEventRepository = pendingEventRepository;
+        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
         _windowService = windowService;
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -219,9 +222,12 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
             draft.IsAllDay = false;
             draft.SourceSystem = ComfyUIFolderScannerService.SourceKey;
             draft.ColorId = "navy";
-            await _pendingEventRepository.UpsertAsync(draft);
-            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
-            firstDraftId ??= draft.PendingEventId;
+            if (_eventRepository is not null)
+            {
+                await _eventRepository.UpsertAsync(draft);
+            }
+            WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
+            firstDraftId ??= draft.EventId;
         }
 
         if (firstDraftId is not null)

@@ -30,6 +30,12 @@ public class Event
     /// <summary>Replaces the old "row exists in pending_event = dirty" heuristic.</summary>
     public bool HasUnpublishedChanges { get; set; }
 
+    /// <summary>
+    /// Soft-delete flag set by the GCal sync reconciler when the remote event is cancelled
+    /// (Story 8.4). Story 8.6 relocates deleted rows into the deleted_event table.
+    /// </summary>
+    public bool IsDeleted { get; set; }
+
     /// <summary>Origin: 'manual' | 'toggl' | 'outlook' | 'civ5' | ...</summary>
     public string? SourceSystem { get; set; }
 

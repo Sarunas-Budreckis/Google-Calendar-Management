@@ -27,6 +27,7 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
         builder.Property(e => e.Lifecycle).HasColumnName("lifecycle").IsRequired().HasDefaultValue("approved");
         builder.Property(e => e.Publish).HasColumnName("publish").IsRequired().HasDefaultValue("local_only");
         builder.Property(e => e.HasUnpublishedChanges).HasColumnName("has_unpublished_changes").HasDefaultValue(false);
+        builder.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
         builder.Property(e => e.SourceSystem).HasColumnName("source_system");
         builder.Property(e => e.RecurringEventId).HasColumnName("recurring_event_id");
         builder.Property(e => e.IsRecurringInstance).HasColumnName("is_recurring_instance").HasDefaultValue(false);

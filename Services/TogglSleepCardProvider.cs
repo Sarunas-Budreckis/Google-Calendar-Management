@@ -14,6 +14,7 @@ public sealed class TogglSleepCardProvider : IDataSourceCardProvider, IDataSourc
     private readonly ITogglSleepRepository _repository;
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IPendingEventRepository _pendingEventRepository;
+    private readonly IEventRepository? _eventRepository;
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly ConcurrentDictionary<DateOnly, bool> _hasDataByDate = [];
 
@@ -22,12 +23,14 @@ public sealed class TogglSleepCardProvider : IDataSourceCardProvider, IDataSourc
         ITogglSleepRepository repository,
         IPendingEventDraftService pendingEventDraftService,
         IPendingEventRepository pendingEventRepository,
-        ICalendarSelectionService calendarSelectionService)
+        ICalendarSelectionService calendarSelectionService,
+        IEventRepository? eventRepository = null)
     {
         _serviceProvider = serviceProvider;
         _repository = repository;
         _pendingEventDraftService = pendingEventDraftService;
         _pendingEventRepository = pendingEventRepository;
+        _eventRepository = eventRepository;
         _calendarSelectionService = calendarSelectionService;
     }
 
@@ -93,9 +96,12 @@ public sealed class TogglSleepCardProvider : IDataSourceCardProvider, IDataSourc
         draft.IsAllDay = false;
         draft.SourceSystem = "toggl";
         draft.ColorId = "grey";
-        await _pendingEventRepository.UpsertAsync(draft, ct);
-        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.PendingEventId));
-        _calendarSelectionService.Select(draft.PendingEventId, CalendarEventSourceKind.Pending, openInEditMode: true);
+        if (_eventRepository is not null)
+        {
+            await _eventRepository.UpsertAsync(draft, ct);
+        }
+        WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(draft.EventId));
+        _calendarSelectionService.Select(draft.EventId, CalendarEventSourceKind.Pending, openInEditMode: true);
     }
 
     private static DateTime NormalizeUtc(DateTime value)
