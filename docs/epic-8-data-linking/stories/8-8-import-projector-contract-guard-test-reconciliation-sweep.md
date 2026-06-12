@@ -1,7 +1,7 @@
 # Story 8.8: Import Projector Contract + Guard Test + Reconciliation Sweep
 
 **Epic:** 8 — Event Model & Raw Data Linking Engine
-**Status:** ready-for-dev
+**Status:** done
 **Agent:** Opus · **Effort:** high
 **Dependencies:** 8.7 (blocking — `DataPoint` entity, `CalendarDbContext.DataPoints`, `DataPointConfiguration`, EF migration, and `Constants/SourceKeys.cs` must exist)
 
@@ -56,45 +56,45 @@ so that every raw imported record is guaranteed to have a matching `data_point` 
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Define `IDataPointProjector` interface and `DataPointSpec` record (AC: #1)
-  - [ ] 1.1 Create `Services/IDataPointProjector.cs`:
+- [x] Task 1: Define `IDataPointProjector` interface and `DataPointSpec` record (AC: #1)
+  - [x] 1.1 Create `Services/IDataPointProjector.cs`:
     - Namespace `GoogleCalendarManagement.Services`
     - Interface `IDataPointProjector` with `SourceKey`, `GetOrphanedSpecsAsync`, `ProjectSourceRefsAsync` per AC #1
     - `record DataPointSpec(string SourceKey, string SourceRef, DateTime StartUtc, DateTime EndUtc)` — define in the same file (no separate file needed)
-  - [ ] 1.2 All `DateTime` values are UTC by convention (no `DateTimeKind` enforcement needed — consumers must pass UTC)
+  - [x] 1.2 All `DateTime` values are UTC by convention (no `DateTimeKind` enforcement needed — consumers must pass UTC)
 
-- [ ] Task 2: Create `IDataPointProjectorRegistry` and `DataPointProjectorRegistry` (AC: #2)
-  - [ ] 2.1 Create `Services/IDataPointProjectorRegistry.cs` with three methods per AC #2
-  - [ ] 2.2 Create `Services/DataPointProjectorRegistry.cs`:
+- [x] Task 2: Create `IDataPointProjectorRegistry` and `DataPointProjectorRegistry` (AC: #2)
+  - [x] 2.1 Create `Services/IDataPointProjectorRegistry.cs` with three methods per AC #2
+  - [x] 2.2 Create `Services/DataPointProjectorRegistry.cs`:
     - Internal `Dictionary<string, IDataPointProjector> _projectors` (no `ConcurrentDictionary` needed — Register is called only during startup)
     - `Register` throws `InvalidOperationException` if key already exists: `throw new InvalidOperationException($"Projector for source key '{projector.SourceKey}' is already registered.")`
     - `GetProjector` returns null on miss, never throws
     - `GetAllProjectors` returns `_projectors.Values.ToList().AsReadOnly()`
-  - [ ] 2.3 Namespace: `GoogleCalendarManagement.Services`
+  - [x] 2.3 Namespace: `GoogleCalendarManagement.Services`
 
-- [ ] Task 3: Add `GetProjector()` default member to `IDataSourceImportHandler` (AC: #3)
-  - [ ] 3.1 Open `Services/IDataSourceImportHandler.cs`
-  - [ ] 3.2 Add `IDataPointProjector? GetProjector() => null;` as a default interface member after the existing `IsApiFetch` default
-  - [ ] 3.3 Build the project — verify all 10 existing concrete handlers compile without changes (they inherit the default `return null`)
+- [x] Task 3: Add `GetProjector()` default member to `IDataSourceImportHandler` (AC: #3)
+  - [x] 3.1 Open `Services/IDataSourceImportHandler.cs`
+  - [x] 3.2 Add `IDataPointProjector? GetProjector() => null;` as a default interface member after the existing `IsApiFetch` default
+  - [x] 3.3 Build the project — verify all 10 existing concrete handlers compile without changes (they inherit the default `return null`)
 
-- [ ] Task 4: Write the reflection guard test (AC: #4)
-  - [ ] 4.1 Create `GoogleCalendarManagement.Tests/Unit/Services/DataPointProjectorGuardTests.cs`
-  - [ ] 4.2 Single `[Fact]` test `AllConcreteHandlers_MustOverride_GetProjector`:
+- [x] Task 4: Write the reflection guard test (AC: #4)
+  - [x] 4.1 Create `GoogleCalendarManagement.Tests/Unit/Services/DataPointProjectorGuardTests.cs`
+  - [x] 4.2 Single `[Fact]` test `AllConcreteHandlers_MustOverride_GetProjector`:
     - Reflect on `typeof(IDataSourceImportHandler).Assembly` to find all concrete, non-abstract, non-generic handler types
     - For each type, get the `MethodInfo` for `GetProjector()` via `type.GetMethod(nameof(IDataSourceImportHandler.GetProjector))`
     - Assert `method.DeclaringType == type` (i.e., the method is declared on the concrete class, not inherited from the interface default)
     - Use `handlerTypes.Should().AllSatisfy(...)` with a descriptive failure message: `$"Handler type '{t.Name}' does not override GetProjector() — add a real IDataPointProjector override"`
-  - [ ] 4.3 Verify the test **fails** at this point (no handler overrides `GetProjector()`) — expected state in 8.8
+  - [x] 4.3 Verify the test **fails** at this point (no handler overrides `GetProjector()`) — expected state in 8.8
 
-- [ ] Task 5: Define `IDataPointReconciliationSweepService` (AC: #5)
-  - [ ] 5.1 Create `Services/IDataPointReconciliationSweepService.cs`
-  - [ ] 5.2 Four methods per AC #5
-  - [ ] 5.3 Namespace: `GoogleCalendarManagement.Services`
+- [x] Task 5: Define `IDataPointReconciliationSweepService` (AC: #5)
+  - [x] 5.1 Create `Services/IDataPointReconciliationSweepService.cs`
+  - [x] 5.2 Four methods per AC #5
+  - [x] 5.3 Namespace: `GoogleCalendarManagement.Services`
 
-- [ ] Task 6: Implement `DataPointReconciliationSweepService` (AC: #6)
-  - [ ] 6.1 Create `Services/DataPointReconciliationSweepService.cs`
-  - [ ] 6.2 Constructor injects `IDataPointProjectorRegistry _projectorRegistry`, `IDbContextFactory<CalendarDbContext> _contextFactory`, and `ILogger<DataPointReconciliationSweepService> _logger`
-  - [ ] 6.3 Implement `RunPostImportAsync(string sourceKey, CancellationToken ct)`:
+- [x] Task 6: Implement `DataPointReconciliationSweepService` (AC: #6)
+  - [x] 6.1 Create `Services/DataPointReconciliationSweepService.cs`
+  - [x] 6.2 Constructor injects `IDataPointProjectorRegistry _projectorRegistry`, `IDbContextFactory<CalendarDbContext> _contextFactory`, and `ILogger<DataPointReconciliationSweepService> _logger`
+  - [x] 6.3 Implement `RunPostImportAsync(string sourceKey, CancellationToken ct)`:
     ```
     1. GetProjector(sourceKey); if null, log warning "No projector registered for sourceKey '{sourceKey}'" and return
     2. await using ctx = contextFactory.CreateDbContextAsync(ct)
@@ -103,10 +103,10 @@ so that every raw imported record is guaranteed to have a matching `data_point` 
     5. await ctx.SaveChangesAsync(ct)
     6. If any inserted, log info "Reconciled {count} missing datapoints for source '{sourceKey}'"
     ```
-  - [ ] 6.4 Upsert-or-skip: before inserting, check `ctx.DataPoints.AnyAsync(dp => dp.SourceKey == spec.SourceKey && dp.SourceRef == spec.SourceRef, ct)` and skip if true. For performance with many specs, batch the check using `ctx.DataPoints.Where(dp => dp.SourceKey == sourceKey && sourceRefs.Contains(dp.SourceRef)).Select(dp => dp.SourceRef).ToListAsync(ct)` to get existing refs in one query, then filter.
-  - [ ] 6.5 Implement `RunStartupDriftCheckAsync(CancellationToken ct)`:
+  - [x] 6.4 Upsert-or-skip: before inserting, check `ctx.DataPoints.AnyAsync(dp => dp.SourceKey == spec.SourceKey && dp.SourceRef == spec.SourceRef, ct)` and skip if true. For performance with many specs, batch the check using `ctx.DataPoints.Where(dp => dp.SourceKey == sourceKey && sourceRefs.Contains(dp.SourceRef)).Select(dp => dp.SourceRef).ToListAsync(ct)` to get existing refs in one query, then filter.
+  - [x] 6.5 Implement `RunStartupDriftCheckAsync(CancellationToken ct)`:
     - For each projector in `_projectorRegistry.GetAllProjectors()`, call `RunPostImportAsync(projector.SourceKey, ct)` sequentially (not parallel — avoid DB contention on startup)
-  - [ ] 6.6 Implement `RebuildRegistryForSourceAsync(string sourceKey, CancellationToken ct)`:
+  - [x] 6.6 Implement `RebuildRegistryForSourceAsync(string sourceKey, CancellationToken ct)`:
     ```
     1. GetProjector(sourceKey); if null, log warning and return
     2. await using ctx = contextFactory.CreateDbContextAsync(ct)
@@ -118,23 +118,23 @@ so that every raw imported record is guaranteed to have a matching `data_point` 
     8. await tx.CommitAsync(ct)
     9. Log info "Rebuilt {count} datapoints for source '{sourceKey}'"
     ```
-  - [ ] 6.7 Implement `RebuildRegistryAllAsync(CancellationToken ct)`:
+  - [x] 6.7 Implement `RebuildRegistryAllAsync(CancellationToken ct)`:
     - For each projector in `_projectorRegistry.GetAllProjectors()`, call `RebuildRegistryForSourceAsync(projector.SourceKey, ct)` sequentially
 
-- [ ] Task 7: DI registration (AC: #2 DI, #6 DI)
-  - [ ] 7.1 Open `App.xaml.cs`
-  - [ ] 7.2 Add `services.AddSingleton<IDataPointProjectorRegistry, DataPointProjectorRegistry>()` near other singleton registrations (~lines 268–310)
-  - [ ] 7.3 Add `services.AddSingleton<IDataPointReconciliationSweepService, DataPointReconciliationSweepService>()`
+- [x] Task 7: DI registration (AC: #2 DI, #6 DI)
+  - [x] 7.1 Open `App.xaml.cs`
+  - [x] 7.2 Add `services.AddSingleton<IDataPointProjectorRegistry, DataPointProjectorRegistry>()` near other singleton registrations (~lines 268–310)
+  - [x] 7.3 Add `services.AddSingleton<IDataPointReconciliationSweepService, DataPointReconciliationSweepService>()`
 
-- [ ] Task 8: Wire up startup sweep (AC: #7)
-  - [ ] 8.1 After the DI container is built and the main window is shown, add fire-and-forget startup sweep. Locate the existing startup sequence in `App.xaml.cs` (search for where the main window is activated or where other startup services are invoked)
-  - [ ] 8.2 Call `Task.Run(() => serviceProvider.GetRequiredService<IDataPointReconciliationSweepService>().RunStartupDriftCheckAsync(CancellationToken.None))` — do NOT await on the UI thread; no UI blocking
-  - [ ] 8.3 The sweep runs silently; any orphans found are logged but do NOT produce a user-facing dialog
+- [x] Task 8: Wire up startup sweep (AC: #7)
+  - [x] 8.1 After the DI container is built and the main window is shown, add fire-and-forget startup sweep. Locate the existing startup sequence in `App.xaml.cs` (search for where the main window is activated or where other startup services are invoked)
+  - [x] 8.2 Call `Task.Run(() => serviceProvider.GetRequiredService<IDataPointReconciliationSweepService>().RunStartupDriftCheckAsync(CancellationToken.None))` — do NOT await on the UI thread; no UI blocking
+  - [x] 8.3 The sweep runs silently; any orphans found are logged but do NOT produce a user-facing dialog
 
-- [ ] Task 9: Add `RebuildDataPointRegistryCommand` to `DataSourcePanelViewModel` (AC: #8)
-  - [ ] 9.1 Open `ViewModels/DataSourcePanelViewModel.cs`
-  - [ ] 9.2 Inject `IDataPointReconciliationSweepService` into the constructor (check if the constructor uses DI or manual wiring)
-  - [ ] 9.3 Add `public AsyncRelayCommand RebuildDataPointRegistryCommand { get; }` initialized in constructor:
+- [x] Task 9: Add `RebuildDataPointRegistryCommand` to `DataSourcePanelViewModel` (AC: #8)
+  - [x] 9.1 Open `ViewModels/DataSourcePanelViewModel.cs`
+  - [x] 9.2 Inject `IDataPointReconciliationSweepService` into the constructor (check if the constructor uses DI or manual wiring)
+  - [x] 9.3 Add `public AsyncRelayCommand RebuildDataPointRegistryCommand { get; }` initialized in constructor:
     ```csharp
     RebuildDataPointRegistryCommand = new AsyncRelayCommand(async ct =>
     {
@@ -142,23 +142,29 @@ so that every raw imported record is guaranteed to have a matching `data_point` 
         await _dialogService.ShowMessageAsync("Data Point Registry", "Registry rebuilt successfully.", "OK");
     });
     ```
-  - [ ] 9.4 If `DataSourcePanelViewModel` does not already inject `IContentDialogService`, add it
-  - [ ] 9.5 Expose the command on the XAML view by verifying `DataSourcePanelControl.xaml` can access it (no UI button needed in 8.8 — just ensure the command is accessible for Epic 9 wiring; a TODO comment in the XAML is acceptable)
+  - [x] 9.4 If `DataSourcePanelViewModel` does not already inject `IContentDialogService`, add it
+  - [x] 9.5 Expose the command on the XAML view by verifying `DataSourcePanelControl.xaml` can access it (no UI button needed in 8.8 — just ensure the command is accessible for Epic 9 wiring; a TODO comment in the XAML is acceptable)
 
-- [ ] Task 10: Unit tests for `DataPointReconciliationSweepService` (AC: #9)
-  - [ ] 10.1 Create `GoogleCalendarManagement.Tests/Unit/Services/DataPointReconciliationSweepServiceTests.cs`
-  - [ ] 10.2 Use in-memory SQLite with the standard `TestDbContextFactory` pattern (see Dev Notes)
-  - [ ] 10.3 Mock `IDataPointProjectorRegistry` with Moq; wire mock projectors
-  - [ ] 10.4 Write 5 tests per AC #9:
+- [x] Task 10: Unit tests for `DataPointReconciliationSweepService` (AC: #9)
+  - [x] 10.1 Create `GoogleCalendarManagement.Tests/Unit/Services/DataPointReconciliationSweepServiceTests.cs`
+  - [x] 10.2 Use in-memory SQLite with the standard `TestDbContextFactory` pattern (see Dev Notes)
+  - [x] 10.3 Mock `IDataPointProjectorRegistry` with Moq; wire mock projectors
+  - [x] 10.4 Write 5 tests per AC #9:
     - `RunPostImportAsync_InsertsOrphanedDataPoints` — mock projector returns 2 specs; assert 2 `DataPoint` rows exist after call
     - `RunPostImportAsync_IsIdempotent` — call twice with same specs; assert still only 2 rows (no duplicates)
     - `RunPostImportAsync_UnknownSourceKey_DoesNotThrow` — no projector registered for key; verify completes without exception
     - `RunStartupDriftCheckAsync_CallsProjectorForEveryRegisteredSource` — mock registry with 3 projectors; verify `GetOrphanedSpecsAsync` called on each
     - `RebuildRegistryForSourceAsync_DeletesExistingThenReinserts` — seed 3 existing `DataPoint` rows for source; rebuild; assert rows replaced (not duplicated)
 
-- [ ] Task 11: Verify build (AC: #10)
-  - [ ] 11.1 `dotnet build` from solution root — zero errors, zero CS warnings
-  - [ ] 11.2 Run unit tests: `dotnet test GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj` — all tests pass **except** the guard test from Task 4 (expected failure in 8.8)
+- [x] Task 11: Verify build (AC: #10)
+  - [x] 11.1 `dotnet build` from solution root — zero errors, zero CS warnings
+  - [x] 11.2 Run unit tests: `dotnet test GoogleCalendarManagement.Tests/GoogleCalendarManagement.Tests.csproj` — all tests pass **except** the guard test from Task 4 (expected failure in 8.8)
+
+### Review Findings
+
+- [x] [Review][Patch] Projector registry is never populated from handler projectors [App.xaml.cs:57]
+- [x] [Review][Patch] Healed orphan datapoints are logged as information instead of the required warning [Services/DataPointReconciliationSweepService.cs:45]
+- [x] [Review][Patch] Fire-and-forget startup sweep can fail silently and stop remaining projector checks [App.xaml.cs:192]
 
 ---
 
@@ -452,10 +458,45 @@ Modified files:
 
 ### Agent Model Used
 
-Opus
+Opus (claude-opus-4-8)
 
 ### Debug Log References
 
+- `dotnet build GoogleCalendarManagement.sln` — succeeds, 0 errors, no new warnings (2 pre-existing warnings in unrelated test files).
+- `dotnet test --filter DataPointReconciliationSweepServiceTests` — 5/5 pass.
+- `dotnet test --filter DataPointProjectorGuardTests` — **1 fail (intended)**: lists all 10 concrete handlers as missing `GetProjector()` overrides. This is the designed CI-tripwire state for 8.8; it goes green after Story 8.9 adds projectors.
+- Full suite excluding the guard test: 468 passed, 0 failed, 19 skipped (pre-existing UI-thread skips). No regressions.
+
 ### Completion Notes List
 
+- Defined the `IDataPointProjector` contract + `DataPointSpec` record (AC #1) as a distinct concern from 8.7's `ISourcePointerResolver` — both remain separate and 8.9 will implement one of each per source.
+- Added `IDataPointProjectorRegistry` / `DataPointProjectorRegistry` (AC #2): plain `Dictionary` (startup-only registration), `Register` throws on duplicate key, `GetProjector` returns null on miss, `GetAllProjectors` returns a snapshot.
+- Added `IDataPointProjector? GetProjector() => null;` default member to `IDataSourceImportHandler` (AC #3) — all 10 existing concrete handlers compile unchanged via the default.
+- Reflection guard test (AC #4) enumerates concrete handlers and asserts each declares its own `GetProjector()` override. Confirmed it fails in 8.8 (all 10 handlers listed), as intended.
+- `IDataPointReconciliationSweepService` + implementation (AC #5/#6): post-import heal, startup drift check (sequential), per-source rebuild (transactional `ExecuteDeleteAsync` + re-project), and rebuild-all. Upsert-or-skip de-dupes against existing `(source_key, source_ref)` rows in one batch query and within the incoming batch; `CreatedAt` stamped from injected `TimeProvider`.
+- Startup sweep wired fire-and-forget via `Task.Run` after the main page initializes (AC #7) — no UI-thread await, orphans logged not dialog'd. (No projectors registered yet in 8.8, so it is a silent no-op until 8.9.)
+- `RebuildDataPointRegistryCommand` (`AsyncRelayCommand`) added to `DataSourcePanelViewModel` (AC #8); injected `IDataPointReconciliationSweepService` + `IContentDialogService`; shows a completion dialog. XAML wiring deferred to Epic 9 via a TODO comment.
+- Both new services registered as singletons in `App.xaml.cs` DI (AC #2/#6).
+- 5 sweep-service unit tests added (AC #9), all green. Updated the existing `DataSourcePanelViewModelTests` factory for the two new constructor params (Moq stubs).
+
 ### File List
+
+**New files:**
+- `Services/IDataPointProjector.cs`
+- `Services/IDataPointProjectorRegistry.cs`
+- `Services/DataPointProjectorRegistry.cs`
+- `Services/IDataPointReconciliationSweepService.cs`
+- `Services/DataPointReconciliationSweepService.cs`
+- `GoogleCalendarManagement.Tests/Unit/Services/DataPointProjectorGuardTests.cs`
+- `GoogleCalendarManagement.Tests/Unit/Services/DataPointReconciliationSweepServiceTests.cs`
+
+**Modified files:**
+- `Services/IDataSourceImportHandler.cs` — added `GetProjector()` default member
+- `App.xaml.cs` — DI registrations + fire-and-forget startup drift check
+- `ViewModels/DataSourcePanelViewModel.cs` — `RebuildDataPointRegistryCommand` + new injected dependencies
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/DataSourcePanelViewModelTests.cs` — updated test factory for new constructor params
+- `docs/sprint-status.yaml` — status 8.8 → in-progress → review
+
+### Change Log
+
+- 2026-06-12: Implemented Story 8.8 — import projector contract (`IDataPointProjector`), projector registry, `IDataSourceImportHandler.GetProjector()` default member, reflection CI guard test (intended-failing until 8.9), reconciliation sweep service (post-import/startup/rebuild), fire-and-forget startup drift check, and `RebuildDataPointRegistryCommand`. 5 sweep-service unit tests added; full suite green except the by-design guard test.

@@ -6,6 +6,7 @@ using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.ViewModels;
 using Microsoft.UI.Xaml;
+using Moq;
 
 namespace GoogleCalendarManagement.Tests.Unit.ViewModels;
 
@@ -671,7 +672,9 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
             calendarSelectionService ?? new StubCalendarSelectionService(),
             pendingEventDraftService ?? new StubPendingEventDraftService(),
             viewRangeProvider ?? new StubCalendarViewRangeProvider(),
-            eventRepository ?? new StubEventRepository());
+            eventRepository ?? new StubEventRepository(),
+            new Mock<IDataPointReconciliationSweepService>().Object,
+            new Mock<IContentDialogService>().Object);
     }
 
     private sealed class StubSystemStateRepository : ISystemStateRepository

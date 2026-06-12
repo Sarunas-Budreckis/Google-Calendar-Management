@@ -36,6 +36,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     private readonly IPendingEventDraftService _pendingEventDraftService;
     private readonly IEventRepository _eventRepository;
     private readonly ICalendarViewRangeProvider _viewRangeProvider;
+    private readonly IDataPointReconciliationSweepService _sweepService;
+    private readonly IContentDialogService _dialogService;
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _isMinimized;
     private bool _isLoadingGlobal;
@@ -59,7 +61,9 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         ICalendarSelectionService calendarSelectionService,
         IPendingEventDraftService pendingEventDraftService,
         ICalendarViewRangeProvider viewRangeProvider,
-        IEventRepository eventRepository)
+        IEventRepository eventRepository,
+        IDataPointReconciliationSweepService sweepService,
+        IContentDialogService dialogService)
     {
         _systemStateRepository = systemStateRepository;
         _dataSourceRepository = dataSourceRepository;
@@ -71,6 +75,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         _pendingEventDraftService = pendingEventDraftService;
         _eventRepository = eventRepository;
         _viewRangeProvider = viewRangeProvider;
+        _sweepService = sweepService;
+        _dialogService = dialogService;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         OpenDayNameHeaderCommand = new AsyncRelayCommand(OpenSelectedDayNameEventAsync, () => CurrentDay.HasValue);
         BackFromDrilldownCommand = new RelayCommand(() => DrilldownCard = null);
@@ -79,6 +85,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         SelectSourcesPanelCommand = new RelayCommand(() => ActivePanel = PanelKind.Sources);
         SelectDayDetailPanelCommand = new RelayCommand(() => ActivePanel = PanelKind.DayDetail);
         SelectLinkingPanelCommand = new RelayCommand(() => ActivePanel = PanelKind.Linking);
+        // TODO (Epic 9): surface this command on a button in DataSourcePanelControl.xaml.
+        RebuildDataPointRegistryCommand = new AsyncRelayCommand(RebuildDataPointRegistryAsync);
 
         WeakReferenceMessenger.Default.Register<DataSourcePanelViewModel, DataSourceImportCompletedMessage>(
             this,
@@ -125,6 +133,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     public IRelayCommand SelectDayDetailPanelCommand { get; }
 
     public IRelayCommand SelectLinkingPanelCommand { get; }
+
+    public AsyncRelayCommand RebuildDataPointRegistryCommand { get; }
 
     public bool IsMinimized
     {
@@ -737,6 +747,12 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         {
             await OpenOrCreateDayNameEventAsync(date);
         }
+    }
+
+    private async Task RebuildDataPointRegistryAsync(CancellationToken ct)
+    {
+        await _sweepService.RebuildRegistryAllAsync(ct);
+        await _dialogService.ShowMessageAsync("Data Point Registry", "Registry rebuilt successfully.");
     }
 
     private async Task<DayNameEventReference?> GetDayNameEventAsync(DateOnly date, CancellationToken ct)

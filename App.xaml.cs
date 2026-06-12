@@ -54,16 +54,13 @@ namespace GoogleCalendarManagement
             var services = new ServiceCollection();
             ConfigureServices(services);
             serviceProvider = services.BuildServiceProvider();
-            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
-                .Register(serviceProvider.GetRequiredService<TogglSleepImportHandler>());
-            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
-                .Register(serviceProvider.GetRequiredService<TogglTransitImportHandler>());
-            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
-                .Register(serviceProvider.GetRequiredService<MapsTimelineImportHandler>());
-            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
-                .Register(serviceProvider.GetRequiredService<SpotifyImportHandler>());
-            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
-                .Register(serviceProvider.GetRequiredService<TogglPhoneImportHandler>());
+            var importRegistry = serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>();
+            var projectorRegistry = serviceProvider.GetRequiredService<IDataPointProjectorRegistry>();
+            RegisterImportHandler(importRegistry, projectorRegistry, serviceProvider.GetRequiredService<TogglSleepImportHandler>());
+            RegisterImportHandler(importRegistry, projectorRegistry, serviceProvider.GetRequiredService<TogglTransitImportHandler>());
+            RegisterImportHandler(importRegistry, projectorRegistry, serviceProvider.GetRequiredService<MapsTimelineImportHandler>());
+            RegisterImportHandler(importRegistry, projectorRegistry, serviceProvider.GetRequiredService<SpotifyImportHandler>());
+            RegisterImportHandler(importRegistry, projectorRegistry, serviceProvider.GetRequiredService<TogglPhoneImportHandler>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
                 .Register(serviceProvider.GetRequiredService<TogglSleepCardProvider>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
@@ -76,22 +73,18 @@ namespace GoogleCalendarManagement
                 .Register(serviceProvider.GetRequiredService<SpotifyCardProvider>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
                 .Register(serviceProvider.GetRequiredService<Civ5CardProvider>());
-            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
-                .Register(serviceProvider.GetRequiredService<Civ5ImportHandler>());
-            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
-                .Register(serviceProvider.GetRequiredService<CallLogImportHandler>());
+            RegisterImportHandler(importRegistry, projectorRegistry, serviceProvider.GetRequiredService<Civ5ImportHandler>());
+            RegisterImportHandler(importRegistry, projectorRegistry, serviceProvider.GetRequiredService<CallLogImportHandler>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
                 .Register(serviceProvider.GetRequiredService<CallLogCardProvider>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
                 .Register(serviceProvider.GetRequiredService<ComfyUICardProvider>());
-            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
-                .Register(serviceProvider.GetRequiredService<ComfyUIImportHandler>());
-            serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>()
-                .Register(serviceProvider.GetRequiredService<OutlookImportHandler>());
+            RegisterImportHandler(importRegistry, projectorRegistry, serviceProvider.GetRequiredService<ComfyUIImportHandler>());
+            RegisterImportHandler(importRegistry, projectorRegistry, serviceProvider.GetRequiredService<OutlookImportHandler>());
             serviceProvider.GetRequiredService<DataSourceCardProviderRegistry>()
                 .Register(serviceProvider.GetRequiredService<OutlookCardProvider>());
             var csvHandler = serviceProvider.GetRequiredService<TogglCsvImportHandler>();
-            var importRegistry = serviceProvider.GetRequiredService<DataSourceImportHandlerRegistry>();
+            RegisterProjectorIfAvailable(projectorRegistry, csvHandler);
             importRegistry.RegisterCsvHandler(TogglSleepImportService.SourceKey, csvHandler);
             importRegistry.RegisterCsvHandler(TogglTransitImportService.SourceKey, csvHandler);
             importRegistry.RegisterCsvHandler(TogglPhoneCardProvider.SourceKey, csvHandler);
@@ -186,7 +179,44 @@ namespace GoogleCalendarManagement
             window.Content = mainPage;
             await mainPage.ViewModel.InitializeAsync();
 
+            // Fire-and-forget startup drift check: heals any data_point registry gaps in the
+            // background. Do NOT await on the UI thread — orphans are logged, never surfaced as a dialog.
+            var sweepProvider = serviceProvider;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await sweepProvider
+                        .GetRequiredService<IDataPointReconciliationSweepService>()
+                        .RunStartupDriftCheckAsync(CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogError(ex, "Startup data point reconciliation sweep failed.");
+                }
+            });
+
             logger?.LogInformation("Application started successfully.");
+        }
+
+        private static void RegisterImportHandler(
+            DataSourceImportHandlerRegistry importRegistry,
+            IDataPointProjectorRegistry projectorRegistry,
+            IDataSourceImportHandler handler)
+        {
+            importRegistry.Register(handler);
+            RegisterProjectorIfAvailable(projectorRegistry, handler);
+        }
+
+        private static void RegisterProjectorIfAvailable(
+            IDataPointProjectorRegistry projectorRegistry,
+            IDataSourceImportHandler handler)
+        {
+            var projector = handler.GetProjector();
+            if (projector is not null)
+            {
+                projectorRegistry.Register(projector);
+            }
         }
 
         private static async Task<XamlRoot?> WaitForXamlRootAsync(UIElement element)
@@ -268,6 +298,8 @@ namespace GoogleCalendarManagement
             services.AddSingleton<IEventRepository, EventRepository>();
             services.AddSingleton<IEventIdentityService, EventIdentityService>();
             services.AddSingleton<ISourcePointerResolverRegistry, SourcePointerResolverRegistry>();
+            services.AddSingleton<IDataPointProjectorRegistry, DataPointProjectorRegistry>();
+            services.AddSingleton<IDataPointReconciliationSweepService, DataPointReconciliationSweepService>();
             services.AddSingleton<IConfigRepository, ConfigRepository>();
             services.AddSingleton<IDataSourceRepository, DataSourceRepository>();
             services.AddSingleton<DataSourceImportHandlerRegistry>();
