@@ -1,7 +1,7 @@
 # Story 8.13: Link-to-Any-Event Picker (Tolerates Non-Concurrency)
 
 **Epic:** 8 — Event Model & Raw Data Linking Engine
-**Status:** ready-for-dev
+**Status:** done
 **Agent:** Sonnet · **Effort:** medium
 **Prerequisites:** Story 8.12 (link table + link/ignore/unlink operations) and Story 8.3 (Event repository + identity service) must be complete
 
@@ -54,19 +54,19 @@ so that rounding errors and approximate tracking times don't block me from recor
 
 9. Unit tests:
    - `EventPickerServiceTests`: concurrent event appears in `ConcurrentEvents` and not in `OtherEvents`; non-concurrent events are ordered nearest-midpoint-first; `lifecycle=candidate` events are excluded; `searchText` filters both lists case-insensitively; empty DB returns empty result
-   - `EventPickerViewModelTests`: `ConfirmLinkCommand.CanExecute` is false when `SelectedItem` is null, true after it is set; `IsEmpty` is true when both collections empty, false when either has items; mock `ILinkService.LinkAsync` is called with correct args on confirm
+   - `EventPickerViewModelTests`: `ConfirmLinkCommand.CanExecute` is false when `SelectedItem` is null, true after it is set; `IsEmpty` is true when service returns empty lists, false when either has items; mock `ILinkService.LinkAsync` is called with correct args on confirm
 
 ---
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Data models + `IEventPickerService` + `EventPickerService` (AC: #1, #2, #4)
-  - [ ] 1.1 Create `Models/EventPickerItem.cs` — record: `EventId` (string), `Summary` (string), `StartLocal` (DateTime), `EndLocal` (DateTime), `ColorId` (string?), `IsConcurrent` (bool)
-  - [ ] 1.2 Create `Models/EventPickerResult.cs` — record: `IReadOnlyList<EventPickerItem> ConcurrentEvents`, `IReadOnlyList<EventPickerItem> OtherEvents`
-  - [ ] 1.3 Create `Services/IEventPickerService.cs` — one method: `Task<EventPickerResult> GetCandidatesAsync(DateTimeOffset rangeStart, DateTimeOffset rangeEnd, string? searchText, CancellationToken ct = default)`
-  - [ ] 1.4 Create `Services/EventPickerService.cs`:
+- [x] Task 1: Data models + `IEventPickerService` + `EventPickerService` (AC: #1, #2, #4)
+  - [x] 1.1 Create `Models/EventPickerItem.cs` — record: `EventId` (string), `Summary` (string), `StartLocal` (DateTime), `EndLocal` (DateTime), `ColorId` (string?), `IsConcurrent` (bool)
+  - [x] 1.2 Create `Models/EventPickerResult.cs` — record: `IReadOnlyList<EventPickerItem> ConcurrentEvents`, `IReadOnlyList<EventPickerItem> OtherEvents`
+  - [x] 1.3 Create `Services/IEventPickerService.cs` — one method: `Task<EventPickerResult> GetCandidatesAsync(DateTimeOffset rangeStart, DateTimeOffset rangeEnd, string? searchText, CancellationToken ct = default)`
+  - [x] 1.4 Create `Services/EventPickerService.cs`:
     - Inject `IEventRepository` (from 8.3)
-    - Fetch `lifecycle=approved` events via `IEventRepository.GetEventsForRangeAsync` with a ±90-day window around the datapoint date by default; if `searchText` is present and the caller needs a wider window, widen to ±365 days (see Dev Notes)
+    - Fetch `lifecycle=approved` events via `IEventRepository.GetByDateRangeAsync` with a ±90-day window around the datapoint date by default; if `searchText` is present and the caller needs a wider window, widen to ±365 days (see Dev Notes)
     - Split: concurrent = `event.start_datetime < rangeEnd && event.end_datetime > rangeStart`; non-concurrent = all others
     - Sort concurrent by `start_datetime` ascending
     - Sort non-concurrent by `|eventMid - rangeMid|` ascending (see Dev Notes for midpoint calculation)
@@ -74,52 +74,62 @@ so that rounding errors and approximate tracking times don't block me from recor
     - Convert `start_datetime` / `end_datetime` (UTC) to local time for `EventPickerItem.StartLocal` / `EndLocal`
     - Return `EventPickerResult`
 
-- [ ] Task 2: `EventPickerViewModel` (AC: #3, #6)
-  - [ ] 2.1 Create `ViewModels/EventPickerViewModel.cs` — inherits `ObservableObject` (CommunityToolkit.Mvvm)
-  - [ ] 2.2 Constructor: `(IEventPickerService pickerService, ILinkService linkService, DateTimeOffset rangeStart, DateTimeOffset rangeEnd, IReadOnlyList<string> dataPointIds)` — store all; fire `_ = LoadAsync(null)` immediately for initial population
-  - [ ] 2.3 Add `ConcurrentEvents` and `OtherEvents` as `ObservableCollection<EventPickerItem>`; populate from `IEventPickerService` result; update `IsEmpty` after each load
-  - [ ] 2.4 Add `SearchText` — on set, cancel in-flight CTS, schedule a 300ms debounce (use `Task.Delay(300, cts.Token)` pattern), then call `LoadAsync(SearchText)`
-  - [ ] 2.5 `LoadAsync(string? searchText)` — calls `_pickerService.GetCandidatesAsync`, updates both collections via `DispatcherQueue.TryEnqueue` (WinUI 3 UI-thread dispatch requirement), updates `IsEmpty`
-  - [ ] 2.6 `SelectedItem` property — setter calls `ConfirmLinkCommand.NotifyCanExecuteChanged()`
-  - [ ] 2.7 `ConfirmLinkCommand` implementation:
+- [x] Task 2: `EventPickerViewModel` (AC: #3, #6)
+  - [x] 2.1 Create `ViewModels/EventPickerViewModel.cs` — inherits `ObservableObject` (CommunityToolkit.Mvvm)
+  - [x] 2.2 Constructor: `(IEventPickerService pickerService, ILinkService linkService, DateTimeOffset rangeStart, DateTimeOffset rangeEnd, IReadOnlyList<int> dataPointIds)` — store all; fire `_ = LoadAsync(null)` immediately for initial population
+  - [x] 2.3 Add `ConcurrentEvents` and `OtherEvents` as `ObservableCollection<EventPickerItem>`; populate from `IEventPickerService` result; update `IsEmpty` after each load
+  - [x] 2.4 Add `SearchText` — on set, cancel in-flight CTS, schedule a 300ms debounce (use `Task.Delay(300, cts.Token)` pattern), then call `LoadAsync(SearchText)`
+  - [x] 2.5 `LoadAsync(string? searchText)` — calls `_pickerService.GetCandidatesAsync`, updates both collections via `DispatcherQueue.TryEnqueue` (WinUI 3 UI-thread dispatch requirement), updates `IsEmpty`
+  - [x] 2.6 `SelectedItem` property — setter calls `ConfirmLinkCommand.NotifyCanExecuteChanged()`
+  - [x] 2.7 `ConfirmLinkCommand` implementation:
     - `CanExecute`: `SelectedItem != null`
     - `Execute`: call `ILinkService.LinkAsync` (single) or `ILinkService.LinkClumpAsync` (clump, when `dataPointIds.Count > 1`) with the selected `EventId`; on success send `EventUpdatedMessage`; on exception set `ErrorMessage` and return without closing dialog
-  - [ ] 2.8 `IsEmpty` computed property — returns `ConcurrentEvents.Count == 0 && OtherEvents.Count == 0`
-  - [ ] 2.9 `ErrorMessage` property (string?, notify on change)
+  - [x] 2.8 `IsEmpty` computed property — returns `ConcurrentEvents.Count == 0 && OtherEvents.Count == 0`
+  - [x] 2.9 `ErrorMessage` property (string?, notify on change)
 
-- [ ] Task 3: `EventPickerDialog` XAML + code-behind (AC: #5)
-  - [ ] 3.1 Create `Views/EventPickerDialog.xaml` — ContentDialog; Title = "Link to event"; PrimaryButtonText = "Link"; SecondaryButtonText = "Cancel"
-  - [ ] 3.2 XAML Content structure:
+- [x] Task 3: `EventPickerDialog` XAML + code-behind (AC: #5)
+  - [x] 3.1 Create `Views/EventPickerDialog.xaml` — ContentDialog; Title = "Link to event"; PrimaryButtonText = "Link"; SecondaryButtonText = "Cancel"
+  - [x] 3.2 XAML Content structure:
     - `StackPanel` (Width=400, MaxHeight=500)
     - `TextBox` PlaceholderText="Search events…", Text bound TwoWay to `SearchText`
     - `CollectionViewSource` in page resources keyed `GroupedEventSource` — `Source` bound to a merged `ObservableCollection<EventPickerGroup>` that the VM maintains (see Dev Notes for grouping strategy)
     - `ListView` bound to `GroupedEventSource`; `IsGrouping=True`; `GroupStyle` with `HeaderTemplate` showing group key string
-    - Item DataTemplate: `StackPanel` (Horizontal) → 16×16 `Rectangle` Fill from `ColorId` via color converter → `TextBlock` Summary → `TextBlock` time range (see Dev Notes for formatting)
+    - Item DataTemplate: `StackPanel` (Horizontal) → 16×16 `Rectangle` Fill from `ColorHex` via `HexToBrushConverter` → `TextBlock` Summary → `TextBlock` time range (see Dev Notes for formatting)
     - `TextBlock` "No events found" Visibility bound to `IsEmpty` via `BoolToVisibilityConverter`
-    - `TextBlock` for `ErrorMessage` (Foreground=Red, Visibility bound to `ErrorMessage != null`)
-  - [ ] 3.3 Create `Views/EventPickerDialog.xaml.cs`:
+    - `TextBlock` for `ErrorMessage` (Foreground=Red, Visibility bound to `HasError`)
+  - [x] 3.3 Create `Views/EventPickerDialog.xaml.cs`:
     - Constructor takes `EventPickerViewModel vm`; sets `DataContext = vm`; binds `IsPrimaryButtonEnabled` to `vm.SelectedItem != null` (observe via PropertyChanged); wires `PrimaryButtonClick` to `args.Cancel = true` (let the command handle the link write — dialog stays open on failure)
     - Sets `CloseButtonText = string.Empty` (secondary button is Cancel via `SecondaryButtonClick`)
 
-- [ ] Task 4: DI registration (AC: #7)
-  - [ ] 4.1 `App.xaml.cs`: add `services.AddSingleton<IEventPickerService, EventPickerService>()`
-  - [ ] 4.2 Verify `ILinkService` is registered from 8.12; if not yet present, add `// TODO 8.12: ILinkService must be registered here` comment placeholder
+- [x] Task 4: DI registration (AC: #7)
+  - [x] 4.1 `App.xaml.cs`: add `services.AddSingleton<IEventPickerService, EventPickerService>()`
+  - [x] 4.2 `ILinkService` is already registered from 8.12 — verified present in `App.xaml.cs`
 
-- [ ] Task 5: Tests (AC: #9)
-  - [ ] 5.1 Create `GoogleCalendarManagement.Tests/Unit/Services/EventPickerServiceTests.cs`:
+- [x] Task 5: Tests (AC: #9)
+  - [x] 5.1 Create `GoogleCalendarManagement.Tests/Unit/Services/EventPickerServiceTests.cs`:
     - Setup: in-memory SQLite seeded with `Event` rows (mix of `lifecycle=approved` and `lifecycle=candidate`)
     - Test `ConcurrentEvents`: event overlapping the query range lands in `ConcurrentEvents`, not `OtherEvents`
     - Test `OtherEvents` ordering: two non-concurrent events, nearer midpoint first
     - Test candidate exclusion: `lifecycle=candidate` event not present in either list
     - Test search: search "foo" excludes events without "foo" in summary; case-insensitive match works
     - Test empty: no events in DB → both lists empty
-  - [ ] 5.2 Create `GoogleCalendarManagement.Tests/Unit/ViewModels/EventPickerViewModelTests.cs`:
+  - [x] 5.2 Create `GoogleCalendarManagement.Tests/Unit/ViewModels/EventPickerViewModelTests.cs`:
     - Mock `IEventPickerService` (returns controlled `EventPickerResult`)
     - Mock `ILinkService`
     - Test: `ConfirmLinkCommand.CanExecute` false initially; true after `SelectedItem` set
     - Test: `IsEmpty` true when service returns empty lists; false when items present
     - Test: `ConfirmLinkCommand` calls `ILinkService.LinkAsync` with correct `dataPointId` and `eventId`
     - Test: on `ILinkService` throw, `ErrorMessage` is set and command does not rethrow
+
+### Review Findings
+
+- [x] [Review][Patch] Cancel or version all picker loads so the fire-and-forget initial load cannot overwrite newer search results [ViewModels/EventPickerViewModel.cs:50]
+- [x] [Review][Patch] Surface non-cancellation picker load failures instead of leaving stale results with no `ErrorMessage` [ViewModels/EventPickerViewModel.cs:104]
+- [x] [Review][Patch] Use `rangeEnd` when calculating the positive fetch window for long picker ranges [Services/EventPickerService.cs:24]
+- [x] [Review][Patch] Treat null `EndDatetime` as `StartDatetime` instead of omitting otherwise valid approved events [Services/EventPickerService.cs:38]
+- [x] [Review][Patch] Validate `rangeEnd > rangeStart` before concurrency and midpoint calculations [Services/EventPickerService.cs:31]
+- [x] [Review][Patch] Normalize event timestamps as UTC before local display and proximity calculations, matching `CalendarQueryService` [Services/EventPickerService.cs:41]
+- [x] [Review][Patch] Complete `ContentDialog` deferrals in `finally` so unexpected command exceptions cannot strand the dialog [Views/EventPickerDialog.xaml.cs:27]
 
 ---
 
@@ -133,7 +143,7 @@ Story 8.13 cannot start until both 8.12 and 8.3 are merged. Expected interfaces:
 ```csharp
 // Services/IEventRepository.cs
 public interface IEventRepository {
-    Task<IList<Event>> GetEventsForRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
+    Task<IList<Event>> GetByDateRangeAsync(DateOnly from, DateOnly to, CancellationToken ct = default);
     Task<Event?> GetByEventIdAsync(string eventId, CancellationToken ct = default);
 }
 ```
@@ -249,7 +259,7 @@ Add a `TimeRangeText` computed property to `EventPickerItem` or use a converter 
 
 ### Color lookup pattern
 
-Use the same color-lookup pattern established in `CalendarQueryService.MapEventToDisplayModel` (story 8.5). The `EventPickerItem.ColorId` is the raw GCal color id string (e.g., `"3"`, `"grape"`, null). Pass it through the existing `ColorIdToColorConverter` (or equivalent) already used in calendar item templates. Do not reinvent the color mapping table.
+Use the same color-lookup pattern established in `CalendarQueryService.MapEventToDisplayModel` (story 8.5). The `EventPickerItem.ColorId` is the raw GCal color id string (e.g., `"3"`, `"grape"`, null). Pass it through the existing `IColorMappingService` in `EventPickerService` to produce a `ColorHex` string stored on the item. A `HexToBrushConverter` in `Views/Converters/` converts this to a `SolidColorBrush` in the item template.
 
 ### Project Structure Notes
 
@@ -260,6 +270,8 @@ New files only — no existing files need modification except `App.xaml.cs` (DI 
 - `Services/IEventPickerService.cs`
 - `Services/EventPickerService.cs`
 - `ViewModels/EventPickerViewModel.cs` (includes `EventPickerGroup` nested or alongside)
+- `Views/Converters/BoolToVisibilityConverter.cs`
+- `Views/Converters/HexToBrushConverter.cs`
 - `Views/EventPickerDialog.xaml`
 - `Views/EventPickerDialog.xaml.cs`
 - `App.xaml.cs` — add `IEventPickerService` singleton registration
@@ -286,6 +298,41 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+**ILinkService signature mismatch:** The story Dev Notes anticipated `LinkAsync(string dataPointId, ...)` with a string ID, but the actual 8.12 implementation uses `Task<string> LinkAsync(int dataPointId, string eventId, CancellationToken ct = default)` with an `int` dataPointId and no actionGroupId param (it returns the action_group_id instead). Adapted the VM constructor and `ExecuteConfirmLinkAsync` to use `IReadOnlyList<int>` and match the real interface.
+
+**IEventRepository method name:** The story Dev Notes referenced `GetEventsForRangeAsync` but the actual 8.3 interface exposes `GetByDateRangeAsync(DateOnly from, DateOnly to, ...)`. Used the real method name.
+
+**BoolToVisibilityConverter:** WinUI 3 has no built-in BoolToVisibilityConverter resource. Created `Views/Converters/BoolToVisibilityConverter.cs`. Added `HasError` computed bool property to `EventPickerViewModel` for the ErrorMessage visibility binding.
+
+**ColorId → color brush:** No existing XAML value converter for color id → brush. `EventPickerService` pre-computes `ColorHex` (hex string) using `IColorMappingService`, stored on `EventPickerItem` alongside the raw `ColorId`. Created `Views/Converters/HexToBrushConverter.cs` to convert hex string to `SolidColorBrush` in the item DataTemplate.
+
 ### Completion Notes List
 
+- All 5 tasks (15 subtasks) completed.
+- 15 new tests added: 8 in `EventPickerServiceTests` + 7 in `EventPickerViewModelTests`. All 15 pass.
+- Full regression suite: 539 passed, 0 failed (19 pre-existing skips unrelated to this story).
+- `IEventPickerService` registered as singleton in `App.xaml.cs` alongside existing `ILinkService`.
+- `EventPickerDialog` created per-invocation at the call site (Epic 9 stories will wire it).
+- `EventPickerViewModel.Groups` ObservableCollection drives the grouped `CollectionViewSource`; empty groups are never added so no phantom section headers appear.
+- `DispatcherQueue` captured at VM construction time; null-safe dispatch path used so unit tests run inline without UI thread.
+
 ### File List
+
+- `Models/EventPickerItem.cs` — new
+- `Models/EventPickerResult.cs` — new
+- `Services/IEventPickerService.cs` — new
+- `Services/EventPickerService.cs` — new
+- `ViewModels/EventPickerViewModel.cs` — new (includes `EventPickerGroup`)
+- `Views/Converters/BoolToVisibilityConverter.cs` — new
+- `Views/Converters/HexToBrushConverter.cs` — new
+- `Views/EventPickerDialog.xaml` — new
+- `Views/EventPickerDialog.xaml.cs` — new
+- `App.xaml.cs` — modified (added `IEventPickerService` singleton registration)
+- `GoogleCalendarManagement.Tests/Unit/Services/EventPickerServiceTests.cs` — new
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/EventPickerViewModelTests.cs` — new
+- `docs/sprint-status.yaml` — modified (8-13 status: ready-for-dev → review)
+
+### Change Log
+
+- 2026-06-16: Story 8.13 implemented — EventPickerService, EventPickerViewModel, EventPickerDialog, converters, DI registration, and tests (15 new passing)
+- 2026-06-16: Code review fixes applied — stale-load protection, picker load error surfacing, timestamp/range hardening, null-end handling, and dialog deferral cleanup

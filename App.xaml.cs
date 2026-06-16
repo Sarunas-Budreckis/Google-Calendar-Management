@@ -300,6 +300,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton<IEventRepository, EventRepository>();
             services.AddSingleton<IEventIdentityService, EventIdentityService>();
             services.AddSingleton<ILinkService, LinkService>();
+            services.AddSingleton<IEventPickerService, EventPickerService>();
             services.AddSingleton<ISourcePointerResolverRegistry, SourcePointerResolverRegistry>();
             services.AddSingleton<IDataPointProjectorRegistry, DataPointProjectorRegistry>();
             services.AddSingleton<IDataPointReconciliationSweepService, DataPointReconciliationSweepService>();
