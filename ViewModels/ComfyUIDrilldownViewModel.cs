@@ -19,6 +19,7 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
     private readonly ICalendarSelectionService _calendarSelectionService;
     private readonly IWindowService _windowService;
     private readonly TimeProvider _timeProvider;
+    private readonly IDataPointReconciliationSweepService _sweepService;
 
     private readonly List<ComfyUIScanPoint> _points = [];
     private DateOnly _currentDate;
@@ -32,6 +33,7 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
         IPendingEventDraftService pendingEventDraftService,
         ICalendarSelectionService calendarSelectionService,
         IWindowService windowService,
+        IDataPointReconciliationSweepService sweepService,
         TimeProvider? timeProvider = null)
     {
         _repository = repository;
@@ -39,6 +41,7 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
         _pendingEventDraftService = pendingEventDraftService;
         _calendarSelectionService = calendarSelectionService;
         _windowService = windowService;
+        _sweepService = sweepService;
         _timeProvider = timeProvider ?? TimeProvider.System;
 
         AddFolderCommand = new AsyncRelayCommand(AddFolderAsync, () => !IsScanning);
@@ -185,6 +188,7 @@ public sealed class ComfyUIDrilldownViewModel : ObservableObject
         {
             IsScanning = false;
         }
+        await _sweepService.RunPostImportAsync(ComfyUIFolderScannerService.SourceKey);
     }
 
     private async Task CreateCandidateEventsAsync()

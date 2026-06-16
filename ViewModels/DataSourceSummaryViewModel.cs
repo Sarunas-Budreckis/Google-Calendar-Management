@@ -12,6 +12,7 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
 {
     private readonly DataSourceImportHandlerRegistry _handlerRegistry;
     private readonly IDataSourceRepository _dataSourceRepository;
+    private readonly IDataPointReconciliationSweepService? _sweepService;
     private bool _isImporting;
     private bool _isCsvImporting;
     private string? _colorHex;
@@ -25,7 +26,8 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
         DataSourceImportHandlerRegistry handlerRegistry,
         IDataSourceRepository dataSourceRepository,
         string? colorHex = null,
-        IReadOnlyList<DataSourceDayDataMarkerViewModel>? dayDataMarkers = null)
+        IReadOnlyList<DataSourceDayDataMarkerViewModel>? dayDataMarkers = null,
+        IDataPointReconciliationSweepService? sweepService = null)
     {
         DataSourceId = dataSourceId;
         SourceKey = sourceKey;
@@ -34,6 +36,7 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
         LastImportedRelativeLabel = lastImportedRelativeLabel;
         _handlerRegistry = handlerRegistry;
         _dataSourceRepository = dataSourceRepository;
+        _sweepService = sweepService;
         _colorHex = colorHex;
         foreach (var marker in dayDataMarkers ?? [])
         {
@@ -181,6 +184,10 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
             {
                 IsImporting = false;
             }
+            if (_sweepService is not null)
+            {
+                await _sweepService.RunPostImportAsync(SourceKey);
+            }
         }
     }
 
@@ -197,6 +204,10 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
             finally
             {
                 IsCsvImporting = false;
+            }
+            if (_sweepService is not null)
+            {
+                await _sweepService.RunPostImportAsync(SourceKey);
             }
         }
     }

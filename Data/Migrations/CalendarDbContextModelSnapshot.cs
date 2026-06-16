@@ -993,6 +993,11 @@ namespace GoogleCalendarManagement.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("ms_played");
 
+                    b.Property<string>("NaturalKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("natural_key");
+
                     b.Property<DateTime>("PlayedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("played_at");
@@ -1006,6 +1011,10 @@ namespace GoogleCalendarManagement.Data.Migrations
 
                     b.HasIndex("PlayedAt")
                         .HasDatabaseName("idx_spotify_data_played_at");
+
+                    b.HasIndex("NaturalKey")
+                        .IsUnique()
+                        .HasDatabaseName("idx_spotify_natural_key");
 
                     b.HasIndex("PlayedAt", "TrackName")
                         .IsUnique()

@@ -1,12 +1,12 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using GoogleCalendarManagement.Data.Entities;
 using GoogleCalendarManagement.Messages;
 using GoogleCalendarManagement.Models;
 using GoogleCalendarManagement.Services;
-using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -38,6 +38,7 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     private readonly ICalendarViewRangeProvider _viewRangeProvider;
     private readonly IDataPointReconciliationSweepService _sweepService;
     private readonly IContentDialogService _dialogService;
+    private readonly ICoverageService _coverageService;
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _isMinimized;
     private bool _isLoadingGlobal;
@@ -63,7 +64,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         ICalendarViewRangeProvider viewRangeProvider,
         IEventRepository eventRepository,
         IDataPointReconciliationSweepService sweepService,
-        IContentDialogService dialogService)
+        IContentDialogService dialogService,
+        ICoverageService coverageService)
     {
         _systemStateRepository = systemStateRepository;
         _dataSourceRepository = dataSourceRepository;
@@ -77,6 +79,7 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         _viewRangeProvider = viewRangeProvider;
         _sweepService = sweepService;
         _dialogService = dialogService;
+        _coverageService = coverageService;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         OpenDayNameHeaderCommand = new AsyncRelayCommand(OpenSelectedDayNameEventAsync, () => CurrentDay.HasValue);
         BackFromDrilldownCommand = new RelayCommand(() => DrilldownCard = null);
@@ -425,7 +428,7 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         var sources = await _dataSourceRepository.GetAllSourcesAsync(ct);
         foreach (var source in sources.OrderBy(source => source.DisplayName, StringComparer.CurrentCultureIgnoreCase))
         {
-            var integration = await _dataSourceRepository.GetIntegrationAsync(date, source.DataSourceId, ct);
+            var coverage = await _coverageService.GetDateSourceCoverageAsync(date, source.SourceKey, ct);
             var provider = _cardProviderRegistry.GetProvider(source.SourceKey);
             if (provider is IDataSourceCardProviderPreloader preloader)
             {
@@ -448,10 +451,9 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                 source.DataSourceId,
                 source.SourceKey,
                 source.DisplayName,
-                integration?.Integrated == true,
+                coverage,
                 isGreyedOut,
                 date,
-                _dataSourceRepository,
                 card => DrilldownCard = card,
                 compactSummaryView,
                 drilldownViewFactory,
@@ -524,7 +526,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                     lastDataDateLabel: "Never imported",
                     lastImportedRelativeLabel: null,
                     handlerRegistry: _importHandlerRegistry,
-                    dataSourceRepository: _dataSourceRepository));
+                    dataSourceRepository: _dataSourceRepository,
+                    sweepService: _sweepService));
             }
 
             Sources.Clear();
@@ -589,7 +592,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
             _importHandlerRegistry,
             _dataSourceRepository,
             source.ColorHex,
-            dayDataMarkers);
+            dayDataMarkers,
+            _sweepService);
     }
 
     private static string FormatSourceKey(string sourceKey)

@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Reflection;
 using GoogleCalendarManagement.Data;
 using GoogleCalendarManagement.Infrastructure;
+using GoogleCalendarManagement.Constants;
 using GoogleCalendarManagement.Services;
+using GoogleCalendarManagement.Services.DataLinking;
 using GoogleCalendarManagement.ViewModels;
 using GoogleCalendarManagement.Views;
 using Microsoft.EntityFrameworkCore;
@@ -213,7 +215,7 @@ namespace GoogleCalendarManagement
             IDataSourceImportHandler handler)
         {
             var projector = handler.GetProjector();
-            if (projector is not null)
+            if (projector is not null && projectorRegistry.GetProjector(projector.SourceKey) is null)
             {
                 projectorRegistry.Register(projector);
             }
@@ -302,6 +304,7 @@ namespace GoogleCalendarManagement
             services.AddSingleton<IDataPointReconciliationSweepService, DataPointReconciliationSweepService>();
             services.AddSingleton<IConfigRepository, ConfigRepository>();
             services.AddSingleton<IDataSourceRepository, DataSourceRepository>();
+            services.AddSingleton<ICoverageService, CoverageService>();
             services.AddSingleton<DataSourceImportHandlerRegistry>();
             services.AddSingleton<DataSourceCardProviderRegistry>();
             services.AddSingleton<ITogglSleepRepository, TogglSleepRepository>();
@@ -420,6 +423,20 @@ namespace GoogleCalendarManagement
             services.AddTransient<MonthViewControl>();
             services.AddTransient<WeekViewControl>();
             services.AddTransient<DayViewControl>();
+
+            // Data Linking — ClumpBlock providers
+            services.AddSingleton<IClumpBlockProvider, Civ5ClumpBlockProvider>();
+            services.AddSingleton<IClumpBlockProvider, ComfyUIClumpBlockProvider>();
+            services.AddSingleton<IClumpBlockProvider, PhoneClumpBlockProvider>();
+            services.AddSingleton<IClumpBlockProvider>(sp => new TrivialClumpBlockProvider(
+                SourceKeys.CallLog,
+                sp.GetRequiredService<IDbContextFactory<CalendarDbContext>>(),
+                sp.GetRequiredService<EightFifteenRuleService>()));
+            services.AddSingleton<IClumpBlockProvider>(sp => new TrivialClumpBlockProvider(
+                SourceKeys.Toggl,
+                sp.GetRequiredService<IDbContextFactory<CalendarDbContext>>(),
+                sp.GetRequiredService<EightFifteenRuleService>()));
+            services.AddSingleton<IClumpBlockProviderRegistry, ClumpBlockProviderRegistry>();
         }
     }
 }

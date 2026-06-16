@@ -12,6 +12,7 @@ public sealed class MapsTimelineDrilldownViewModel : ObservableObject
     private readonly IMapsTimelineRepository _repository;
     private readonly MapsTimelineParser _parser;
     private readonly MapsTimelineImportHandler _importHandler;
+    private readonly IDataPointReconciliationSweepService _sweepService;
     private MapsTimelineRaw? _currentRecord;
     private DateOnly _currentDate;
     private bool _hasSegments;
@@ -21,11 +22,13 @@ public sealed class MapsTimelineDrilldownViewModel : ObservableObject
     public MapsTimelineDrilldownViewModel(
         IMapsTimelineRepository repository,
         MapsTimelineParser parser,
-        MapsTimelineImportHandler importHandler)
+        MapsTimelineImportHandler importHandler,
+        IDataPointReconciliationSweepService sweepService)
     {
         _repository = repository;
         _parser = parser;
         _importHandler = importHandler;
+        _sweepService = sweepService;
         CopyToViewerCommand = new AsyncRelayCommand(CopyToViewerAsync, () => HasTimeline);
         ImportCommand = new AsyncRelayCommand(ImportAsync);
     }
@@ -116,6 +119,7 @@ public sealed class MapsTimelineDrilldownViewModel : ObservableObject
     private async Task ImportAsync()
     {
         await _importHandler.TriggerImportAsync();
+        await _sweepService.RunPostImportAsync(MapsTimelineImportHandler.SourceKey);
         await LoadAsync(_currentDate);
     }
 }

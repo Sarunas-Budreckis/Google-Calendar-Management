@@ -1,5 +1,14 @@
 # Deferred Work
 
+## Deferred from: code review of 8-9-project-all-sources-into-datapoints (2026-06-12)
+
+- **SpotifyProjector silently skips rows with empty NaturalKey** — guard `!string.IsNullOrWhiteSpace(NaturalKey)` masks rows that failed migration backfill; root cause is the SQL format mismatch in the migration. [`Services/Projectors/SpotifyProjector.cs`]
+- **SpotifyProjector can produce `EndUtc < StartUtc` for garbage `MsPlayed` values** — garbage-in scenario; `DataPointSpec` has no guard against inverted intervals. [`Services/Projectors/SpotifyProjector.cs`]
+- **All projectors memory-load full tables before in-process filtering** — design inherited from 8.8; `ProjectSourceRefsAsync` pulls the full entity table even when only a few `sourceRefs` are requested. [`Services/Projectors/`]
+- **MapsTimelineProjector `FileName` not guaranteed unique at DB level** — story designates `FileName` as natural key but no `UNIQUE` constraint exists on `MapsTimelineRaw.FileName`; duplicate filenames would silently suppress projection. [`Services/Projectors/MapsTimelineProjector.cs`]
+- **CallLogProjector uses `entry.Date` without specifying `DateTimeKind.Utc`** — if `CallLogEntry.Date` is stored as `DateTimeKind.Unspecified`, the projected `DataPointSpec` silently violates the UTC contract. [`Services/Projectors/CallLogProjector.cs`]
+- **Projector namespace is `GoogleCalendarManagement.Services` not `Services.Projectors`** — placement in `Services/Projectors/` folder but no sub-namespace; confirm matches 8.8 convention. [`Services/Projectors/*.cs`]
+
 ## Deferred from: code review of 3-1-build-year-month-week-day-calendar-views (2026-03-31)
 
 - **F11: `GetWeekRange` duplicated across MainViewModel + four view controls** — DRY violation; extract shared static helper to prevent silent divergence if week-start logic changes. [`ViewModels/MainViewModel.cs`, `Views/WeekViewControl.xaml.cs`]

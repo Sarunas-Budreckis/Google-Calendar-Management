@@ -31,6 +31,15 @@ public interface IDataPointProjector
         CalendarDbContext ctx,
         IReadOnlyList<string> sourceRefs,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns all source_refs currently present in the raw table for this source.
+    /// Used by the reconciliation sweep to detect and delete stale <c>data_point</c> rows
+    /// whose corresponding raw record was deleted on re-import.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetAllRawSourceRefsAsync(
+        CalendarDbContext ctx,
+        CancellationToken ct = default);
 }
 
 public record DataPointSpec(string SourceKey, string SourceRef, DateTime StartUtc, DateTime EndUtc);

@@ -1,7 +1,7 @@
 # Story 8.10: Coverage Service + Delete `DateSourceIntegration`
 
 **Epic:** 8 — Event Model & Raw Data Linking Engine
-**Status:** ready-for-dev
+**Status:** done
 **Agent:** Sonnet · **Effort:** medium
 **Dependencies:** 8.9 (blocking — `data_point` rows must exist for all sources); 8.12 provides real link state (link-aware second pass arrives when that story lands)
 
@@ -35,13 +35,13 @@ so that the day-mode panel shows computed coverage instead of the deprecated man
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create `CoverageResult` + `CoverageLevel` + `ICoverageService` (AC: #1, #2, #3)
-  - [ ] 1.1 Add `Models/CoverageResult.cs`:
+- [x] Task 1: Create `CoverageResult` + `CoverageLevel` + `ICoverageService` (AC: #1, #2, #3)
+  - [x] 1.1 Add `Models/CoverageResult.cs`:
     ```csharp
     public sealed record CoverageResult(int Total, int Covered, CoverageLevel Level);
     public enum CoverageLevel { Full, Partial, None }
     ```
-  - [ ] 1.2 Add `Services/ICoverageService.cs`:
+  - [x] 1.2 Add `Services/ICoverageService.cs`:
     ```csharp
     public interface ICoverageService
     {
@@ -50,71 +50,50 @@ so that the day-mode panel shows computed coverage instead of the deprecated man
         Task<CoverageResult> GetEventCoverageAsync(DateTime startUtc, DateTime endUtc, CancellationToken ct = default);
     }
     ```
-  - [ ] 1.3 Implement `Services/CoverageService.cs` (see Dev Notes for SQL pattern)
+  - [x] 1.3 Implement `Services/CoverageService.cs` (see Dev Notes for SQL pattern)
 
-- [ ] Task 2: EF migration — drop `date_source_integration` (AC: #6, #11)
-  - [ ] 2.1 Run `dotnet ef migrations add DropDateSourceIntegration` (or create manually)
-  - [ ] 2.2 Migration `Up`: `migrationBuilder.DropTable("date_source_integration")` (also drop index `idx_date_source_integration_date_source` if EF doesn't auto-infer)
-  - [ ] 2.3 Migration `Down`: recreate table (copy schema from existing Designer snapshot)
-  - [ ] 2.4 Delete `Data/Entities/DateSourceIntegration.cs`
-  - [ ] 2.5 Delete `Data/Configurations/DateSourceIntegrationConfiguration.cs`
-  - [ ] 2.6 Remove `DbSet<DateSourceIntegration> DateSourceIntegrations` from `Data/CalendarDbContext.cs`
+- [x] Task 2: EF migration — drop `date_source_integration` (AC: #6, #11)
+  - [x] 2.1 Table already dropped in UnifyEventTable migration (Story 8.2) — no new migration needed
+  - [x] 2.2 N/A — already done in 8.2
+  - [x] 2.3 N/A — already done in 8.2
+  - [x] 2.4 Delete `Data/Entities/DateSourceIntegration.cs`
+  - [x] 2.5 `Data/Configurations/DateSourceIntegrationConfiguration.cs` did not exist (already removed in 8.2)
+  - [x] 2.6 `DbSet<DateSourceIntegration>` was not in `CalendarDbContext.cs` (already removed in 8.2)
 
-- [ ] Task 3: Remove `DateSourceIntegration` from `IDataSourceRepository` / `DataSourceRepository` (AC: #7)
-  - [ ] 3.1 Delete `GetIntegrationAsync` and `SetIntegrationAsync` from `Services/IDataSourceRepository.cs`
-  - [ ] 3.2 Delete the corresponding implementations in `Services/DataSourceRepository.cs`
-  - [ ] 3.3 Search for remaining callers: `grep -rn "GetIntegrationAsync\|SetIntegrationAsync\|DateSourceIntegrations\|DateSourceIntegration"` — fix all hits
+- [x] Task 3: Remove `DateSourceIntegration` from `IDataSourceRepository` / `DataSourceRepository` (AC: #7)
+  - [x] 3.1 Delete `GetIntegrationAsync` and `SetIntegrationAsync` from `Services/IDataSourceRepository.cs`
+  - [x] 3.2 Delete the corresponding implementations in `Services/DataSourceRepository.cs`
+  - [x] 3.3 Search for remaining callers — fixed all hits (SchemaTests, DataSourcePanelViewModelTests, DataSourceRepositoryTests deleted)
 
-- [ ] Task 4: Update `DataSourceDayCardViewModel` (AC: #8)
-  - [ ] 4.1 Remove constructor parameter `bool isIntegrated`, field `_isIntegrated`, property `IsIntegrated`, property `IsIntegrationEnabled`, command `ToggleIntegrationCommand`, method `ToggleIntegrationAsync`
-  - [ ] 4.2 Remove `_dataSourceRepository` field and constructor parameter (no longer needed for toggle — verify no other usage in this VM first; if `_dataSourceRepository` is still needed for something else, keep it)
-  - [ ] 4.3 Add constructor parameter `CoverageResult coverage` and property `public CoverageResult Coverage { get; }` 
-  - [ ] 4.4 Add computed display helpers used by XAML:
-    ```csharp
-    public string CoverageLevelSymbol => Coverage.Level switch
-    {
-        CoverageLevel.Full when Coverage.Total == 0 => "—",
-        CoverageLevel.Full => "●",
-        CoverageLevel.Partial => "◐",
-        CoverageLevel.None => "○",
-        _ => "○"
-    };
-    public string CoverageCountText => Coverage.Total > 0 ? $"{Coverage.Covered}/{Coverage.Total} linked" : string.Empty;
-    public Visibility CoverageCountVisibility => Coverage.Total > 0 ? Visibility.Visible : Visibility.Collapsed;
-    ```
+- [x] Task 4: Update `DataSourceDayCardViewModel` (AC: #8)
+  - [x] 4.1 Remove constructor parameter `bool isIntegrated`, field `_isIntegrated`, property `IsIntegrated`, property `IsIntegrationEnabled`, command `ToggleIntegrationCommand`, method `ToggleIntegrationAsync`
+  - [x] 4.2 Remove `_dataSourceRepository` field and constructor parameter (only used by `ToggleIntegrationAsync`)
+  - [x] 4.3 Add constructor parameter `CoverageResult coverage` and property `public CoverageResult Coverage { get; }`
+  - [x] 4.4 Add computed display helpers used by XAML: `CoverageLevelSymbol`, `CoverageCountText`, `CoverageCountVisibility`
 
-- [ ] Task 5: Update `DataSourcePanelViewModel.LoadDayModeAsync` (AC: #9)
-  - [ ] 5.1 Inject `ICoverageService` into constructor (add field `_coverageService`)
-  - [ ] 5.2 Remove the `GetIntegrationAsync` call in the per-source loop
-  - [ ] 5.3 Add `var coverage = await _coverageService.GetDateSourceCoverageAsync(date, source.SourceKey, ct);`
-  - [ ] 5.4 Pass `coverage` to `DataSourceDayCardViewModel` constructor (replacing `integration?.Integrated == true`)
-  - [ ] 5.5 Register `ICoverageService` → `CoverageService` as singleton in `App.xaml.cs`
+- [x] Task 5: Update `DataSourcePanelViewModel.LoadDayModeAsync` (AC: #9)
+  - [x] 5.1 Inject `ICoverageService` into constructor (add field `_coverageService`)
+  - [x] 5.2 Remove the `GetIntegrationAsync` call in the per-source loop
+  - [x] 5.3 Add `var coverage = await _coverageService.GetDateSourceCoverageAsync(date, source.SourceKey, ct);`
+  - [x] 5.4 Pass `coverage` to `DataSourceDayCardViewModel` constructor (replacing `integration?.Integrated == true`)
+  - [x] 5.5 Register `ICoverageService` → `CoverageService` as singleton in `App.xaml.cs`
 
-- [ ] Task 6: Update `DataSourcePanelControl.xaml` day-mode card (AC: #10)
-  - [ ] 6.1 Find and delete the `ToggleSwitch`/checkbox bound to `ToggleIntegrationCommand` and `IsIntegrated` (around line 392–395)
-  - [ ] 6.2 Also delete the "Integrated" label `TextBlock` at line 326
-  - [ ] 6.3 In its place add:
-    ```xml
-    <StackPanel Orientation="Horizontal" Spacing="4">
-        <TextBlock Text="{Binding CoverageLevelSymbol}" FontSize="14"/>
-        <TextBlock
-            Text="{Binding CoverageCountText}"
-            FontSize="11"
-            Opacity="0.7"
-            Visibility="{Binding CoverageCountVisibility}"/>
-    </StackPanel>
-    ```
+- [x] Task 6: Update `DataSourcePanelControl.xaml` day-mode card (AC: #10)
+  - [x] 6.1 Deleted `CheckBox` bound to `ToggleIntegrationCommand` and `IsIntegrated`
+  - [x] 6.2 Updated "Integrated" label to "Coverage" in column header
+  - [x] 6.3 Added coverage display `StackPanel` with `CoverageLevelSymbol` and `CoverageCountText`
 
-- [ ] Task 7: Update tests (AC: #12, #13)
-  - [ ] 7.1 In `DataSourceRepositoryTests.cs`: delete the `SetIntegrationAsync_PersistsToDatabase` test (and `GetIntegrationAsync` tests if any)
-  - [ ] 7.2 If the file becomes empty after removal, delete the file
-  - [ ] 7.3 Add `GoogleCalendarManagement.Tests/Integration/CoverageServiceTests.cs` with:
-    - `GetDateSourceCoverage_ZeroDatapoints_ReturnsFull` — seed no `data_point` rows; expect `Level=Full, Total=0, Covered=0`
-    - `GetDateSourceCoverage_AllCovered_ReturnsFull` — seed 2 `data_point` rows + 2 `link` rows (state='linked'); expect `Level=Full, Total=2, Covered=2`
-    - `GetDateSourceCoverage_PartialCoverage_ReturnsPartial` — 3 datapoints, 1 linked; expect `Level=Partial`
-    - `GetDateSourceCoverage_NoCoverage_ReturnsNone` — 2 datapoints, 0 links; expect `Level=None`
-    - `GetDateSourceCoverage_LinkTableMissing_GracefulFallback` — test with a context that has no `link` table (raw SQLite, skip link table creation); expect graceful `CoverageResult` with `Total > 0, Covered = 0, Level = None` (no exception thrown)
-  - [ ] 7.4 Update `DataSourcePanelViewModelTests.cs` if it mocks `IDataSourceRepository.GetIntegrationAsync` or uses `DataSourceDayCardViewModel` with `isIntegrated` param — replace with `CoverageResult` mock
+- [x] Task 7: Update tests (AC: #12, #13)
+  - [x] 7.1 Deleted `DataSourceRepositoryTests.cs` (entire file — only contained `SetIntegrationAsync_PersistsToDatabase`)
+  - [x] 7.2 File deleted
+  - [x] 7.3 Added `GoogleCalendarManagement.Tests/Integration/CoverageServiceTests.cs` with all 5 tests (all pass)
+  - [x] 7.4 Updated `DataSourcePanelViewModelTests.cs`: removed 3 integration tests, updated `StubDataSourceRepository`, added `ICoverageService` mock to `CreateViewModel`
+
+### Review Findings
+
+- [x] [Review][Patch] Coverage SQL binds O-format strings against EF `DateTime` TEXT columns, so real EF-seeded rows can be excluded by lexical comparison [Services/CoverageService.cs:35] — fixed by binding `DateTime` parameters and adding an EF-seeded regression test
+- [x] [Review][Patch] Coverage joins count link rows instead of distinct datapoints, so duplicate link rows can inflate totals and covered counts [Services/CoverageService.cs:30] — fixed with distinct datapoint counting and duplicate-link regression coverage
+- [x] [Review][Patch] `GetDayCoverageAsync` missing-table fallback still queries `data_point`, unlike the date-source fallback that returns zero coverage when `data_point` is absent [Services/CoverageService.cs:83] — fixed with a guarded day fallback and missing-table regression test
 
 ---
 
@@ -355,4 +334,35 @@ claude-sonnet-4-6
 
 ### Completion Notes List
 
+- Created `Models/CoverageResult.cs` (`CoverageResult` record + `CoverageLevel` enum).
+- Created `Services/ICoverageService.cs` with 3 methods; `GetEventCoverageAsync` stubs to `NotImplementedException` until 8.12.
+- Created `Services/CoverageService.cs`: raw ADO.NET SQL with LEFT JOIN to `link`; catches `SqliteException` code 1 for missing `link` table (fallback count-only) and missing `data_point` table (returns Full/0).
+- Deleted `Data/Entities/DateSourceIntegration.cs` (table was already dropped in 8.2's `UnifyEventTable` migration — no new migration needed).
+- Removed `GetIntegrationAsync`/`SetIntegrationAsync` from `IDataSourceRepository` and `DataSourceRepository`; no remaining callers.
+- Rewrote `DataSourceDayCardViewModel`: removed `_dataSourceRepository`, `IsIntegrated`, `IsIntegrationEnabled`, `ToggleIntegrationCommand`, `ToggleIntegrationAsync`; added `Coverage` property and `CoverageLevelSymbol`/`CoverageCountText`/`CoverageCountVisibility` helpers.
+- Updated `DataSourcePanelViewModel`: added `ICoverageService` constructor param + field; `LoadDayModeAsync` now calls `GetDateSourceCoverageAsync` per source.
+- Updated `DataSourcePanelControl.xaml`: column header "Integrated" → "Coverage"; replaced `CheckBox` with coverage `StackPanel`.
+- Registered `ICoverageService → CoverageService` as singleton in `App.xaml.cs`.
+- Deleted `DataSourceRepositoryTests.cs` (only test referenced dropped table).
+- Added `CoverageServiceTests.cs` with 5 integration tests; all pass. Fixed shared-connection issue (guard `conn.State` before `OpenAsync`).
+- Updated `DataSourcePanelViewModelTests.cs`: removed 3 integration tests, stripped `StubDataSourceRepository` of integration members, added `ICoverageService` mock parameter to `CreateViewModel`.
+- Removed 2 stale `DateSourceIntegration` schema tests from `SchemaTests.cs`.
+- Result: 488 passed, 0 failed, 19 skipped.
+- Review fixes: bound coverage SQL date parameters as provider `DateTime` values, counted distinct datapoints across joins, and added missing `data_point` fallback for day coverage. Added 3 regression tests.
+
 ### File List
+
+- `Models/CoverageResult.cs` — Added
+- `Services/ICoverageService.cs` — Added
+- `Services/CoverageService.cs` — Added
+- `Data/Entities/DateSourceIntegration.cs` — Deleted
+- `Services/IDataSourceRepository.cs` — Modified
+- `Services/DataSourceRepository.cs` — Modified
+- `ViewModels/DataSourceDayCardViewModel.cs` — Modified
+- `ViewModels/DataSourcePanelViewModel.cs` — Modified
+- `Views/DataSourcePanelControl.xaml` — Modified
+- `App.xaml.cs` — Modified
+- `GoogleCalendarManagement.Tests/Integration/DataSourceRepositoryTests.cs` — Deleted
+- `GoogleCalendarManagement.Tests/Integration/CoverageServiceTests.cs` — Added
+- `GoogleCalendarManagement.Tests/Unit/ViewModels/DataSourcePanelViewModelTests.cs` — Modified
+- `GoogleCalendarManagement.Tests/Integration/SchemaTests.cs` — Modified

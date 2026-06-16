@@ -300,25 +300,7 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task ToggleIntegration_CallsRepository_AndUpdatesCheckbox()
-    {
-        var repository = new StubDataSourceRepository
-        {
-            Sources = [new DataSource { DataSourceId = 7, SourceKey = "toggl", DisplayName = "Toggl" }]
-        };
-        var viewModel = CreateViewModel(repository);
-
-        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
-        var card = viewModel.DayCards.Single();
-        await card.ToggleIntegrationCommand.ExecuteAsync(null);
-
-        repository.SetIntegrationCalls.Should().ContainSingle();
-        repository.SetIntegrationCalls[0].Should().Be((new DateOnly(2026, 05, 13), 7, true));
-        card.IsIntegrated.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task LoadDayMode_WhenCardProviderHasNoData_GreysIntegrationCheckbox()
+    public async Task LoadDayMode_WhenCardProviderHasNoData_GreysOutCard()
     {
         var repository = new StubDataSourceRepository
         {
@@ -330,31 +312,30 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
 
         await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
 
-        var card = viewModel.DayCards.Single();
-        card.IsGreyedOut.Should().BeTrue();
-        card.IsIntegrationEnabled.Should().BeFalse();
-        card.ToggleIntegrationCommand.CanExecute(null).Should().BeFalse();
+        viewModel.DayCards.Single().IsGreyedOut.Should().BeTrue();
     }
 
     [Fact]
-    public async Task LoadDayMode_UsesIntegrationStatusForSelectedDate()
+    public async Task LoadDayMode_CoverageServiceCalledPerSource()
     {
         var repository = new StubDataSourceRepository
         {
-            Sources = [new DataSource { DataSourceId = 7, SourceKey = "toggl", DisplayName = "Toggl" }],
-            Integrations =
-            {
-                [(new DateOnly(2026, 05, 13), 7)] = true,
-                [(new DateOnly(2026, 05, 14), 7)] = false
-            }
+            Sources = [new DataSource { DataSourceId = 7, SourceKey = "toggl", DisplayName = "Toggl" }]
         };
-        var viewModel = CreateViewModel(repository);
+        var coverageMock = new Mock<ICoverageService>();
+        coverageMock
+            .Setup(s => s.GetDateSourceCoverageAsync(It.IsAny<DateOnly>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CoverageResult(3, 1, CoverageLevel.Partial));
+        var viewModel = CreateViewModel(repository, coverageService: coverageMock.Object);
 
         await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 13));
-        viewModel.DayCards.Single().IsIntegrated.Should().BeTrue();
 
-        await viewModel.LoadDayModeAsync(new DateOnly(2026, 05, 14));
-        viewModel.DayCards.Single().IsIntegrated.Should().BeFalse();
+        var card = viewModel.DayCards.Single();
+        card.Coverage.Level.Should().Be(CoverageLevel.Partial);
+        card.Coverage.Total.Should().Be(3);
+        card.Coverage.Covered.Should().Be(1);
+        card.CoverageLevelSymbol.Should().Be("◐");
+        card.CoverageCountText.Should().Be("1/3 linked");
     }
 
     [Fact]
@@ -660,8 +641,17 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
         IPendingEventDraftService? pendingEventDraftService = null,
         IEventRepository? eventRepository = null,
         ICalendarViewRangeProvider? viewRangeProvider = null,
-        StubSystemStateRepository? systemStateRepository = null)
+        StubSystemStateRepository? systemStateRepository = null,
+        ICoverageService? coverageService = null)
     {
+        if (coverageService is null)
+        {
+            var mock = new Mock<ICoverageService>();
+            mock.Setup(s => s.GetDateSourceCoverageAsync(It.IsAny<DateOnly>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new CoverageResult(0, 0, CoverageLevel.Full));
+            coverageService = mock.Object;
+        }
+
         return new DataSourcePanelViewModel(
             systemStateRepository ?? new StubSystemStateRepository(),
             repository,
@@ -674,7 +664,8 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
             viewRangeProvider ?? new StubCalendarViewRangeProvider(),
             eventRepository ?? new StubEventRepository(),
             new Mock<IDataPointReconciliationSweepService>().Object,
-            new Mock<IContentDialogService>().Object);
+            new Mock<IContentDialogService>().Object,
+            coverageService);
     }
 
     private sealed class StubSystemStateRepository : ISystemStateRepository
@@ -712,10 +703,6 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
 
         public Dictionary<int, DataSourceImportLog?> LastImports { get; } = [];
 
-        public Dictionary<(DateOnly Date, int DataSourceId), bool> Integrations { get; } = [];
-
-        public List<(DateOnly Date, int DataSourceId, bool Integrated)> SetIntegrationCalls { get; } = [];
-
         public int GetAllSourcesCallCount { get; private set; }
 
         public Task<IReadOnlyList<DataSource>> GetAllSourcesAsync(CancellationToken ct = default)
@@ -734,33 +721,6 @@ public sealed class DataSourcePanelViewModelTests : IDisposable
 
         public Task<DataSource> UpsertSourceAsync(DataSource source, CancellationToken ct = default)
             => Task.FromResult(source);
-
-        public Task<DateSourceIntegration?> GetIntegrationAsync(DateOnly date, int dataSourceId, CancellationToken ct = default)
-        {
-            if (!Integrations.TryGetValue((date, dataSourceId), out var integrated))
-            {
-                return Task.FromResult<DateSourceIntegration?>(null);
-            }
-
-            return Task.FromResult<DateSourceIntegration?>(new DateSourceIntegration
-            {
-                Date = date,
-                DataSourceId = dataSourceId,
-                Integrated = integrated
-            });
-        }
-
-        public Task<DateSourceIntegration> SetIntegrationAsync(DateOnly date, int dataSourceId, bool integrated, CancellationToken ct = default)
-        {
-            SetIntegrationCalls.Add((date, dataSourceId, integrated));
-            Integrations[(date, dataSourceId)] = integrated;
-            return Task.FromResult(new DateSourceIntegration
-            {
-                Date = date,
-                DataSourceId = dataSourceId,
-                Integrated = integrated
-            });
-        }
 
         public Task<DataSourceImportLog?> GetLastImportAsync(int dataSourceId, CancellationToken ct = default)
         {

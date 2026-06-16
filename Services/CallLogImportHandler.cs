@@ -22,6 +22,8 @@ public sealed class CallLogImportHandler : IDataSourceImportHandler
 
     public string SourceKey => CallLogImportService.SourceKey;
 
+    public IDataPointProjector GetProjector() => new CallLogProjector();
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         var window = _windowService.GetWindow();

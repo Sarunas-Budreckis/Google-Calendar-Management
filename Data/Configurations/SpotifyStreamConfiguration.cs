@@ -12,6 +12,7 @@ public class SpotifyStreamConfiguration : IEntityTypeConfiguration<SpotifyStream
 
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+        builder.Property(e => e.NaturalKey).HasColumnName("natural_key").IsRequired();
         builder.Property(e => e.PlayedAt).HasColumnName("played_at").IsRequired();
         builder.Property(e => e.TrackName).HasColumnName("track_name").IsRequired();
         builder.Property(e => e.ArtistName).HasColumnName("artist_name").IsRequired();
@@ -22,6 +23,9 @@ public class SpotifyStreamConfiguration : IEntityTypeConfiguration<SpotifyStream
         builder.HasIndex(e => new { e.PlayedAt, e.TrackName })
             .IsUnique()
             .HasDatabaseName("idx_spotify_data_dedup");
+        builder.HasIndex(e => e.NaturalKey)
+            .IsUnique()
+            .HasDatabaseName("idx_spotify_natural_key");
         builder.HasIndex(e => e.PlayedAt)
             .HasDatabaseName("idx_spotify_data_played_at");
     }

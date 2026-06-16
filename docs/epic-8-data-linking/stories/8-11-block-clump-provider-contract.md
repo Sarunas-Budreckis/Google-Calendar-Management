@@ -1,7 +1,7 @@
 # Story 8.11: Block/Clump Provider Contract + Adapt Existing Coalescers
 
 **Epic:** 8 — Event Model & Raw Data Linking Engine
-**Status:** ready-for-dev
+**Status:** done
 **Agent:** Sonnet · **Effort:** medium
 **Dependencies:** 8.7 (blocking — `data_point` table and `DataPoint` entity must exist)
 
@@ -33,40 +33,50 @@ so that the Linking panel (Epic 9) can consume every source through one interfac
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Define the provider contract types (AC: #1, #2)
-  - [ ] 1.1 Create `Services/DataLinking/ClumpBlock.cs` with `ClumpDataPoint`, `Clump`, `Block`, `ClumpBlockResult` records (see Dev Notes §Contract design for exact definitions)
-  - [ ] 1.2 Create `Services/DataLinking/IClumpBlockProvider.cs` with `IClumpBlockProvider` interface
-  - [ ] 1.3 Create `Services/DataLinking/IClumpBlockProviderRegistry.cs` with `IClumpBlockProviderRegistry` interface
-  - [ ] 1.4 Create `Services/DataLinking/ClumpBlockProviderRegistry.cs` implementing the registry (constructor takes `IEnumerable<IClumpBlockProvider>`, resolves by `SourceKey`)
+- [x] Task 1: Define the provider contract types (AC: #1, #2)
+  - [x] 1.1 Create `Services/DataLinking/ClumpBlock.cs` with `ClumpDataPoint`, `Clump`, `Block`, `ClumpBlockResult` records (see Dev Notes §Contract design for exact definitions)
+  - [x] 1.2 Create `Services/DataLinking/IClumpBlockProvider.cs` with `IClumpBlockProvider` interface
+  - [x] 1.3 Create `Services/DataLinking/IClumpBlockProviderRegistry.cs` with `IClumpBlockProviderRegistry` interface
+  - [x] 1.4 Create `Services/DataLinking/ClumpBlockProviderRegistry.cs` implementing the registry (constructor takes `IEnumerable<IClumpBlockProvider>`, resolves by `SourceKey`)
 
-- [ ] Task 2: Implement Civ5 provider (AC: #3)
-  - [ ] 2.1 Create `Services/DataLinking/Civ5ClumpBlockProvider.cs`
-  - [ ] 2.2 Inject `IDbContextFactory<CalendarDbContext>` + `EightFifteenRuleService` in constructor
-  - [ ] 2.3 `GetClumpsAndBlocksAsync(from, to, ct)`: query `data_point` rows for `source_key = "civ5_session"` where `start_utc` between `from` and `to`; for each `source_ref` resolve the `Civ5SessionPoint` record (see Dev Notes §Source-ref resolution); pass sorted `Civ5SessionPoint` list to `Civ5SessionCoalescer.CoalesceIntoWindows`; map each `Civ5CandidateWindow` to a `Clump` + blocks via `_eightFifteenRule.ApplyRule(window.WindowStart, window.WindowEnd)`
+- [x] Task 2: Implement Civ5 provider (AC: #3)
+  - [x] 2.1 Create `Services/DataLinking/Civ5ClumpBlockProvider.cs`
+  - [x] 2.2 Inject `IDbContextFactory<CalendarDbContext>` + `EightFifteenRuleService` in constructor
+  - [x] 2.3 `GetClumpsAndBlocksAsync(from, to, ct)`: query `data_point` rows for `source_key = "civ5_session"` where `start_utc` between `from` and `to`; for each `source_ref` resolve the `Civ5SessionPoint` record (see Dev Notes §Source-ref resolution); pass sorted `Civ5SessionPoint` list to `Civ5SessionCoalescer.CoalesceIntoWindows`; map each `Civ5CandidateWindow` to a `Clump` + blocks via `_eightFifteenRule.ApplyRule(window.WindowStart, window.WindowEnd)`
 
-- [ ] Task 3: Implement ComfyUI provider (AC: #4)
-  - [ ] 3.1 Create `Services/DataLinking/ComfyUIClumpBlockProvider.cs` — same pattern as Civ5 but for `source_key = "comfyui_scan"` and `ComfyUISessionCoalescer`
-  - [ ] 3.2 Resolve `ComfyUIScanPoint` entities via `source_ref` (DB id); coalesce; map to clumps + blocks
+- [x] Task 3: Implement ComfyUI provider (AC: #4)
+  - [x] 3.1 Create `Services/DataLinking/ComfyUIClumpBlockProvider.cs` — same pattern as Civ5 but for `source_key = "comfyui_scan"` and `ComfyUISessionCoalescer`
+  - [x] 3.2 Resolve `ComfyUIScanPoint` entities via `source_ref` (DB id); coalesce; map to clumps + blocks
 
-- [ ] Task 4: Implement phone provider (AC: #5)
-  - [ ] 4.1 Create `Services/DataLinking/PhoneClumpBlockProvider.cs`
-  - [ ] 4.2 `SourceKey` = `"toggl_phone"` (confirm source key used in 8.9 projectors — check `TogglPhoneDrilldownViewModel` or 8.9 story for the canonical key)
-  - [ ] 4.3 Query `data_point` rows; convert each to `SlidingWindowEntry(StartUtc, EndUtc)`; run `TogglSlidingWindowService.ComputeWindows` with the same gap/quality/min-duration thresholds currently used in `TogglPhoneDrilldownViewModel` (read those constants from `Constants/ImportThresholds.cs`)
-  - [ ] 4.4 For each `SlidingWindowResult`: collect the datapoints whose time range falls within the window → form a `Clump`; compute blocks via `EightFifteenRuleService.ApplyRule(windowStart, windowEnd)`
+- [x] Task 4: Implement phone provider (AC: #5)
+  - [x] 4.1 Create `Services/DataLinking/PhoneClumpBlockProvider.cs`
+  - [x] 4.2 `SourceKey` = `"toggl_phone"` (confirm source key used in 8.9 projectors — check `TogglPhoneDrilldownViewModel` or 8.9 story for the canonical key)
+  - [x] 4.3 Query `data_point` rows; convert each to `SlidingWindowEntry(StartUtc, EndUtc)`; run `TogglSlidingWindowService.ComputeWindows` with the same gap/quality/min-duration thresholds currently used in `TogglPhoneDrilldownViewModel` (read those constants from `Constants/ImportThresholds.cs`)
+  - [x] 4.4 For each `SlidingWindowResult`: collect the datapoints whose time range falls within the window → form a `Clump`; compute blocks via `EightFifteenRuleService.ApplyRule(windowStart, windowEnd)`
 
-- [ ] Task 5: Implement trivial 1:1 providers (AC: #6)
-  - [ ] 5.1 Create `Services/DataLinking/TrivialClumpBlockProvider.cs` — parameterized by `sourceKey` in constructor; each `DataPoint` row becomes `new Clump([point], point.StartUtc, point.EndUtc)` with blocks from `EightFifteenRuleService.ApplyRule(point.StartUtc, point.EndUtc)`
-  - [ ] 5.2 Register two instances: one for `"call_log"`, one for `"toggl_entry"`
+- [x] Task 5: Implement trivial 1:1 providers (AC: #6)
+  - [x] 5.1 Create `Services/DataLinking/TrivialClumpBlockProvider.cs` — parameterized by `sourceKey` in constructor; each `DataPoint` row becomes `new Clump([point], point.StartUtc, point.EndUtc)` with blocks from `EightFifteenRuleService.ApplyRule(point.StartUtc, point.EndUtc)`
+  - [x] 5.2 Register two instances: one for `"call_log"`, one for `"toggl_entry"`
 
-- [ ] Task 6: DI registration (AC: #7, #8)
-  - [ ] 6.1 In `App.xaml.cs`, register all providers as `IClumpBlockProvider` singletons (or scoped — match the lifetime of the DB context factory used inside)
-  - [ ] 6.2 Register `ClumpBlockProviderRegistry` as `IClumpBlockProviderRegistry` singleton (takes `IEnumerable<IClumpBlockProvider>`)
+- [x] Task 6: DI registration (AC: #7, #8)
+  - [x] 6.1 In `App.xaml.cs`, register all providers as `IClumpBlockProvider` singletons (or scoped — match the lifetime of the DB context factory used inside)
+  - [x] 6.2 Register `ClumpBlockProviderRegistry` as `IClumpBlockProviderRegistry` singleton (takes `IEnumerable<IClumpBlockProvider>`)
 
-- [ ] Task 7: Unit tests (AC: #10)
-  - [ ] 7.1 `Civ5ClumpBlockProviderTests` — stub DB returning known `DataPoint` + `Civ5SessionPoint` rows; verify clump count and block ranges match `Civ5SessionCoalescer` output
-  - [ ] 7.2 `ComfyUIClumpBlockProviderTests` — same pattern
-  - [ ] 7.3 `TrivialClumpBlockProviderTests` — 3 datapoints in, 3 clumps out, each with at least 1 block
-  - [ ] 7.4 `EightFifteenRuleService` block output sanity check — already tested in `EightFifteenRuleServiceTests.cs`; no new tests needed there
+- [x] Task 7: Unit tests (AC: #10)
+  - [x] 7.1 `Civ5ClumpBlockProviderTests` — stub DB returning known `DataPoint` + `Civ5SessionPoint` rows; verify clump count and block ranges match `Civ5SessionCoalescer` output
+  - [x] 7.2 `ComfyUIClumpBlockProviderTests` — same pattern
+  - [x] 7.3 `TrivialClumpBlockProviderTests` — 3 datapoints in, 3 clumps out, each with at least 1 block
+  - [x] 7.4 `EightFifteenRuleService` block output sanity check — already tested in `EightFifteenRuleServiceTests.cs`; no new tests needed there
+
+### Review Findings
+
+- [x] [Review][Patch] Civ5 and ComfyUI providers query source keys that current projectors never write [Services/DataLinking/Civ5ClumpBlockProvider.cs:20]
+- [x] [Review][Patch] Civ5 and ComfyUI providers crash the whole clump load on malformed `source_ref` [Services/DataLinking/Civ5ClumpBlockProvider.cs:37]
+- [x] [Review][Patch] Duration-based providers omit datapoints that overlap the requested range but start before `fromUtc` [Services/DataLinking/PhoneClumpBlockProvider.cs:32]
+- [x] [Review][Patch] Phone clump mapping can omit zero-duration datapoints at `WindowEndUtc` [Services/DataLinking/PhoneClumpBlockProvider.cs:53]
+- [x] [Review][Patch] Phone provider behavior has no direct unit coverage [GoogleCalendarManagement.Tests/Unit/Services/DataLinking:1]
+- [x] [Review][Patch] `ClumpDataPoint.DataPointId` drifts from the story's exact `long` contract [Services/DataLinking/ClumpBlock.cs:4]
+- [x] [Review][Patch] Phone provider uses a generic min-duration threshold instead of a phone-specific threshold constant [Services/DataLinking/PhoneClumpBlockProvider.cs:48]
 
 ---
 
@@ -275,4 +285,30 @@ Sonnet
 
 ### Completion Notes List
 
+- All 7 tasks and all subtasks completed and tested. 11 unit tests added across Civ5, ComfyUI, and Trivial provider test classes.
+- `DataPointId` uses `int` (matching the entity), not `long` as shown in Dev Notes.
+- Added `PhoneCoalesceQualityThreshold = 0.5` to `ImportThresholds` (was missing; the gap and duration constants already existed).
+- Restored `Data/Entities/DateSourceIntegration.cs` shim that was accidentally deleted in 8.9 work — the file's own doc says it should persist until story 8.10.
+- Full regression suite: 485 pre-existing tests pass; 3 failures in `CoverageServiceTests` are pre-existing from in-progress 8.10 work (missing migration for `data_point` table in those test fixtures).
+
 ### File List
+
+- `Services/DataLinking/ClumpBlock.cs` (new)
+- `Services/DataLinking/IClumpBlockProvider.cs` (new)
+- `Services/DataLinking/IClumpBlockProviderRegistry.cs` (new)
+- `Services/DataLinking/ClumpBlockProviderRegistry.cs` (new)
+- `Services/DataLinking/Civ5ClumpBlockProvider.cs` (new)
+- `Services/DataLinking/ComfyUIClumpBlockProvider.cs` (new)
+- `Services/DataLinking/PhoneClumpBlockProvider.cs` (new)
+- `Services/DataLinking/TrivialClumpBlockProvider.cs` (new)
+- `Constants/ImportThresholds.cs` (modified — added `PhoneCoalesceQualityThreshold`)
+- `App.xaml.cs` (modified — DI registrations for all providers + registry)
+- `Data/Entities/DateSourceIntegration.cs` (restored — accidentally deleted in 8.9 work)
+- `GoogleCalendarManagement.Tests/Unit/Services/DataLinking/Civ5ClumpBlockProviderTests.cs` (new)
+- `GoogleCalendarManagement.Tests/Unit/Services/DataLinking/ComfyUIClumpBlockProviderTests.cs` (new)
+- `GoogleCalendarManagement.Tests/Unit/Services/DataLinking/TrivialClumpBlockProviderTests.cs` (new)
+
+### Change Log
+
+- 2026-06-12: Story 8.11 implemented — IClumpBlockProvider contract, all five providers (Civ5, ComfyUI, Phone, and two trivial), DI registration, and 11 unit tests. Added `PhoneCoalesceQualityThreshold` to `ImportThresholds`. Restored accidentally-deleted `DateSourceIntegration` shim.
+- 2026-06-16: Code review findings resolved — aligned Civ5/ComfyUI source keys with current projectors, made source_ref parsing defensive, fixed duration overlap semantics, added phone provider tests, restored exact DataPointId contract type, and moved phone min-window threshold to a phone-specific constant.

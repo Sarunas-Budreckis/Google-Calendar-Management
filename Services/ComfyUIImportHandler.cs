@@ -25,6 +25,8 @@ public sealed class ComfyUIImportHandler : IDataSourceImportHandler
 
     public string SourceKey => ComfyUIFolderScannerService.SourceKey;
 
+    public IDataPointProjector GetProjector() => new ComfyUIProjector();
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         await EnsureDataSourceAsync(ct);

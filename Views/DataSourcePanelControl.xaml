@@ -384,7 +384,7 @@
                                 Grid.Column="1"
                                 Opacity="0.72"
                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="Integrated"
+                                Text="Coverage"
                                 TextTrimming="CharacterEllipsis" />
                             <TextBlock
                                 Grid.Column="2"
@@ -442,18 +442,21 @@
                                                 Text="⋮"
                                                 ToolTipService.ToolTip="Drag to reorder" />
 
-                                            <CheckBox
+                                            <StackPanel
                                                 Grid.Column="1"
-                                                Width="22"
-                                                Height="22"
-                                                MinWidth="0"
-                                                Padding="0"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Top"
-                                                Command="{Binding ToggleIntegrationCommand}"
-                                                IsChecked="{Binding IsIntegrated, Mode=OneWay}"
-                                                IsEnabled="{Binding IsIntegrationEnabled}"
-                                                ToolTipService.ToolTip="Mark Integrated" />
+                                                Orientation="Horizontal"
+                                                Spacing="4">
+                                                <TextBlock
+                                                    Text="{Binding CoverageLevelSymbol}"
+                                                    FontSize="14" />
+                                                <TextBlock
+                                                    Text="{Binding CoverageCountText}"
+                                                    FontSize="11"
+                                                    Opacity="0.7"
+                                                    Visibility="{Binding CoverageCountVisibility}" />
+                                            </StackPanel>
 
                                             <StackPanel
                                                 Grid.Column="2"

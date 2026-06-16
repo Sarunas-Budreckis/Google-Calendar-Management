@@ -28,6 +28,8 @@ public sealed class TogglSleepImportHandler : IDataSourceImportHandler
 
     public bool IsApiFetch => true;
 
+    public IDataPointProjector GetProjector() => new TogglSleepProjector();
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         var selection = await ShowDateRangeDialogAsync(ct);

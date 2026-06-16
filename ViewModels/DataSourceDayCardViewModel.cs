@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using GoogleCalendarManagement.Services;
+using GoogleCalendarManagement.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -8,20 +8,16 @@ namespace GoogleCalendarManagement.ViewModels;
 
 public sealed class DataSourceDayCardViewModel : ObservableObject
 {
-    private readonly IDataSourceRepository _dataSourceRepository;
-    private readonly DateOnly _date;
     private readonly Action<DataSourceDayCardViewModel> _expand;
-    private bool _isIntegrated;
     private UIElement? _drilldownView;
 
     public DataSourceDayCardViewModel(
         int dataSourceId,
         string sourceKey,
         string displayName,
-        bool isIntegrated,
+        CoverageResult coverage,
         bool isGreyedOut,
         DateOnly date,
-        IDataSourceRepository dataSourceRepository,
         Action<DataSourceDayCardViewModel> expand,
         UIElement? compactSummaryView,
         Func<UIElement> drilldownViewFactory,
@@ -32,10 +28,8 @@ public sealed class DataSourceDayCardViewModel : ObservableObject
         DataSourceId = dataSourceId;
         SourceKey = sourceKey;
         DisplayName = displayName;
-        _isIntegrated = isIntegrated;
+        Coverage = coverage;
         IsGreyedOut = isGreyedOut;
-        _date = date;
-        _dataSourceRepository = dataSourceRepository;
         _expand = expand;
         CompactSummaryView = compactSummaryView;
         DrilldownViewFactory = drilldownViewFactory;
@@ -49,7 +43,6 @@ public sealed class DataSourceDayCardViewModel : ObservableObject
                 }
             },
             () => addAction is not null && (allowAddWhenGreyedOut || !IsGreyedOut));
-        ToggleIntegrationCommand = new AsyncRelayCommand(ToggleIntegrationAsync, () => !IsGreyedOut);
         ExpandCommand = new RelayCommand(() => _expand(this));
     }
 
@@ -59,17 +52,22 @@ public sealed class DataSourceDayCardViewModel : ObservableObject
 
     public string DisplayName { get; }
 
-    public bool IsIntegrated
-    {
-        get => _isIntegrated;
-        private set => SetProperty(ref _isIntegrated, value);
-    }
+    public CoverageResult Coverage { get; }
 
     public bool IsGreyedOut { get; }
 
-    public bool IsIntegrationEnabled => !IsGreyedOut;
+    public string CoverageLevelSymbol => Coverage.Level switch
+    {
+        CoverageLevel.Full when Coverage.Total == 0 => "—",
+        CoverageLevel.Full => "●",
+        CoverageLevel.Partial => "◐",
+        CoverageLevel.None => "○",
+        _ => "○"
+    };
 
-    public IAsyncRelayCommand ToggleIntegrationCommand { get; }
+    public string CoverageCountText => Coverage.Total > 0 ? $"{Coverage.Covered}/{Coverage.Total} linked" : string.Empty;
+
+    public Visibility CoverageCountVisibility => Coverage.Total > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     public IRelayCommand ExpandCommand { get; }
 
@@ -86,27 +84,6 @@ public sealed class DataSourceDayCardViewModel : ObservableObject
     public Func<UIElement> DrilldownViewFactory { get; }
 
     public UIElement DrilldownView => _drilldownView ??= DrilldownViewFactory();
-
-    private async Task ToggleIntegrationAsync()
-    {
-        if (IsGreyedOut)
-        {
-            return;
-        }
-
-        var nextValue = !IsIntegrated;
-        IsIntegrated = nextValue;
-
-        try
-        {
-            await _dataSourceRepository.SetIntegrationAsync(_date, DataSourceId, nextValue);
-        }
-        catch
-        {
-            IsIntegrated = !nextValue;
-            throw;
-        }
-    }
 
     public static UIElement CreatePlaceholderDrilldown(string displayName)
     {

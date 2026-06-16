@@ -95,10 +95,12 @@ public sealed class SpotifyImportService : ISpotifyImportService
             var albumName = item.Track?.Albums?.FirstOrDefault()?.Name;
             var durationMs = item.Track?.DurationMs ?? 0;
             var msPlayed = item.PlayedMs;
+            var naturalKey = BuildNaturalKey(playedAt, trackName);
             var key = (playedAt, trackName);
 
             if (pendingInserts.TryGetValue(key, out var pending))
             {
+                pending.NaturalKey = naturalKey;
                 pending.ArtistName = artistName;
                 pending.AlbumName = albumName;
                 pending.DurationMs = durationMs;
@@ -113,6 +115,7 @@ public sealed class SpotifyImportService : ISpotifyImportService
             {
                 var newStream = new SpotifyStream
                 {
+                    NaturalKey = naturalKey,
                     PlayedAt = playedAt,
                     TrackName = trackName,
                     ArtistName = artistName,
@@ -126,6 +129,7 @@ public sealed class SpotifyImportService : ISpotifyImportService
             }
             else
             {
+                existing.NaturalKey = naturalKey;
                 existing.ArtistName = artistName;
                 existing.AlbumName = albumName;
                 existing.DurationMs = durationMs;
@@ -182,4 +186,6 @@ public sealed class SpotifyImportService : ISpotifyImportService
     {
         return DateTimeOffset.Parse(endTime, CultureInfo.InvariantCulture).UtcDateTime;
     }
+
+    private static string BuildNaturalKey(DateTime playedAt, string trackName) => $"{playedAt:yyyy-MM-ddTHH:mm:ss.fffffff}|{trackName}";
 }

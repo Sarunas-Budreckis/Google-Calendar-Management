@@ -15,6 +15,8 @@ public sealed class Civ5ImportHandler : IDataSourceImportHandler
 
     public string SourceKey => Civ5SaveScannerService.SourceKey;
 
+    public IDataPointProjector GetProjector() => new Civ5Projector();
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         var result = await _scannerService.ScanAsync(ct);

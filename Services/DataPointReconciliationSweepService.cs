@@ -45,6 +45,19 @@ public sealed class DataPointReconciliationSweepService : IDataPointReconciliati
             _logger.LogWarning(
                 "Reconciled {Count} missing datapoints for source '{SourceKey}'", inserted, sourceKey);
         }
+
+        // Orphan deletion: remove data_point rows whose raw record no longer exists.
+        var allRawRefs = await projector.GetAllRawSourceRefsAsync(ctx, ct);
+        var rawRefsList = allRawRefs.ToList();
+        var deleted = await ctx.DataPoints
+            .Where(dp => dp.SourceKey == sourceKey && !rawRefsList.Contains(dp.SourceRef))
+            .ExecuteDeleteAsync(ct);
+        if (deleted > 0)
+        {
+            _logger.LogWarning(
+                "Deleted {Count} stale datapoints for source '{SourceKey}' (raw records removed)",
+                deleted, sourceKey);
+        }
     }
 
     public async Task RunStartupDriftCheckAsync(CancellationToken ct = default)

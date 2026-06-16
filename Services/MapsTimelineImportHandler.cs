@@ -40,6 +40,8 @@ public sealed class MapsTimelineImportHandler : IDataSourceImportHandler
 
     string IDataSourceImportHandler.SourceKey => SourceKey;
 
+    public IDataPointProjector GetProjector() => new MapsTimelineProjector();
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         var filePath = await PickJsonFileAsync();

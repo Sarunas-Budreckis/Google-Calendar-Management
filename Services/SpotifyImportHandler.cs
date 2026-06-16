@@ -28,6 +28,8 @@ public sealed class SpotifyImportHandler : IDataSourceImportHandler
 
     public bool IsApiFetch => true;
 
+    public IDataPointProjector GetProjector() => new SpotifyProjector();
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         var selection = await ShowDateRangeDialogAsync(ct);

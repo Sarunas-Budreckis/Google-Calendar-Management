@@ -47,28 +47,6 @@ public sealed class DataSourceRepository : IDataSourceRepository
         return existing;
     }
 
-    // TODO 8.10: the date_source_integration table was dropped in Story 8.2 (manual per-day
-    // "integrated?" checkbox superseded by computed coverage). These methods are stubbed until
-    // Story 8.10 replaces them with the coverage service and removes them from the interface.
-    public Task<DateSourceIntegration?> GetIntegrationAsync(DateOnly date, int dataSourceId, CancellationToken ct = default)
-    {
-        return Task.FromResult<DateSourceIntegration?>(null);
-    }
-
-    public Task<DateSourceIntegration> SetIntegrationAsync(DateOnly date, int dataSourceId, bool integrated, CancellationToken ct = default)
-    {
-        var now = DateTime.UtcNow;
-        return Task.FromResult(new DateSourceIntegration
-        {
-            Date = date,
-            DataSourceId = dataSourceId,
-            Integrated = integrated,
-            IntegratedAt = integrated ? now : null,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-    }
-
     public async Task<DataSourceImportLog?> GetLastImportAsync(int dataSourceId, CancellationToken ct = default)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);

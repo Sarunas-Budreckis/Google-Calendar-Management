@@ -299,37 +299,6 @@ public class SchemaTests
     }
 
     [Fact]
-    public async Task DateSourceIntegration_HasUniqueIndexOnDateAndDataSourceId_AfterMigration()
-    {
-        // Arrange
-        await using var ctx = await CreateMigratedInMemoryContextAsync();
-        var connection = ctx.Database.GetDbConnection();
-
-        // Act — read all indexes for date_source_integration
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='date_source_integration'";
-        var indexes = new List<string>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            indexes.Add(reader.GetString(0));
-
-        // Assert
-        indexes.Should().Contain("idx_date_source_integration_date_source",
-            "date_source_integration must have a unique index on (date, data_source_id)");
-
-        // Verify the index covers both columns and is unique
-        using var infoCmd = connection.CreateCommand();
-        infoCmd.CommandText = "PRAGMA index_info('idx_date_source_integration_date_source')";
-        var indexColumns = new List<string>();
-        await using var infoReader = await infoCmd.ExecuteReaderAsync();
-        while (await infoReader.ReadAsync())
-            indexColumns.Add(infoReader.GetString(2));
-
-        indexColumns.Should().Contain("date");
-        indexColumns.Should().Contain("data_source_id");
-    }
-
-    [Fact]
     public async Task DataSourceImportLog_FkToDataSource_IsRestrictOnDelete_AfterMigration()
     {
         // Arrange
@@ -352,31 +321,6 @@ public class SchemaTests
         // Assert
         referencedTable.Should().Be("data_source", "import log FK must reference data_source");
         onDeleteBehavior.Should().NotBe("CASCADE", "import log FK must not cascade deletes");
-    }
-
-    [Fact]
-    public async Task DateSourceIntegration_FkToDataSource_IsRestrictOnDelete_AfterMigration()
-    {
-        // Arrange
-        await using var ctx = await CreateMigratedInMemoryContextAsync();
-        var connection = ctx.Database.GetDbConnection();
-
-        // Act
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = "PRAGMA foreign_key_list('date_source_integration')";
-
-        string? onDeleteBehavior = null;
-        string? referencedTable = null;
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            referencedTable = reader.GetString(2);
-            onDeleteBehavior = reader.GetString(6);
-        }
-
-        // Assert
-        referencedTable.Should().Be("data_source", "integration FK must reference data_source");
-        onDeleteBehavior.Should().NotBe("CASCADE", "integration FK must not cascade deletes");
     }
 
     [Fact]

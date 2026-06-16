@@ -15,6 +15,8 @@ public sealed class TogglPhoneImportHandler : IDataSourceImportHandler
 
     public string SourceKey => TogglPhoneCardProvider.SourceKey;
 
+    public IDataPointProjector GetProjector() => new TogglPhoneProjector();
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         try

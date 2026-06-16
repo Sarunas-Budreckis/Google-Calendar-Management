@@ -29,6 +29,8 @@ public sealed class OutlookImportHandler : IDataSourceImportHandler
 
     public bool IsApiFetch => true;
 
+    public IDataPointProjector GetProjector() => new OutlookProjector();
+
     public async Task TriggerImportAsync(CancellationToken ct = default)
     {
         var result = await ShowSyncDialogAsync(ct);
