@@ -57,8 +57,8 @@ public sealed class CoverageServiceTests : IDisposable
 
         await CreateLinkTableAsync(_connection);
         await ExecuteNonQueryAsync(_connection, @"
-            INSERT INTO link (link_id, data_point_id, state, origin, created_at, updated_at)
-            VALUES (1, 1, 'linked', 'manual', @now, @now), (2, 2, 'linked', 'manual', @now, @now)",
+            INSERT INTO link (link_id, data_point_id, state, origin, action_group_id, created_at, updated_at)
+            VALUES (1, 1, 'linked', 'manual', 'g1', @now, @now), (2, 2, 'linked', 'manual', 'g1', @now, @now)",
             ("@now", DateTime.UtcNow.ToString("O")));
 
         var service = new CoverageService(_contextFactory);
@@ -95,8 +95,12 @@ public sealed class CoverageServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetDateSourceCoverage_DuplicateLinks_CountsDistinctDataPoints()
+    public async Task GetDateSourceCoverage_SingleLinkPerDatapoint_CountsDistinctDataPoints()
     {
+        // Story 8.12 added a UNIQUE index on link.data_point_id, so a datapoint can have at most
+        // one link row. CoverageService's COUNT(DISTINCT ...) therefore counts each linked
+        // datapoint exactly once. (Duplicate-link rows per datapoint are now structurally
+        // impossible — see LinkServiceTests.UniqueConstraint_Enforced_AtDbLevel.)
         var date = new DateOnly(2026, 6, 1);
         var start = new DateTime(2026, 6, 1, 8, 0, 0, DateTimeKind.Utc);
 
@@ -108,8 +112,8 @@ public sealed class CoverageServiceTests : IDisposable
 
         await CreateLinkTableAsync(_connection);
         await ExecuteNonQueryAsync(_connection, @"
-            INSERT INTO link (link_id, data_point_id, state, origin, created_at, updated_at)
-            VALUES (1, 1, 'linked', 'manual', @now, @now), (2, 1, 'linked', 'manual', @now, @now)",
+            INSERT INTO link (link_id, data_point_id, state, origin, action_group_id, created_at, updated_at)
+            VALUES (1, 1, 'linked', 'manual', 'g1', @now, @now)",
             ("@now", DateTime.UtcNow.ToString("O")));
 
         var service = new CoverageService(_contextFactory);
@@ -140,8 +144,8 @@ public sealed class CoverageServiceTests : IDisposable
 
         await CreateLinkTableAsync(_connection);
         await ExecuteNonQueryAsync(_connection, @"
-            INSERT INTO link (link_id, data_point_id, state, origin, created_at, updated_at)
-            VALUES (1, 1, 'linked', 'manual', @now, @now)",
+            INSERT INTO link (link_id, data_point_id, state, origin, action_group_id, created_at, updated_at)
+            VALUES (1, 1, 'linked', 'manual', 'g1', @now, @now)",
             ("@now", DateTime.UtcNow.ToString("O")));
 
         var service = new CoverageService(_contextFactory);

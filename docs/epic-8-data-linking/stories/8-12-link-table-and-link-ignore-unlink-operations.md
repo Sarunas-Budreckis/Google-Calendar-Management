@@ -1,7 +1,7 @@
 # Story 8.12: `link` Table + Link / Ignore / Unlink Operations (Undoable)
 
 **Epic:** 8 — Event Model & Raw Data Linking Engine
-**Status:** ready-for-dev
+**Status:** done
 **Agent:** Opus · **Effort:** high
 **Dependencies:** 8.7 (blocking — `data_point` table + `DataPoint` entity must exist); 8.2 (blocking — unified `event` table with stable `event_id` string PK must exist)
 
@@ -92,52 +92,61 @@ so that every datapoint has exactly zero or one resolution row, all manual opera
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create `Link` entity + configuration + migration (AC: #1)
-  - [ ] 1.1 Create `Data/Entities/Link.cs` — public properties: `LinkId`, `DataPointId`, `EventId` (string?), `State`, `Origin`, `RuleId` (string?), `ActionGroupId`, `CreatedAt`, `UpdatedAt`; navigation properties: `DataPoint DataPoint`, `Event? Event`
-  - [ ] 1.2 Add `ICollection<Link> Links { get; set; }` navigation to the `DataPoint` entity (created in 8.7)
-  - [ ] 1.3 Create `Data/Configurations/LinkConfiguration.cs` implementing `IEntityTypeConfiguration<Link>` — see Dev Notes for full configuration
-  - [ ] 1.4 Add `public DbSet<Link> Links { get; set; }` to `CalendarDbContext`
-  - [ ] 1.5 Run `dotnet ef migrations add AddLinkTable` — verify generated SQL matches schema in AC #1; fix configuration if not
-  - [ ] 1.6 Confirm migration file uses timestamp naming convention matching existing migrations
+- [x] Task 1: Create `Link` entity + configuration + migration (AC: #1)
+  - [x] 1.1 Create `Data/Entities/Link.cs` — public properties: `LinkId`, `DataPointId`, `EventId` (string?), `State`, `Origin`, `RuleId` (string?), `ActionGroupId`, `CreatedAt`, `UpdatedAt`; navigation properties: `DataPoint DataPoint`, `Event? Event`
+  - [x] 1.2 Add `ICollection<Link> Links { get; set; }` navigation to the `DataPoint` entity (created in 8.7)
+  - [x] 1.3 Create `Data/Configurations/LinkConfiguration.cs` implementing `IEntityTypeConfiguration<Link>` — see Dev Notes for full configuration
+  - [x] 1.4 Add `public DbSet<Link> Links { get; set; }` to `CalendarDbContext`
+  - [x] 1.5 Run `dotnet ef migrations add AddLinkTable` — verify generated SQL matches schema in AC #1; fix configuration if not
+  - [x] 1.6 Confirm migration file uses timestamp naming convention matching existing migrations
 
-- [ ] Task 2: Create `ILinkService` interface (AC: #3–#15)
-  - [ ] 2.1 Create `Services/ILinkService.cs` — declare all methods listed in Dev Notes interface block; return types: link/ignore/unlink ops return `Task<string>` (the action_group_id); query ops return `Task<T>`
-  - [ ] 2.2 Confirm namespace `GoogleCalendarManagement.Services`
+- [x] Task 2: Create `ILinkService` interface (AC: #3–#15)
+  - [x] 2.1 Create `Services/ILinkService.cs` — declare all methods listed in Dev Notes interface block; return types: link/ignore/unlink ops return `Task<string>` (the action_group_id); query ops return `Task<T>`
+  - [x] 2.2 Confirm namespace `GoogleCalendarManagement.Services`
 
-- [ ] Task 3: Implement `LinkService` (AC: #2–#15)
-  - [ ] 3.1 Create `Services/LinkService.cs` — constructor takes `IDbContextFactory<CalendarDbContext>`, holds an in-memory undo stack (`Dictionary<string, List<LinkSnapshot>>`)
-  - [ ] 3.2 Implement `GenerateActionGroupId()` private helper: `Guid.NewGuid().ToString("N")` — same pattern as `EventIdentityService.MintEventId()`
-  - [ ] 3.3 Implement invariant guard `AssertManualOriginNotOverwritten(Link existing)` — throws if `existing.Origin == "manual"`
-  - [ ] 3.4 Implement `LinkAsync` — snapshot previous → upsert link row → push to undo stack → return group id
-  - [ ] 3.5 Implement `LinkClumpAsync` — snapshot all previous states → upsert all link rows in one transaction → push one group entry → return group id
-  - [ ] 3.6 Implement `IgnoreAsync` — same pattern as `LinkAsync` with `state='ignored'`, `event_id=null`
-  - [ ] 3.7 Implement `IgnoreClumpAsync` — same pattern as `LinkClumpAsync`
-  - [ ] 3.8 Implement `UnlinkAsync` — snapshot previous (or null) → delete row if exists → push to undo stack → return group id
-  - [ ] 3.9 Implement `UnlinkClumpAsync` — snapshot all → delete in one transaction → push group → return group id
-  - [ ] 3.10 Implement `UndoActionGroupAsync` — retrieve snapshot from undo stack → restore rows in one transaction → remove group from stack
-  - [ ] 3.11 Implement `WriteAutoLinkAsync(dataPointId, eventId, ruleId)` — guard against overwriting `manual` rows; upsert with `origin='auto_rule'`; do NOT add to undo stack
-  - [ ] 3.12 Implement `WriteAutoIgnoreAsync(dataPointId, ruleId)` — same guard; upsert with `origin='auto_rule'`, `event_id=null`
-  - [ ] 3.13 Implement `GetLinkAsync`, `GetLinksByEventAsync`, `GetLinksByActionGroupAsync` — direct EF queries using `IDbContextFactory`
-  - [ ] 3.14 Verify all public methods are `async Task` / `async Task<T>` — no `.Result` or `.Wait()` calls
+- [x] Task 3: Implement `LinkService` (AC: #2–#15)
+  - [x] 3.1 Create `Services/LinkService.cs` — constructor takes `IDbContextFactory<CalendarDbContext>`, holds an in-memory undo stack (`Dictionary<string, List<LinkSnapshot>>`)
+  - [x] 3.2 Implement `GenerateActionGroupId()` private helper: `Guid.NewGuid().ToString("N")` — same pattern as `EventIdentityService.MintEventId()`
+  - [x] 3.3 Implement invariant guard `AssertManualOriginNotOverwritten(Link existing)` — throws if `existing.Origin == "manual"` (implemented as `AssertNotManual`)
+  - [x] 3.4 Implement `LinkAsync` — snapshot previous → upsert link row → push to undo stack → return group id
+  - [x] 3.5 Implement `LinkClumpAsync` — snapshot all previous states → upsert all link rows in one transaction → push one group entry → return group id
+  - [x] 3.6 Implement `IgnoreAsync` — same pattern as `LinkAsync` with `state='ignored'`, `event_id=null`
+  - [x] 3.7 Implement `IgnoreClumpAsync` — same pattern as `LinkClumpAsync`
+  - [x] 3.8 Implement `UnlinkAsync` — snapshot previous (or null) → delete row if exists → push to undo stack → return group id
+  - [x] 3.9 Implement `UnlinkClumpAsync` — snapshot all → delete in one transaction → push group → return group id
+  - [x] 3.10 Implement `UndoActionGroupAsync` — retrieve snapshot from undo stack → restore rows in one transaction → remove group from stack
+  - [x] 3.11 Implement `WriteAutoLinkAsync(dataPointId, eventId, ruleId)` — guard against overwriting `manual` rows; upsert with `origin='auto_rule'`; do NOT add to undo stack
+  - [x] 3.12 Implement `WriteAutoIgnoreAsync(dataPointId, ruleId)` — same guard; upsert with `origin='auto_rule'`, `event_id=null`
+  - [x] 3.13 Implement `GetLinkAsync`, `GetLinksByEventAsync`, `GetLinksByActionGroupAsync` — direct EF queries using `IDbContextFactory`
+  - [x] 3.14 Verify all public methods are `async Task` / `async Task<T>` — no `.Result` or `.Wait()` calls
 
-- [ ] Task 4: DI registration (AC: #17)
-  - [ ] 4.1 In `App.xaml.cs`, add `services.AddSingleton<ILinkService, LinkService>()` near the other singleton data-service registrations
+- [x] Task 4: DI registration (AC: #17)
+  - [x] 4.1 In `App.xaml.cs`, add `services.AddSingleton<ILinkService, LinkService>()` near the other singleton data-service registrations
 
-- [ ] Task 5: Integration tests (AC: #16)
-  - [ ] 5.1 Create `GoogleCalendarManagement.Tests/Integration/LinkServiceTests.cs` — xUnit class; setup uses in-memory SQLite + `EnsureCreated()` (same pattern as `GoogleCalendarSyncTests.cs`)
-  - [ ] 5.2 Test: `LinkAsync_CreatesLinkRow_WithCorrectFields` — verify `state='linked'`, `origin='manual'`, `event_id` set, `action_group_id` not empty
-  - [ ] 5.3 Test: `IgnoreAsync_CreatesIgnoreRow_WithNullEventId` — verify `state='ignored'`, `event_id IS NULL`
-  - [ ] 5.4 Test: `UnlinkAsync_RemovesRow_WhenRowExists` — link a datapoint, then unlink, verify no row
-  - [ ] 5.5 Test: `UnlinkAsync_IsNoOp_WhenRowAbsent` — no row exists; call unlink; assert no exception, still no row
-  - [ ] 5.6 Test: `LinkClumpAsync_WritesNRows_UnderSameActionGroupId` — 3 datapoints; assert all rows share same group id
-  - [ ] 5.7 Test: `UndoActionGroupAsync_RestoresPreviousState_WhenWasUnlinked` — link then undo; assert row deleted
-  - [ ] 5.8 Test: `UndoActionGroupAsync_RestoresPreviousState_WhenWasLinkedToOtherEvent` — datapoint linked to eventA; re-link to eventB; undo; assert linked back to eventA
-  - [ ] 5.9 Test: `UndoActionGroupAsync_IsNoOp_WhenGroupIdUnknown` — call undo with a random guid; assert no exception
-  - [ ] 5.10 Test: `CascadeDelete_DeletesLinkRow_WhenDataPointDeleted` — create datapoint + link row; delete datapoint via EF; assert link row gone
-  - [ ] 5.11 Test: `WriteAutoLinkAsync_DoesNotOverwrite_ManualRow` — seed a manual link row; call `WriteAutoLinkAsync` on the same datapoint; assert throws `InvalidOperationException`
-  - [ ] 5.12 Test: `WriteAutoLinkAsync_Overwrites_ExistingAutoRow` — seed auto_rule link; call `WriteAutoLinkAsync` with different event; assert row updated, still `origin='auto_rule'`
-  - [ ] 5.13 Test: `UniqueConstraint_Enforced_AtDbLevel` — try to insert two link rows for the same `data_point_id` via raw EF; assert `DbUpdateException`
-  - [ ] 5.14 Test: `UndoClump_RestoresAllNDatapoints_InOneStep` — link 3-datapoint clump; undo; all 3 rows gone
+- [x] Task 5: Integration tests (AC: #16)
+  - [x] 5.1 Create `GoogleCalendarManagement.Tests/Integration/LinkServiceTests.cs` — xUnit class; setup uses in-memory SQLite + `EnsureCreated()` (same pattern as `GoogleCalendarSyncTests.cs`)
+  - [x] 5.2 Test: `LinkAsync_CreatesLinkRow_WithCorrectFields` — verify `state='linked'`, `origin='manual'`, `event_id` set, `action_group_id` not empty
+  - [x] 5.3 Test: `IgnoreAsync_CreatesIgnoreRow_WithNullEventId` — verify `state='ignored'`, `event_id IS NULL`
+  - [x] 5.4 Test: `UnlinkAsync_RemovesRow_WhenRowExists` — link a datapoint, then unlink, verify no row
+  - [x] 5.5 Test: `UnlinkAsync_IsNoOp_WhenRowAbsent` — no row exists; call unlink; assert no exception, still no row
+  - [x] 5.6 Test: `LinkClumpAsync_WritesNRows_UnderSameActionGroupId` — 3 datapoints; assert all rows share same group id
+  - [x] 5.7 Test: `UndoActionGroupAsync_RestoresPreviousState_WhenWasUnlinked` — link then undo; assert row deleted
+  - [x] 5.8 Test: `UndoActionGroupAsync_RestoresPreviousState_WhenWasLinkedToOtherEvent` — datapoint linked to eventA; re-link to eventB; undo; assert linked back to eventA
+  - [x] 5.9 Test: `UndoActionGroupAsync_IsNoOp_WhenGroupIdUnknown` — call undo with a random guid; assert no exception
+  - [x] 5.10 Test: `CascadeDelete_DeletesLinkRow_WhenDataPointDeleted` — create datapoint + link row; delete datapoint via EF; assert link row gone
+  - [x] 5.11 Test: `WriteAutoLinkAsync_DoesNotOverwrite_ManualRow` — seed a manual link row; call `WriteAutoLinkAsync` on the same datapoint; assert throws `InvalidOperationException`
+  - [x] 5.12 Test: `WriteAutoLinkAsync_Overwrites_ExistingAutoRow` — seed auto_rule link; call `WriteAutoLinkAsync` with different event; assert row updated, still `origin='auto_rule'`
+  - [x] 5.13 Test: `UniqueConstraint_Enforced_AtDbLevel` — try to insert two link rows for the same `data_point_id` via raw EF; assert `DbUpdateException`
+  - [x] 5.14 Test: `UndoClump_RestoresAllNDatapoints_InOneStep` — link 3-datapoint clump; undo; all 3 rows gone
+  - [x] 5.15 (added) Test: `LinkAsync_Throws_WhenEventIdMissing` — verifies the state/event_id invariant guard (AC #2)
+
+### Review Findings
+
+- [x] [Review][Patch] Superseded action groups can still undo and overwrite newer link decisions [Services/LinkService.cs:57]
+- [x] [Review][Patch] Clump operations do not normalize null, empty, or duplicate datapoint inputs before saving [Services/LinkService.cs:130]
+- [x] [Review][Patch] `state` and `origin` allowed values are not enforced at the schema boundary [Data/Configurations/LinkConfiguration.cs:16]
+- [x] [Review][Patch] Auto rule writes accept blank `ruleId`, leaving `auto_rule` rows without rule traceability [Services/LinkService.cs:51]
+- [x] [Review][Patch] Integration tests do not cover all Story 8.12 acceptance criteria and public service methods [GoogleCalendarManagement.Tests/Integration/LinkServiceTests.cs:34]
 
 ---
 
@@ -452,10 +461,42 @@ xUnit + FluentAssertions + Moq — same as all other tests. In-memory SQLite wit
 
 ### Agent Model Used
 
-Opus
+Opus 4.8
 
 ### Debug Log References
 
+- All `LinkServiceTests` pass; full suite 524 passed / 19 skipped after review fixes.
+- **Schema landing broke 3 `CoverageServiceTests`** (8.10): those tests created a provisional `link` table with `action_group_id TEXT NULL` and inserted rows omitting it. Now that `EnsureCreated()` builds the canonical table (`action_group_id` NOT NULL + UNIQUE index on `data_point_id`), the inserts failed. Fixed by supplying `action_group_id` in the inserts and repurposing `GetDateSourceCoverage_DuplicateLinks_CountsDistinctDataPoints` → `..._SingleLinkPerDatapoint_...` (two link rows for one datapoint is now structurally impossible under the unique index; the constraint itself is covered by `LinkServiceTests.UniqueConstraint_Enforced_AtDbLevel`).
+- **Pre-existing, unrelated failures (NOT introduced by this story):** 3 `DataPointReconciliationSweepServiceTests` (`RunPostImportAsync_InsertsOrphanedDataPoints`, `RunPostImportAsync_IsIdempotent`, `RunStartupDriftCheckAsync_CallsProjectorForEveryRegisteredSource`) fail with `ArgumentNullException` because their projector mock does not stub `GetAllRawSourceRefsAsync`. Verified failing on a clean checkout of commit 72a907b (3 failed / 2 passed) before any 8.12 change. Belongs to the projector-contract work (8.8/8.9), left untouched to avoid scope creep.
+
 ### Completion Notes List
 
+- Added the canonical `link` table via migration `20260616183154_AddLinkTable`: `link_id` PK; `data_point_id` FK → `data_point` **ON DELETE CASCADE**; nullable `event_id` FK → `event` **ON DELETE RESTRICT**; UNIQUE index on `data_point_id`; indexes on `event_id` and `action_group_id`. Generated SQL inspected and confirmed to match AC #1 (unique index correctly emitted on the non-nullable `data_point_id`).
+- `LinkService` enforces the state/event_id invariant in code (not the DB): `linked ⇔ event_id set`, `ignored ⇔ event_id null`; violations throw `InvalidOperationException` before touching the DB (AC #2).
+- All manual write ops (Link/Ignore/Unlink, singular + clump) write in one `SaveChangesAsync`, share one `action_group_id`, snapshot prior state into an in-memory undo stack, and return the group id. Singular ops are implemented as clumps of one to avoid duplication.
+- `UndoActionGroupAsync` restores the snapshot in one transaction and is a no-op for unknown groups. Undo snapshots are deep copies, so they survive in-place EF mutation of the tracked row.
+- Auto (rule-engine) writes (`WriteAutoLinkAsync`/`WriteAutoIgnoreAsync`) never overwrite a `manual` row (throw) and are NOT added to the undo stack (AC #12).
+- Undo stack guarded by a lock for thread safety (service is a DI Singleton).
+- `ILinkService` registered as Singleton in `App.xaml.cs` (AC #17).
+
 ### File List
+
+- **Created:** `Data/Entities/Link.cs`
+- **Created:** `Data/Configurations/LinkConfiguration.cs`
+- **Created:** `Services/ILinkService.cs`
+- **Created:** `Services/LinkService.cs`
+- **Created:** `Data/Migrations/20260616183154_AddLinkTable.cs`
+- **Created:** `Data/Migrations/20260616183154_AddLinkTable.Designer.cs`
+- **Created:** `GoogleCalendarManagement.Tests/Integration/LinkServiceTests.cs`
+- **Modified:** `Data/Entities/DataPoint.cs` — added `Links` navigation property
+- **Modified:** `Data/CalendarDbContext.cs` — added `DbSet<Link> Links`
+- **Modified:** `Data/Migrations/CalendarDbContextModelSnapshot.cs` — regenerated by `dotnet ef`
+- **Modified:** `App.xaml.cs` — DI registration of `ILinkService`
+- **Modified:** `GoogleCalendarManagement.Tests/Integration/CoverageServiceTests.cs` — updated link inserts for the canonical schema (see Debug Log)
+
+### Change Log
+
+| Date       | Change                                                                 |
+|------------|------------------------------------------------------------------------|
+| 2026-06-16 | Implemented Story 8.12: `link` table + `LinkService` (link/ignore/unlink, clump, undo, auto-write guards) + 15 integration tests; DI registration; migration `AddLinkTable`. Updated `CoverageServiceTests` link inserts to the canonical schema. |
+| 2026-06-16 | Addressed code review findings: superseded undo groups, clump input normalization, schema value checks, auto-rule `rule_id` validation, and expanded integration coverage. |

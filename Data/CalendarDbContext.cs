@@ -31,6 +31,7 @@ public class CalendarDbContext : DbContext
     public DbSet<ComfyUIScanPoint> ComfyUIScanPoints { get; set; }
     public DbSet<OutlookEvent> OutlookEvents { get; set; }
     public DbSet<DataPoint> DataPoints { get; set; }
+    public DbSet<Link> Links { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

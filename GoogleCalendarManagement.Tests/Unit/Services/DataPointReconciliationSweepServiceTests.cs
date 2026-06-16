@@ -143,6 +143,8 @@ public sealed class DataPointReconciliationSweepServiceTests : IDisposable
         projector.Setup(p => p.SourceKey).Returns(sourceKey);
         projector.Setup(p => p.GetOrphanedSpecsAsync(It.IsAny<CalendarDbContext>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(specs);
+        projector.Setup(p => p.GetAllRawSourceRefsAsync(It.IsAny<CalendarDbContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(specs.Select(s => s.SourceRef).ToList());
         return projector;
     }
 

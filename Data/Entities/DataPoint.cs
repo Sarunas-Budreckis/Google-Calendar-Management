@@ -8,4 +8,6 @@ public class DataPoint
     public DateTime StartUtc { get; set; }
     public DateTime EndUtc { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    public ICollection<Link> Links { get; set; } = new List<Link>();
 }
