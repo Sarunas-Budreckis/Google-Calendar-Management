@@ -54,6 +54,104 @@ public sealed class LinkService : ILinkService
     public async Task WriteAutoIgnoreAsync(int dataPointId, string ruleId, CancellationToken ct = default) =>
         await UpsertClumpAsync(new[] { dataPointId }, StateIgnored, null, OriginAutoRule, ruleId, addToUndoStack: false, ct);
 
+    public async Task<string> WriteAutoBatchAsync(IReadOnlyList<AutoLinkWrite> writes, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(writes);
+
+        var actionGroupId = GenerateActionGroupId();
+        if (writes.Count == 0)
+        {
+            // Empty run — nothing to apply or undo.
+            return actionGroupId;
+        }
+
+        var now = DateTime.UtcNow;
+        var snapshots = new List<LinkSnapshot>();
+
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        await using var tx = await context.Database.BeginTransactionAsync(ct);
+
+        foreach (var write in writes)
+        {
+            var state = write.Ignore ? StateIgnored : StateLinked;
+            var eventId = write.Ignore ? null : write.EventId;
+
+            AssertInvariant(state, eventId);
+            AssertAutoRuleId(OriginAutoRule, write.RuleId);
+            AssertGeneratedEventMatchesWrite(write, eventId);
+
+            var existing = await context.Links
+                .SingleOrDefaultAsync(l => l.DataPointId == write.DataPointId, ct);
+
+            // Manual decisions are sacred — never overwrite. The engine already excludes manual
+            // rows from the eligible set; this is defense-in-depth against a race, and it skips
+            // (rather than throwing) so one stray row can't abort an entire pipeline run.
+            if (existing?.Origin == OriginManual)
+            {
+                continue;
+            }
+
+            // Idempotency: an identical auto row is left untouched (no write, no undo snapshot),
+            // so re-running a pipeline on unchanged data produces no net change.
+            if (existing is not null &&
+                existing.Origin == OriginAutoRule &&
+                existing.State == state &&
+                existing.EventId == eventId &&
+                existing.RuleId == write.RuleId)
+            {
+                continue;
+            }
+
+            snapshots.Add(new LinkSnapshot(write.DataPointId, CloneRow(existing)));
+            if (write.GeneratedEvent is not null)
+            {
+                context.Events.Add(write.GeneratedEvent);
+            }
+
+            UpsertOnContext(context, existing, write.DataPointId, eventId, state, OriginAutoRule, write.RuleId, actionGroupId, now);
+        }
+
+        await context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        // Pipeline runs are undoable (Story 8.14): register the changed rows under the shared group.
+        if (snapshots.Count > 0)
+        {
+            PushUndo(actionGroupId, snapshots);
+        }
+
+        return actionGroupId;
+    }
+
+    public async Task<IReadOnlyList<Link>> DeleteAutoLinksForDataPointsAsync(
+        IReadOnlyList<int> dataPointIds, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(dataPointIds);
+
+        var ids = dataPointIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return Array.Empty<Link>();
+        }
+
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        var rows = await context.Links
+            .Where(l => ids.Contains(l.DataPointId) && l.Origin == OriginAutoRule)
+            .ToListAsync(ct);
+
+        if (rows.Count == 0)
+        {
+            return Array.Empty<Link>();
+        }
+
+        var deleted = rows.Select(r => CloneRow(r)!).ToList();
+        context.Links.RemoveRange(rows);
+        await context.SaveChangesAsync(ct);
+
+        return deleted;
+    }
+
     public async Task UndoActionGroupAsync(string actionGroupId, CancellationToken ct = default)
     {
         List<LinkSnapshot>? snapshots;
@@ -299,6 +397,24 @@ public sealed class LinkService : ILinkService
         if (origin == OriginAutoRule && string.IsNullOrWhiteSpace(ruleId))
         {
             throw new InvalidOperationException("An auto_rule resolution requires a non-empty rule_id.");
+        }
+    }
+
+    private static void AssertGeneratedEventMatchesWrite(AutoLinkWrite write, string? eventId)
+    {
+        if (write.GeneratedEvent is null)
+        {
+            return;
+        }
+
+        if (write.Ignore)
+        {
+            throw new InvalidOperationException("An ignored auto-rule write cannot include a generated event.");
+        }
+
+        if (string.IsNullOrWhiteSpace(eventId) || write.GeneratedEvent.EventId != eventId)
+        {
+            throw new InvalidOperationException("A generated event write must link to the generated event id.");
         }
     }
 

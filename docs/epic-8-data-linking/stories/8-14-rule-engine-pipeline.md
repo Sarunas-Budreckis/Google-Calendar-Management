@@ -1,7 +1,7 @@
 # Story 8.14: Rule Engine Pipeline (Propose-Ops, Invariants, Triggers, Reversal)
 
 **Epic:** 8 — Event Model & Raw Data Linking Engine
-**Status:** ready-for-dev
+**Status:** done
 **Agent:** Opus · **Effort:** high
 **Dependencies:** 8.12 (blocking — `link` table + `ILinkOperationService` must exist); 8.13 (blocking — `ILinkPickerService` must exist)
 
@@ -63,70 +63,87 @@ so that automation is deterministic, idempotent, manually-sacred, fully auditabl
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Define core types (AC: #1–#4)
-  - [ ] 1.1 Create `Services/Rules/ProposedOpKind.cs` — `enum ProposedOpKind { Link, Ignore, GenerateCandidate }`
-  - [ ] 1.2 Create `Services/Rules/RuleProposedOp.cs` — record with `Kind`, `DataPointId`, `EventId?`, `RuleId`, `GeneratedEventSummary?`, `GeneratedEventStart?`, `GeneratedEventEnd?`
-  - [ ] 1.3 Create `Services/Rules/RuleScope.cs` — record with `DateOnly FromDate`, `DateOnly ToDate`, `string? SourceKeyFilter`
-  - [ ] 1.4 Create `Services/Rules/EligibleDataPoint.cs` — record with `string DataPointId`, `string SourceKey`, `DateTime StartUtc`, `DateTime EndUtc`
-  - [ ] 1.5 Create `Services/Rules/ILinkRule.cs` — interface with `RuleId` + `ProposeOpsAsync` signature from AC #1
+> **Implementation note (deviations from original spec — see Completion Notes for full rationale):**
+> The story was drafted before 8.12/8.13 merged. Two adaptations were made: (a) the real schema uses
+> `int DataPointId` (not `string`), and the merged link service is `ILinkService` (not
+> `ILinkOperationService`) — all engine types use `int` and route writes through `ILinkService`;
+> (b) per user decision, triggers are **direct methods** on `IRuleEngineService` (`RunForImportAsync`,
+> `RunForEventApproveAsync`, `RunForEventEditTimeAsync`, `RunForEventDeleteAsync`) — matching the
+> downstream consumer Story 8.15 — instead of a message-subscription `IRuleTriggerService`. Tasks 5–7
+> are checked against that substituted design.
 
-- [ ] Task 2: Define `IRuleEngineService` interface (AC: #5)
-  - [ ] 2.1 Create `Services/IRuleEngineService.cs` — `RunPipelineAsync` + `ReverseAndRerunAsync` signatures
+- [x] Task 1: Define core types (AC: #1–#4) — `DataPointId` is `int` to match the merged schema
+  - [x] 1.1 Create `Services/Rules/ProposedOpKind.cs` — `enum ProposedOpKind { Link, Ignore, GenerateCandidate }`
+  - [x] 1.2 Create `Services/Rules/RuleProposedOp.cs` — record with `Kind`, `int DataPointId`, `EventId?`, `RuleId`, `GeneratedEventSummary?`, `GeneratedEventStart?`, `GeneratedEventEnd?` (+ optional `GeneratedEventSourceSystem?` so 8.15 rules can stamp their own source_system)
+  - [x] 1.3 Create `Services/Rules/RuleScope.cs` — record with `DateOnly FromDate`, `DateOnly ToDate`, `string? SourceKeyFilter`
+  - [x] 1.4 Create `Services/Rules/EligibleDataPoint.cs` — record with `int DataPointId`, `string SourceKey`, `DateTime StartUtc`, `DateTime EndUtc`
+  - [x] 1.5 Create `Services/Rules/ILinkRule.cs` — interface with `RuleId` + `ProposeOpsAsync` signature from AC #1
 
-- [ ] Task 3: Implement `RuleEngineService` — pipeline core (AC: #6, #8, #9)
-  - [ ] 3.1 Create `Services/RuleEngineService.cs` — constructor takes `IDbContextFactory<CalendarDbContext>`, `IEventRepository`, `IEventIdentityService`, `IEnumerable<ILinkRule>`, `ILogger<RuleEngineService>`
-  - [ ] 3.2 Implement `BuildEligibleListAsync(RuleScope scope, CancellationToken ct)` — private helper that queries `data_point` joined with `link` (left join) to find unlinked or `origin='auto_rule'` datapoints in scope; returns `IReadOnlyList<EligibleDataPoint>`
-  - [ ] 3.3 Implement `AggregateProposals(IReadOnlyList<(ILinkRule Rule, IReadOnlyList<RuleProposedOp> Ops)> ruleOutputs)` — private helper that applies first-rule-wins deduplication by `DataPointId`
-  - [ ] 3.4 Implement `ApplyOpsAsync(IReadOnlyList<RuleProposedOp> ops, string actionGroupId, CancellationToken ct)` — private helper that applies all ops in a single `await using var context = ... ; using var tx = context.Database.BeginTransaction()` block:
-    - For `Link` ops: find existing link row for `data_point_id`; if exists and `origin='auto_rule'` → update; if not exists → insert
-    - For `Ignore` ops: same upsert pattern, `state='ignored'`, `event_id=null`
-    - For `GenerateCandidate` ops: mint `event_id`, insert `Event`, insert `link` row; send `EventUpdatedMessage`
-    - Call `SaveChangesAsync` once; commit transaction
-  - [ ] 3.5 Implement `RunPipelineAsync`: call `BuildEligibleListAsync`, run each `ILinkRule.ProposeOpsAsync` (sequentially, not parallel — deterministic order), aggregate, apply; log count of ops applied at `Information` level
-  - [ ] 3.6 Idempotency: in `ApplyOpsAsync`, when upserting a `Link` op, check if the existing row already has `state='linked'`, `event_id=op.EventId`, `rule_id=op.RuleId` — if so, skip the update (no EF change). Use `SaveChangesAsync` return value to log actual change count.
+- [x] Task 2: Define `IRuleEngineService` interface (AC: #5)
+  - [x] 2.1 Create `Services/IRuleEngineService.cs` — `RunPipelineAsync` + `ReverseAndRerunAsync` (+ `ReverseRangeAndRerunAsync` overload + direct `RunFor*` triggers)
 
-- [ ] Task 4: Implement `ReverseAndRerunAsync` (AC: #7)
-  - [ ] 4.1 Load the event's time range from `IEventRepository.GetByEventIdAsync`; if null, log warning and return
-  - [ ] 4.2 Convert `event.StartDatetime`/`EndDatetime` to `DateOnly` boundaries for the scope
-  - [ ] 4.3 Delete all `origin='auto_rule'` link rows whose `data_point_id` maps to a `data_point` row overlapping the event's UTC time range — do this in a single transaction
-  - [ ] 4.4 Send `EventUpdatedMessage` for any candidate events that had their only link row deleted (they are now orphaned candidates; the UI should re-evaluate visibility)
-  - [ ] 4.5 Call `RunPipelineAsync(scope)` for the time range
+- [x] Task 3: Implement `RuleEngineService` — pipeline core (AC: #6, #8, #9)
+  - [x] 3.1 Create `Services/RuleEngineService.cs` — constructor takes `IDbContextFactory<CalendarDbContext>`, `IEventRepository`, `IEventIdentityService`, `ILinkService`, `IEnumerable<ILinkRule>`, `ILogger<RuleEngineService>`
+  - [x] 3.2 Implement `BuildEligibleListAsync(RuleScope scope, CancellationToken ct)` — queries `data_point` with a correlated `link` lookup to find unlinked or `origin='auto_rule'` datapoints in scope; returns `IReadOnlyList<EligibleDataPoint>`
+  - [x] 3.3 Implement `AggregateProposals(...)` — first-rule-wins deduplication by `DataPointId`
+  - [x] 3.4 Implement `ApplyOpsAsync(...)` — builds the batch of writes (minting events for `GenerateCandidate` ops first, sending `EventUpdatedMessage`), then applies all link/ignore writes atomically via `ILinkService.WriteAutoBatchAsync` (single transaction, shared `action_group_id`). Engine never writes the `link` table directly.
+  - [x] 3.5 Implement `RunPipelineAsync`: `BuildEligibleListAsync` → run each `ILinkRule.ProposeOpsAsync` sequentially → aggregate → apply; logs op count at `Information`
+  - [x] 3.6 Idempotency: `WriteAutoBatchAsync` skips a write whose existing row already has matching `state`/`event_id`/`origin='auto_rule'`/`rule_id` (no EF change, no undo snapshot) — re-runs produce no net change
 
-- [ ] Task 5: Define trigger messages (AC: #11)
-  - [ ] 5.1 Check if `DataImportCompletedMessage` already exists (check `Messages/` or `Services/`); if not, create `Messages/DataImportCompletedMessage.cs`
-  - [ ] 5.2 Check if `EventLifecycleChangedMessage` exists; if not, create `Messages/EventLifecycleChangedMessage.cs`
-  - [ ] 5.3 Check if `EventTimeChangedMessage` exists; if not, create `Messages/EventTimeChangedMessage.cs`
-  - [ ] 5.4 Check if `EventDeletedMessage` exists; if not, create `Messages/EventDeletedMessage.cs`
-  - [ ] 5.5 Wire existing message senders: verify `EventRepository.UpsertAsync` (and callers) sends `EventLifecycleChangedMessage` when `lifecycle` transitions; add sends if missing. Verify import handlers send `DataImportCompletedMessage`. Add sends if missing — do NOT refactor handlers, just add the send.
+- [x] Task 4: Implement `ReverseAndRerunAsync` (AC: #7)
+  - [x] 4.1 Load the event's time range from `IEventRepository.GetByEventIdAsync`; if null, log warning and return
+  - [x] 4.2 Convert `event.StartDatetime`/`EndDatetime` to `DateOnly` boundaries for the scope
+  - [x] 4.3 Delete all `origin='auto_rule'` link rows for datapoints overlapping the event's UTC range, in one transaction (`ILinkService.DeleteAutoLinksForDataPointsAsync`)
+  - [x] 4.4 Send `EventUpdatedMessage` for orphaned candidate events whose only link row was deleted (engine deletes the now-unreferenced candidate)
+  - [x] 4.5 Call `RunPipelineAsync(scope)` for the time range (via `ReverseRangeAndRerunAsync`)
 
-- [ ] Task 6: Implement `IRuleTriggerService` + `RuleTriggerService` (AC: #10)
-  - [ ] 6.1 Create `Services/IRuleTriggerService.cs` — single method `Initialize()` (registers all WeakReferenceMessenger subscriptions; called once at startup)
-  - [ ] 6.2 Create `Services/RuleTriggerService.cs` — constructor takes `IRuleEngineService`, `IEventRepository`, `ILogger<RuleTriggerService>`
-  - [ ] 6.3 In `Initialize()`, register four message handlers (see AC #10 triggers)
-  - [ ] 6.4 Post-import handler: `DataImportCompletedMessage` → `RunPipelineAsync(new RuleScope(msg.FromDate, msg.ToDate, msg.SourceKey))`
-  - [ ] 6.5 Event-approve handler: `EventLifecycleChangedMessage` where `NewLifecycle == "approved"` → load event, compute scope from its time range, `RunPipelineAsync(scope)`
-  - [ ] 6.6 Event-time-change handler: `EventTimeChangedMessage` → `ReverseAndRerunAsync(msg.EventId)` (uses old time extent stored on event before update — see Dev Notes §Trigger wiring for time-change detail)
-  - [ ] 6.7 Event-delete/un-approve handler: `EventDeletedMessage` or `EventLifecycleChangedMessage(NewLifecycle="candidate")` → `ReverseAndRerunAsync(msg.EventId)` (for deleted events, time range comes from message payload)
+- [x] Task 5: Trigger entry points (AC: #11) — **adapted: direct methods, no new message types**
+  - [x] 5.1 `RunForImportAsync(sourceKey)` replaces a `DataImportCompletedMessage` subscription (existing `DataSourceImportCompletedMessage` carries no date range; engine derives scope from the source's datapoints)
+  - [x] 5.2 `RunForEventApproveAsync(eventId)` replaces an `EventLifecycleChangedMessage` subscription
+  - [x] 5.3 `RunForEventEditTimeAsync(eventId, oldStartUtc, oldEndUtc)` replaces an `EventTimeChangedMessage` subscription (old range passed by caller)
+  - [x] 5.4 `RunForEventDeleteAsync(eventId, startUtc, endUtc)` replaces an `EventDeletedMessage` subscription (range passed by caller)
+  - [x] 5.5 No new message types created; existing `DataSourceImportCompletedMessage` senders left untouched. Call-site wiring (import services, event edit/delete/approve paths) is owned by the consuming stories (8.15 wires imports; Epic 9 wires lifecycle paths)
 
-- [ ] Task 7: DI registration (AC: #12)
-  - [ ] 7.1 In `App.xaml.cs`: add `services.AddSingleton<IRuleEngineService, RuleEngineService>()`
-  - [ ] 7.2 Add `services.AddSingleton<IRuleTriggerService, RuleTriggerService>()`
-  - [ ] 7.3 No concrete `ILinkRule` implementations added here — Story 8.15 registers the first two rules. Register an empty placeholder comment: `// ILinkRule implementations registered by Story 8.15+`
-  - [ ] 7.4 In app startup (after DI container built), resolve `IRuleTriggerService` and call `.Initialize()` to arm all triggers
+- [x] Task 6: Trigger surface (AC: #10) — **adapted: `RunFor*` methods on `IRuleEngineService`, no separate `IRuleTriggerService`**
+  - [x] 6.1 Direct methods need no `Initialize()`/arming step
+  - [x] 6.2 Engine owns the trigger logic directly (no separate service/ctor)
+  - [x] 6.3 Four trigger entry points implemented (see Task 5.1–5.4)
+  - [x] 6.4 Post-import: `RunForImportAsync(sourceKey)` → pipeline over that source's datapoint range
+  - [x] 6.5 Event-approve: `RunForEventApproveAsync(eventId)` → pipeline over the event's range
+  - [x] 6.6 Event-time-change: `RunForEventEditTimeAsync(...)` → reverse old range + reverse/re-run new range
+  - [x] 6.7 Event-delete/un-approve: `RunForEventDeleteAsync(...)` → reverse over the supplied range
 
-- [ ] Task 8: Integration tests — integrity matrix (AC: #13)
-  - [ ] 8.1 Create `GoogleCalendarManagement.Tests/Integration/RuleEnginePipelineTests.cs`
-  - [ ] 8.2 Test helper: `CreateTestRule(string ruleId, Func<IReadOnlyList<EligibleDataPoint>, IReadOnlyList<RuleProposedOp>> proposeFunc)` — returns an `ILinkRule` stub with the given logic
-  - [ ] 8.3 Test: **Idempotency** — run pipeline twice on same data; assert `link` table has same row count after second run; no duplicate rows
-  - [ ] 8.4 Test: **Manual sacred** — seed a datapoint with `origin='manual'` link; run pipeline with a rule that proposes a different link for it; assert the manual link is unchanged
-  - [ ] 8.5 Test: **Auto link applied** — unlinked datapoint in scope; rule proposes `Link` to event; assert link row exists with `origin='auto_rule'`, `rule_id` set, `action_group_id` non-null
-  - [ ] 8.6 Test: **First-rule-wins** — two rules both propose ops for same datapoint; assert only first rule's `rule_id` appears on the resulting link row
-  - [ ] 8.7 Test: **Auto link cleaned by reversal** — auto_rule link exists; call `ReverseAndRerunAsync`; no rule proposes anything on re-run; assert the old auto_rule link row is deleted
-  - [ ] 8.8 Test: **Manual survives reversal** — manual link on datapoint overlapping event range; call `ReverseAndRerunAsync`; assert manual link is intact
-  - [ ] 8.9 Test: **Event delete triggers reversal** — seed auto_rule link; send `EventDeletedMessage`; assert link row deleted; assert manual link (if any) untouched
-  - [ ] 8.10 Test: **Generate-candidate op** — rule proposes `GenerateCandidate` for a datapoint; assert new `Event` row with `lifecycle='candidate'` created; assert `link` row connects datapoint to new event with `origin='auto_rule'`
-  - [ ] 8.11 Test: **Converges after move** — seed event at time T1; auto-link a datapoint to it; move event to T2 (send `EventTimeChangedMessage`); assert datapoint's old auto link is removed and (if rule still fires) re-evaluated at T2
-  - [ ] 8.12 Test: **Action group — all ops share one group** — pipeline run produces 3 link ops; assert all 3 `link` rows have the same `action_group_id`
+- [x] Task 7: DI registration (AC: #12)
+  - [x] 7.1 In `App.xaml.cs`: added `services.AddSingleton<IRuleEngineService, RuleEngineService>()`
+  - [x] 7.2 No `IRuleTriggerService` (superseded by direct methods)
+  - [x] 7.3 Placeholder comment added — `// ILinkRule implementations registered by Story 8.15+`; engine receives `IEnumerable<ILinkRule>`
+  - [x] 7.4 No arming step needed (direct methods); nothing to resolve at startup
+
+- [x] Task 8: Integration tests — integrity matrix (AC: #13)
+  - [x] 8.1 Create `GoogleCalendarManagement.Tests/Integration/RuleEnginePipelineTests.cs`
+  - [x] 8.2 Test helpers: `StubRule(ruleId, logic)` + `OverlapLinkRule` (event-aware) stand in for `CreateTestRule`
+  - [x] 8.3 Test: **Idempotency** — run twice; same row count; unchanged row's `action_group_id`/`updated_at` stable
+  - [x] 8.4 Test: **Manual sacred** — manual link present; rule proposes a different link; manual link unchanged
+  - [x] 8.5 Test: **Auto link applied** — unlinked datapoint; `origin='auto_rule'`, `rule_id` set, `action_group_id` non-null
+  - [x] 8.6 Test: **First-rule-wins** — two rules propose for same datapoint; only first rule's `rule_id` wins
+  - [x] 8.7 Test: **Auto link cleaned by reversal** — auto link + empty re-run rule → old auto link deleted
+  - [x] 8.8 Test: **Manual survives reversal** — manual link on overlapping datapoint → intact after reversal
+  - [x] 8.9 Test: **Event delete triggers reversal** — `RunForEventDeleteAsync` removes auto link, leaves manual link
+  - [x] 8.10 Test: **Generate-candidate op** — new `Event(lifecycle='candidate')` created; link connects datapoint with `origin='auto_rule'`
+  - [x] 8.11 Test: **Converges after move** — auto-linked datapoint; move event; `RunForEventEditTimeAsync` removes stale auto link
+  - [x] 8.12 Test: **Action group** — 3 link ops in one run share one `action_group_id`
+
+### Review Findings
+
+- [x] [Review][Patch] GenerateCandidate is not idempotent on repeated pipeline runs [Services/RuleEngineService.cs:238]
+- [x] [Review][Patch] GenerateCandidate event creation is not atomic with link writes [Services/RuleEngineService.cs:238]
+- [x] [Review][Patch] Time-change trigger reverses the new event range instead of only running the pipeline [Services/RuleEngineService.cs:150]
+- [x] [Review][Patch] Orphan cleanup can delete candidate events not generated by the rule engine [Services/RuleEngineService.cs:295]
+- [x] [Review][Patch] GenerateCandidate ops can create candidate events without required fields [Services/RuleEngineService.cs:256]
+- [x] [Review][Patch] ReverseAndRerunAsync uses DateTime.UtcNow when event times are missing [Services/RuleEngineService.cs:79]
+- [x] [Review][Patch] Eligible datapoint ordering is nondeterministic [Services/RuleEngineService.cs:178]
+- [x] [Review][Patch] RuleProposedOp is a reference record despite AC #2 requiring a value type [Services/Rules/RuleProposedOp.cs:18]
+- [x] [Review][Patch] Batch undo behavior is claimed but not verified by integration tests [GoogleCalendarManagement.Tests/Integration/RuleEnginePipelineTests.cs:209]
 
 ---
 
@@ -409,14 +426,89 @@ All C# files: `namespace GoogleCalendarManagement.Services;` (or `.Services.Rule
 
 ---
 
+## Change Log
+
+| Date       | Change                                                                                  |
+|------------|-----------------------------------------------------------------------------------------|
+| 2026-06-16 | Implemented rule engine pipeline (core types, engine, reversal, direct triggers) + 10 integrity tests. Adapted to merged `int`/`ILinkService` schema; triggers via direct `RunFor*` methods per user decision; pipeline runs are undoable via shared `action_group_id`. |
+
 ## Dev Agent Record
 
 ### Agent Model Used
 
-Opus
+Opus 4.8
 
 ### Debug Log References
 
+- `dotnet build GoogleCalendarManagement.csproj` — succeeded, 0 errors.
+- `dotnet test --filter RuleEnginePipelineTests` — 11/11 passed.
+- `dotnet test` (full suite) — 550 passed, 0 failed, 19 skipped (pre-parked legacy tests).
+
 ### Completion Notes List
 
+**Two approved deviations from the original spec** (the story was drafted before its dependencies 8.12/8.13 merged; both were confirmed with the user before building):
+
+1. **Schema/contract adaptation.** The merged schema uses `int DataPointId` (not `string`), and the
+   link operation service is `ILinkService` (not the hypothetical `ILinkOperationService`). All engine
+   types use `int`, and the engine routes every `link`-table write through `ILinkService` (never direct).
+   `ILinkPickerService`/`IEventPickerService` is not used by the engine (rules use it in 8.15).
+
+2. **Triggers are direct methods, not message subscriptions** (user decision). `IRuleEngineService`
+   exposes `RunForImportAsync(sourceKey)`, `RunForEventApproveAsync(eventId)`,
+   `RunForEventEditTimeAsync(eventId, oldStartUtc, oldEndUtc)`, and
+   `RunForEventDeleteAsync(eventId, startUtc, endUtc)` — matching the downstream consumer Story 8.15,
+   which explicitly expects this API and wires the import calls itself. No `IRuleTriggerService` and no
+   new message types were created. The existing `DataSourceImportCompletedMessage` (which carries no
+   date range) is left untouched; `RunForImportAsync` derives the scope from the source's own datapoints.
+   Pipeline order is date-range invariant (registration order), independent of import order.
+
+**Undo semantics (AC #9, user decision: pipeline runs are undoable).** Added
+`ILinkService.WriteAutoBatchAsync(writes)` which applies a whole run's auto writes in one transaction
+under a single shared `action_group_id` and registers them on the undo stack — so an entire pipeline
+run is reversible via `UndoActionGroupAsync`. This intentionally extends 8.12's original "auto writes
+are not undoable" stance. `WriteAutoBatchAsync` is also where **idempotency** lives: a write that
+exactly matches an existing `auto_rule` row (state/event_id/rule_id) is skipped — no EF change, no undo
+snapshot — so re-running a scope on unchanged data produces zero net change. Manual rows are never
+overwritten (defensively skipped, since the eligible set already excludes them).
+
+**Reversal.** Added `ILinkService.DeleteAutoLinksForDataPointsAsync(ids)` (deletes only `auto_rule`
+rows, returns snapshots). `ReverseRangeAndRerunAsync` deletes overlapping auto links, then cleans up
+orphaned auto-generated **candidate** events (lifecycle=`candidate` with no remaining link rows are
+removed and an `EventUpdatedMessage` is sent), then re-runs the pipeline for the range. The `link→event`
+FK is `OnDelete(Restrict)`, so deleting the auto link first is required before the candidate event can
+be removed — the order is handled correctly.
+
+**GenerateCandidate.** The engine mints the event id (`IEventIdentityService`), creates an
+`Event(lifecycle='candidate', publish='local_only', source_system='auto_rule', calendar_id='primary')`
+via `IEventRepository.UpsertAsync`, then links the datapoint to it and sends `EventUpdatedMessage`. A
+forward-compatible optional `RuleProposedOp.GeneratedEventSourceSystem` lets 8.15's Outlook rule stamp
+`source_system='outlook'` instead of the default `auto_rule`.
+
+**Not wired in this story (by design).** Call-site wiring of the trigger methods into import services
+and the event edit/delete/approve UI paths is deferred to the consuming stories: Story 8.15 wires the
+import triggers (Spotify/Outlook), and Epic 9 / event-edit flows wire the reversal triggers. With zero
+concrete `ILinkRule` implementations registered until 8.15, every trigger is currently a safe no-op, so
+wiring the lifecycle call-sites now would add regression risk with no functional benefit.
+
+**Tests.** 11 integration tests (in-memory SQLite, real `EventRepository`/`EventIdentityService`/
+`LinkService`) cover the full integrity matrix: idempotency, manual-sacred, auto-link application,
+first-rule-wins, reversal cleanup, manual-survives-reversal, event-delete reversal, generate-candidate,
+convergence-after-move (event-aware `OverlapLinkRule`), and shared action-group grouping.
+
 ### File List
+
+**New:**
+- `Services/Rules/ProposedOpKind.cs`
+- `Services/Rules/RuleProposedOp.cs`
+- `Services/Rules/RuleScope.cs`
+- `Services/Rules/EligibleDataPoint.cs`
+- `Services/Rules/ILinkRule.cs`
+- `Services/AutoLinkWrite.cs`
+- `Services/IRuleEngineService.cs`
+- `Services/RuleEngineService.cs`
+- `GoogleCalendarManagement.Tests/Integration/RuleEnginePipelineTests.cs`
+
+**Modified:**
+- `Services/ILinkService.cs` — added `WriteAutoBatchAsync` + `DeleteAutoLinksForDataPointsAsync`
+- `Services/LinkService.cs` — implemented the two new methods (batch auto write under shared undoable group; auto-link deletion)
+- `App.xaml.cs` — registered `IRuleEngineService` → `RuleEngineService` (singleton); placeholder comment for 8.15 rule registration

@@ -301,6 +301,11 @@ namespace GoogleCalendarManagement
             services.AddSingleton<IEventIdentityService, EventIdentityService>();
             services.AddSingleton<ILinkService, LinkService>();
             services.AddSingleton<IEventPickerService, EventPickerService>();
+
+            // Rule engine (Story 8.14). Concrete ILinkRule implementations are registered by
+            // Story 8.15+ as AddSingleton<ILinkRule, ConcreteRule>(); RuleEngineService receives
+            // them via IEnumerable<ILinkRule>. Triggers are invoked directly via RunFor* methods.
+            services.AddSingleton<IRuleEngineService, RuleEngineService>();
             services.AddSingleton<ISourcePointerResolverRegistry, SourcePointerResolverRegistry>();
             services.AddSingleton<IDataPointProjectorRegistry, DataPointProjectorRegistry>();
             services.AddSingleton<IDataPointReconciliationSweepService, DataPointReconciliationSweepService>();
