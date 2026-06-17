@@ -10,15 +10,17 @@ namespace GoogleCalendarManagement.ViewModels;
 public sealed class OutlookDrilldownViewModel : ObservableObject
 {
     private readonly IOutlookEventRepository _repository;
+    private readonly IRuleEngineService _ruleEngine;
     private IReadOnlyList<OutlookEventItemViewModel> _items = [];
     private string _summaryLabel = "";
     private Visibility _dataVisibility = Visibility.Collapsed;
     private Visibility _emptyStateVisibility = Visibility.Visible;
     private DateOnly _currentDate;
 
-    public OutlookDrilldownViewModel(IOutlookEventRepository repository)
+    public OutlookDrilldownViewModel(IOutlookEventRepository repository, IRuleEngineService ruleEngine)
     {
         _repository = repository;
+        _ruleEngine = ruleEngine;
     }
 
     public IReadOnlyList<OutlookEventItemViewModel> Items
@@ -54,6 +56,7 @@ public sealed class OutlookDrilldownViewModel : ObservableObject
     public async Task ToggleSuppressAsync(string outlookEventId, bool suppress, CancellationToken ct = default)
     {
         await _repository.SetSuppressedAsync(outlookEventId, suppress, ct);
+        await _ruleEngine.RunForImportAsync(OutlookImportService.SourceKey, ct);
         await RefreshAsync(ct);
     }
 

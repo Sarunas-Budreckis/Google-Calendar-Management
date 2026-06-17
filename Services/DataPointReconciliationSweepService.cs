@@ -37,13 +37,14 @@ public sealed class DataPointReconciliationSweepService : IDataPointReconciliati
         await using var ctx = await _contextFactory.CreateDbContextAsync(ct);
 
         var orphanedSpecs = await projector.GetOrphanedSpecsAsync(ctx, ct);
-        var inserted = await InsertMissingDataPointsAsync(ctx, sourceKey, orphanedSpecs, ct);
+        var (inserted, updated) = await UpsertDataPointsAsync(ctx, sourceKey, orphanedSpecs, ct);
 
-        if (inserted > 0)
+        if (inserted > 0 || updated > 0)
         {
             await ctx.SaveChangesAsync(ct);
             _logger.LogWarning(
-                "Reconciled {Count} missing datapoints for source '{SourceKey}'", inserted, sourceKey);
+                "Reconciled {Inserted} missing and {Updated} changed datapoints for source '{SourceKey}'",
+                inserted, updated, sourceKey);
         }
 
         // Orphan deletion: remove data_point rows whose raw record no longer exists.
@@ -87,7 +88,7 @@ public sealed class DataPointReconciliationSweepService : IDataPointReconciliati
 
         // After the delete, all raw records are "orphaned" and re-projected in full.
         var allSpecs = await projector.GetOrphanedSpecsAsync(ctx, ct);
-        var inserted = await InsertMissingDataPointsAsync(ctx, sourceKey, allSpecs, ct);
+        var (inserted, _) = await UpsertDataPointsAsync(ctx, sourceKey, allSpecs, ct);
 
         await ctx.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
@@ -108,7 +109,7 @@ public sealed class DataPointReconciliationSweepService : IDataPointReconciliati
     /// (upsert-or-skip on the <c>(source_key, source_ref)</c> pair). Existing refs are
     /// fetched in a single batch query. Does not call SaveChanges; returns the number added.
     /// </summary>
-    private async Task<int> InsertMissingDataPointsAsync(
+    private async Task<(int Inserted, int Updated)> UpsertDataPointsAsync(
         CalendarDbContext ctx,
         string sourceKey,
         IReadOnlyList<DataPointSpec> specs,
@@ -116,24 +117,36 @@ public sealed class DataPointReconciliationSweepService : IDataPointReconciliati
     {
         if (specs.Count == 0)
         {
-            return 0;
+            return (0, 0);
         }
 
         var candidateRefs = specs.Select(s => s.SourceRef).ToList();
-        var existingRefs = await ctx.DataPoints
+        var existingByRef = await ctx.DataPoints
             .Where(dp => dp.SourceKey == sourceKey && candidateRefs.Contains(dp.SourceRef))
-            .Select(dp => dp.SourceRef)
-            .ToHashSetAsync(ct);
+            .ToDictionaryAsync(dp => dp.SourceRef, ct);
 
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var added = 0;
+        var updated = 0;
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var spec in specs)
         {
-            // Skip rows already persisted, and de-duplicate within this batch.
-            if (existingRefs.Contains(spec.SourceRef) || !seen.Add(spec.SourceRef))
+            // De-duplicate within this batch.
+            if (!seen.Add(spec.SourceRef))
             {
+                continue;
+            }
+
+            if (existingByRef.TryGetValue(spec.SourceRef, out var existing))
+            {
+                if (existing.StartUtc != spec.StartUtc || existing.EndUtc != spec.EndUtc)
+                {
+                    existing.StartUtc = spec.StartUtc;
+                    existing.EndUtc = spec.EndUtc;
+                    updated++;
+                }
+
                 continue;
             }
 
@@ -148,6 +161,6 @@ public sealed class DataPointReconciliationSweepService : IDataPointReconciliati
             added++;
         }
 
-        return added;
+        return (added, updated);
     }
 }

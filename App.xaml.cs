@@ -5,6 +5,7 @@ using GoogleCalendarManagement.Infrastructure;
 using GoogleCalendarManagement.Constants;
 using GoogleCalendarManagement.Services;
 using GoogleCalendarManagement.Services.DataLinking;
+using GoogleCalendarManagement.Services.Rules;
 using GoogleCalendarManagement.ViewModels;
 using GoogleCalendarManagement.Views;
 using Microsoft.EntityFrameworkCore;
@@ -302,10 +303,13 @@ namespace GoogleCalendarManagement
             services.AddSingleton<ILinkService, LinkService>();
             services.AddSingleton<IEventPickerService, EventPickerService>();
 
-            // Rule engine (Story 8.14). Concrete ILinkRule implementations are registered by
-            // Story 8.15+ as AddSingleton<ILinkRule, ConcreteRule>(); RuleEngineService receives
-            // them via IEnumerable<ILinkRule>. Triggers are invoked directly via RunFor* methods.
+            // Rule engine (Story 8.14). Concrete ILinkRule implementations are registered below as
+            // AddSingleton<ILinkRule, ConcreteRule>(); RuleEngineService receives them via
+            // IEnumerable<ILinkRule>. Triggers are invoked directly via RunFor* methods. Registration
+            // order is the pipeline's first-rule-wins order (the two 8.15 rules are source-disjoint).
             services.AddSingleton<IRuleEngineService, RuleEngineService>();
+            services.AddSingleton<ILinkRule, SpotifyAutoLinkRule>();      // Story 8.15
+            services.AddSingleton<ILinkRule, OutlookGenerateCandidateRule>(); // Story 8.15
             services.AddSingleton<ISourcePointerResolverRegistry, SourcePointerResolverRegistry>();
             services.AddSingleton<IDataPointProjectorRegistry, DataPointProjectorRegistry>();
             services.AddSingleton<IDataPointReconciliationSweepService, DataPointReconciliationSweepService>();

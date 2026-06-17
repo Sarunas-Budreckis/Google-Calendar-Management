@@ -39,6 +39,7 @@ public sealed class DataSourcePanelViewModel : ObservableObject
     private readonly IDataPointReconciliationSweepService _sweepService;
     private readonly IContentDialogService _dialogService;
     private readonly ICoverageService _coverageService;
+    private readonly IRuleEngineService? _ruleEngine;
     private readonly DispatcherQueue? _dispatcherQueue;
     private bool _isMinimized;
     private bool _isLoadingGlobal;
@@ -65,7 +66,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         IEventRepository eventRepository,
         IDataPointReconciliationSweepService sweepService,
         IContentDialogService dialogService,
-        ICoverageService coverageService)
+        ICoverageService coverageService,
+        IRuleEngineService? ruleEngine = null)
     {
         _systemStateRepository = systemStateRepository;
         _dataSourceRepository = dataSourceRepository;
@@ -80,6 +82,7 @@ public sealed class DataSourcePanelViewModel : ObservableObject
         _sweepService = sweepService;
         _dialogService = dialogService;
         _coverageService = coverageService;
+        _ruleEngine = ruleEngine;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         OpenDayNameHeaderCommand = new AsyncRelayCommand(OpenSelectedDayNameEventAsync, () => CurrentDay.HasValue);
         BackFromDrilldownCommand = new RelayCommand(() => DrilldownCard = null);
@@ -527,7 +530,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
                     lastImportedRelativeLabel: null,
                     handlerRegistry: _importHandlerRegistry,
                     dataSourceRepository: _dataSourceRepository,
-                    sweepService: _sweepService));
+                    sweepService: _sweepService,
+                    ruleEngine: _ruleEngine));
             }
 
             Sources.Clear();
@@ -593,7 +597,8 @@ public sealed class DataSourcePanelViewModel : ObservableObject
             _dataSourceRepository,
             source.ColorHex,
             dayDataMarkers,
-            _sweepService);
+            _sweepService,
+            _ruleEngine);
     }
 
     private static string FormatSourceKey(string sourceKey)

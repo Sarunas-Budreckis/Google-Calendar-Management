@@ -64,6 +64,38 @@ public sealed class DataPointReconciliationSweepServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RunPostImportAsync_UpdatesExistingDataPointTimes()
+    {
+        var start = new DateTime(2026, 06, 12, 8, 0, 0, DateTimeKind.Utc);
+        await using (var seedCtx = await _contextFactory.CreateDbContextAsync())
+        {
+            seedCtx.DataPoints.Add(new DataPoint
+            {
+                SourceKey = SourceKey,
+                SourceRef = "ref-1",
+                StartUtc = start,
+                EndUtc = start.AddHours(1),
+                CreatedAt = start
+            });
+            await seedCtx.SaveChangesAsync();
+        }
+
+        var updatedStart = start.AddHours(2);
+        var projector = CreateProjector(
+            SourceKey,
+            [new DataPointSpec(SourceKey, "ref-1", updatedStart, updatedStart.AddHours(1))]);
+        RegisterSingle(projector);
+        var service = CreateService();
+
+        await service.RunPostImportAsync(SourceKey);
+
+        await using var ctx = await _contextFactory.CreateDbContextAsync();
+        var row = await ctx.DataPoints.SingleAsync(dp => dp.SourceKey == SourceKey && dp.SourceRef == "ref-1");
+        row.StartUtc.Should().Be(updatedStart);
+        row.EndUtc.Should().Be(updatedStart.AddHours(1));
+    }
+
+    [Fact]
     public async Task RunPostImportAsync_UnknownSourceKey_DoesNotThrow()
     {
         _registry.Setup(r => r.GetProjector("unregistered")).Returns((IDataPointProjector?)null);

@@ -236,17 +236,20 @@ public sealed class RuleEngineService : IRuleEngineService
         }
 
         var writes = new List<AutoLinkWrite>(ops.Count);
-        var newCandidateIds = new List<string>();
+        var candidateIdsToNotify = new List<string>();
+        var displacedLinks = new List<Link>();
 
         foreach (var op in ops)
         {
             switch (op.Kind)
             {
                 case ProposedOpKind.Link:
+                    TrackDisplacedAutoLink(displacedLinks, await _linkService.GetLinkAsync(op.DataPointId, ct), op.EventId);
                     writes.Add(new AutoLinkWrite(op.DataPointId, op.EventId, Ignore: false, op.RuleId));
                     break;
 
                 case ProposedOpKind.Ignore:
+                    TrackDisplacedAutoLink(displacedLinks, await _linkService.GetLinkAsync(op.DataPointId, ct), replacementEventId: null);
                     writes.Add(new AutoLinkWrite(op.DataPointId, null, Ignore: true, op.RuleId));
                     break;
 
@@ -257,12 +260,15 @@ public sealed class RuleEngineService : IRuleEngineService
                     if (existing is { Origin: OriginAutoRule, State: StateLinked, RuleId: var ruleId, EventId: not null }
                         && ruleId == op.RuleId)
                     {
-                        writes.Add(new AutoLinkWrite(op.DataPointId, existing.EventId, Ignore: false, op.RuleId));
+                        var refreshed = CreateCandidateEvent(op, existing.EventId);
+                        candidateIdsToNotify.Add(refreshed.EventId);
+                        writes.Add(new AutoLinkWrite(op.DataPointId, existing.EventId, Ignore: false, op.RuleId, refreshed));
                         break;
                     }
 
+                    TrackDisplacedAutoLink(displacedLinks, existing, replacementEventId: null);
                     var generated = CreateCandidateEvent(op);
-                    newCandidateIds.Add(generated.EventId);
+                    candidateIdsToNotify.Add(generated.EventId);
                     writes.Add(new AutoLinkWrite(op.DataPointId, generated.EventId, Ignore: false, op.RuleId, generated));
                     break;
 
@@ -272,8 +278,9 @@ public sealed class RuleEngineService : IRuleEngineService
         }
 
         await _linkService.WriteAutoBatchAsync(writes, ct);
+        await CleanupOrphanedCandidatesAsync(displacedLinks, ct);
 
-        foreach (var id in newCandidateIds)
+        foreach (var id in candidateIdsToNotify.Distinct())
         {
             WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(id));
         }
@@ -281,12 +288,12 @@ public sealed class RuleEngineService : IRuleEngineService
         return writes.Count;
     }
 
-    private Event CreateCandidateEvent(RuleProposedOp op)
+    private Event CreateCandidateEvent(RuleProposedOp op, string? eventId = null)
     {
         var now = DateTime.UtcNow;
         return new Event
         {
-            EventId = _eventIdentity.MintEventId(),
+            EventId = eventId ?? _eventIdentity.MintEventId(),
             CalendarId = "primary",
             Summary = op.GeneratedEventSummary,
             StartDatetime = op.GeneratedEventStart,
@@ -300,14 +307,29 @@ public sealed class RuleEngineService : IRuleEngineService
         };
     }
 
+    private static void TrackDisplacedAutoLink(List<Link> displacedLinks, Link? existing, string? replacementEventId)
+    {
+        if (existing is not { Origin: OriginAutoRule, State: StateLinked, EventId: not null })
+        {
+            return;
+        }
+
+        if (existing.EventId == replacementEventId)
+        {
+            return;
+        }
+
+        displacedLinks.Add(existing);
+    }
+
     private async Task CleanupOrphanedCandidatesAsync(IReadOnlyList<Link> deletedLinks, CancellationToken ct)
     {
-        var candidateEventIds = deletedLinks
+        var candidateLinks = deletedLinks
             .Where(l => l.State == StateLinked && !string.IsNullOrEmpty(l.EventId))
-            .Select(l => l.EventId!)
-            .Distinct()
+            .GroupBy(l => l.EventId!)
+            .Select(g => g.First())
             .ToList();
-        if (candidateEventIds.Count == 0)
+        if (candidateLinks.Count == 0)
         {
             return;
         }
@@ -315,10 +337,11 @@ public sealed class RuleEngineService : IRuleEngineService
         var orphanedIds = new List<string>();
         await using (var context = await _contextFactory.CreateDbContextAsync(ct))
         {
-            foreach (var eventId in candidateEventIds)
+            foreach (var link in candidateLinks)
             {
+                var eventId = link.EventId!;
                 var ev = await context.Events.SingleOrDefaultAsync(e => e.EventId == eventId, ct);
-                if (ev is null || ev.Lifecycle != LifecycleCandidate || ev.SourceSystem != OriginAutoRule)
+                if (ev is null || ev.Lifecycle != LifecycleCandidate || !IsEngineGeneratedCandidate(link, ev))
                 {
                     continue;
                 }
@@ -345,6 +368,11 @@ public sealed class RuleEngineService : IRuleEngineService
             WeakReferenceMessenger.Default.Send(new EventUpdatedMessage(id));
         }
     }
+
+    private static bool IsEngineGeneratedCandidate(Link sourceLink, Event ev) =>
+        ev.SourceSystem == OriginAutoRule ||
+        (sourceLink.RuleId == OutlookGenerateCandidateRule.Id &&
+            ev.SourceSystem == OutlookImportService.SourceKey);
 
     private static DateTime ToLocalDayStartUtc(DateOnly date) =>
         date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local).ToUniversalTime();

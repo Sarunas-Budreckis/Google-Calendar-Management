@@ -91,8 +91,14 @@ public sealed class LinkService : ILinkService
                 continue;
             }
 
-            // Idempotency: an identical auto row is left untouched (no write, no undo snapshot),
-            // so re-running a pipeline on unchanged data produces no net change.
+            if (write.GeneratedEvent is not null)
+            {
+                await UpsertGeneratedEventOnContextAsync(context, write.GeneratedEvent, ct);
+            }
+
+            // Idempotency: an identical auto row is left untouched (no link write, no undo snapshot),
+            // so re-running a pipeline on unchanged data produces no net link change. A generated
+            // candidate refresh may still have been applied above when source fields changed.
             if (existing is not null &&
                 existing.Origin == OriginAutoRule &&
                 existing.State == state &&
@@ -103,11 +109,6 @@ public sealed class LinkService : ILinkService
             }
 
             snapshots.Add(new LinkSnapshot(write.DataPointId, CloneRow(existing)));
-            if (write.GeneratedEvent is not null)
-            {
-                context.Events.Add(write.GeneratedEvent);
-            }
-
             UpsertOnContext(context, existing, write.DataPointId, eventId, state, OriginAutoRule, write.RuleId, actionGroupId, now);
         }
 
@@ -319,6 +320,84 @@ public sealed class LinkService : ILinkService
         existing.ActionGroupId = actionGroupId;
         existing.UpdatedAt = now;
         return existing;
+    }
+
+    private static async Task<bool> UpsertGeneratedEventOnContextAsync(
+        CalendarDbContext context,
+        Event generated,
+        CancellationToken ct)
+    {
+        var existing = await context.Events
+            .SingleOrDefaultAsync(e => e.EventId == generated.EventId, ct);
+        if (existing is null)
+        {
+            context.Events.Add(generated);
+            return true;
+        }
+
+        var changed = false;
+        if (existing.CalendarId != generated.CalendarId)
+        {
+            existing.CalendarId = generated.CalendarId;
+            changed = true;
+        }
+        if (existing.Summary != generated.Summary)
+        {
+            existing.Summary = generated.Summary;
+            changed = true;
+        }
+        if (existing.Description != generated.Description)
+        {
+            existing.Description = generated.Description;
+            changed = true;
+        }
+        if (existing.StartDatetime != generated.StartDatetime)
+        {
+            existing.StartDatetime = generated.StartDatetime;
+            changed = true;
+        }
+        if (existing.EndDatetime != generated.EndDatetime)
+        {
+            existing.EndDatetime = generated.EndDatetime;
+            changed = true;
+        }
+        if (existing.ColorId != generated.ColorId)
+        {
+            existing.ColorId = generated.ColorId;
+            changed = true;
+        }
+        if (existing.Lifecycle != generated.Lifecycle)
+        {
+            existing.Lifecycle = generated.Lifecycle;
+            changed = true;
+        }
+        if (existing.Publish != generated.Publish)
+        {
+            existing.Publish = generated.Publish;
+            changed = true;
+        }
+        if (existing.SourceSystem != generated.SourceSystem)
+        {
+            existing.SourceSystem = generated.SourceSystem;
+            changed = true;
+        }
+        if (existing.HasUnpublishedChanges != generated.HasUnpublishedChanges)
+        {
+            existing.HasUnpublishedChanges = generated.HasUnpublishedChanges;
+            changed = true;
+        }
+        if (existing.IsDeleted != generated.IsDeleted)
+        {
+            existing.IsDeleted = generated.IsDeleted;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            existing.UpdatedAt = generated.UpdatedAt;
+        }
+
+        return changed;
     }
 
     private static IReadOnlyList<int> NormalizeDataPointIds(IEnumerable<int> dataPointIds)

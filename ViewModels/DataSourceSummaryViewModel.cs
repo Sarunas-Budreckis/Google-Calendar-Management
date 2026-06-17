@@ -13,6 +13,7 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
     private readonly DataSourceImportHandlerRegistry _handlerRegistry;
     private readonly IDataSourceRepository _dataSourceRepository;
     private readonly IDataPointReconciliationSweepService? _sweepService;
+    private readonly IRuleEngineService? _ruleEngine;
     private bool _isImporting;
     private bool _isCsvImporting;
     private string? _colorHex;
@@ -27,7 +28,8 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
         IDataSourceRepository dataSourceRepository,
         string? colorHex = null,
         IReadOnlyList<DataSourceDayDataMarkerViewModel>? dayDataMarkers = null,
-        IDataPointReconciliationSweepService? sweepService = null)
+        IDataPointReconciliationSweepService? sweepService = null,
+        IRuleEngineService? ruleEngine = null)
     {
         DataSourceId = dataSourceId;
         SourceKey = sourceKey;
@@ -37,6 +39,7 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
         _handlerRegistry = handlerRegistry;
         _dataSourceRepository = dataSourceRepository;
         _sweepService = sweepService;
+        _ruleEngine = ruleEngine;
         _colorHex = colorHex;
         foreach (var marker in dayDataMarkers ?? [])
         {
@@ -184,10 +187,7 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
             {
                 IsImporting = false;
             }
-            if (_sweepService is not null)
-            {
-                await _sweepService.RunPostImportAsync(SourceKey);
-            }
+            await ReconcileAndRunRulesAsync();
         }
     }
 
@@ -205,10 +205,26 @@ public sealed class DataSourceSummaryViewModel : ObservableObject
             {
                 IsCsvImporting = false;
             }
-            if (_sweepService is not null)
-            {
-                await _sweepService.RunPostImportAsync(SourceKey);
-            }
+            await ReconcileAndRunRulesAsync();
+        }
+    }
+
+    /// <summary>
+    /// Projects the just-imported raw records into <c>data_point</c> rows, then runs the rule engine
+    /// for this source (Story 8.15). The rule run MUST happen after projection — the engine derives
+    /// its scope from the source's datapoints, which only exist once the sweep has projected them.
+    /// A no-op for sources without registered rules.
+    /// </summary>
+    private async Task ReconcileAndRunRulesAsync()
+    {
+        if (_sweepService is not null)
+        {
+            await _sweepService.RunPostImportAsync(SourceKey);
+        }
+
+        if (_ruleEngine is not null)
+        {
+            await _ruleEngine.RunForImportAsync(SourceKey);
         }
     }
 

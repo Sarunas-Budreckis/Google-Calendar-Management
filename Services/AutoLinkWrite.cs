@@ -11,7 +11,7 @@ namespace GoogleCalendarManagement.Services;
 /// <param name="EventId">Target event when linking; ignored when <paramref name="Ignore"/> is true.</param>
 /// <param name="Ignore">True to write <c>state = 'ignored'</c> (event_id null); false to link.</param>
 /// <param name="RuleId">The rule that produced this write (required for auto_rule rows).</param>
-/// <param name="GeneratedEvent">Unsaved candidate event to insert atomically with this link, if any.</param>
+/// <param name="GeneratedEvent">Candidate event values to insert or refresh atomically with this link, if any.</param>
 public readonly record struct AutoLinkWrite(
     int DataPointId,
     string? EventId,
